@@ -13,6 +13,25 @@ MODULE_SPEC.loader.exec_module(installer)
 
 
 class InstallationSafetyTest(unittest.TestCase):
+    def test_existing_eight_character_login_password_is_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            password = Path(directory) / "password"
+            password.write_text("unitPass")
+            password.chmod(0o600)
+            self.assertEqual(installer.administrator_password(password), "unitPass")
+
+    def test_initial_password_uses_the_application_length_boundaries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            password = Path(directory) / "password"
+            password.touch(mode=0o600)
+            for length in (5, 20):
+                password.write_text("a" * length)
+                self.assertEqual(len(installer.administrator_password(password)), length)
+            for length in (4, 21):
+                password.write_text("a" * length)
+                with self.assertRaisesRegex(installer.InstallError, "5-20"):
+                    installer.administrator_password(password)
+
     def test_clean_initialization_policy_accepts_only_system_seed_rows(self):
         installer.validate_seed_counts({"system_user": "1", "da_datasource": "0"},
                                        {"system_user", "da_datasource"}, {"system_user": 1})

@@ -83,11 +83,11 @@ def administrator_password(password_file):
     else:
         if not sys.stdin.isatty():
             raise InstallError("Use --admin-password-file for unattended installation")
-        password = getpass.getpass("New admin password (12-20 characters): ")
+        password = getpass.getpass("Admin login password (5-20 characters; existing password may be reused): ")
         if getpass.getpass("Confirm admin password: ") != password:
             raise InstallError("Administrator password confirmation differs")
-    if not 12 <= len(password) <= 20 or any(character in password for character in "\r\n\x00"):
-        raise InstallError("Administrator password must contain 12-20 characters")
+    if not 5 <= len(password) <= 20 or any(character in password for character in "\r\n\x00"):
+        raise InstallError("Administrator password must contain 5-20 characters, matching qData login")
     return password
 
 

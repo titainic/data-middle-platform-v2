@@ -2,6 +2,8 @@
 
 本教程在一台全新 Linux 主机安装 qData，并连接部署方已有集群。全部 qData 源码、完整初始化 SQL、构建和安装程序来自本 GitHub 仓库。Hive、Kyuubi、Spark、YARN、Doris、DolphinScheduler 使用部署方已有集群；安装器不会重置或清理集群数据。
 
+**普通新装的密码操作只有一项：输入 `admin` 的登录密码。** 可以继续使用原来熟悉的密码，长度 5–20 位。准备好环境后按第 3 节下载、第 5 节安装即可；AES、RSA 和指纹校验由安装器自动处理，不需要手工配置 `--key-file`。
+
 ## 1. 部署内容与目录
 
 ```text
@@ -86,7 +88,10 @@ cd data-middle-platform-v2-main
 
 记录实际 commit SHA 作为部署版本。Git 可 `git checkout <审核后的提交SHA>`；ZIP 可从 GitHub 对应提交下载。产品展示版本 `1.6.1` 不能唯一标识改造版本。
 
-正常新装直接执行第 5 节安装器，它生成实例密钥再调用构建脚本。构建使用公开模板准备独立目录，所有 qData 模块从仓库源码编译；前端打入主 JAR，默认构建独立 AI。现有运行 YAML、密钥、数据库和历史 JAR 不作为源码构建输入。
+正常新装直接执行第 5 节安装器，输入管理员登录密码即可。它自动准备加密配置并调用构建脚本，不需要执行下面的高级操作。构建使用公开模板准备独立目录，所有 qData 模块从仓库源码编译；前端打入主 JAR，默认构建独立 AI。现有运行 YAML、密钥、数据库和历史 JAR 不作为源码构建输入。
+
+<details>
+<summary>高级操作：先独立编译 JAR，再用指定配置安装</summary>
 
 需要先独立构建再安装时，先在 Linux 生成受限的新实例输入文件（目录应为空，已有环境升级沿用原密钥）：
 
@@ -112,6 +117,8 @@ sudo python3 deploy/install.py --install-dir /data/qdata --instance qdata --with
 
 `frontend.env` / `keys.env` 不入 Git。安装器核对构建 manifest 的 AES / 浏览器 RSA 公钥指纹，不匹配时拒绝安装。浏览器“记住密码”使用单独兼容密钥对；后端 RSA 私钥与它分开，不能放入前端产物。
 
+</details>
+
 预期产物：
 
 ```text
@@ -136,11 +143,24 @@ docker build -f qdata-work/qdata-server/docker/Dockerfile -t qdata-web:local qda
 
 ## 4. 内网 / 离线构建
 
-源码仍由本 GitHub 获取。联网 Linux 构建机准备相同架构 JDK 21、Maven、Node、第三方 Maven/npm 缓存和基础服务镜像，再传入内网：
+源码仍由本 GitHub 获取。联网 Linux 构建机准备相同架构 JDK 21、Maven、Node、第三方 Maven/npm 缓存和基础服务镜像，再传入内网。
+
+普通离线新装也由安装器完成构建和配置，只需输入管理员登录密码：
+
+```bash
+sudo env PATH="$PATH" JAVA_HOME="$JAVA_HOME" python3 deploy/install.py --java-home "$JAVA_HOME" --install-dir /data/qdata --instance qdata --with-ai --offline --dependency-dir /opt/qdata-dependencies
+```
+
+<details>
+<summary>高级操作：只进行离线构建</summary>
+
+已按第 3 节高级操作准备构建配置时，可单独执行：
 
 ```bash
 bash deploy/build.sh --offline --dependency-dir /opt/qdata-dependencies --env-file /root/qdata-deploy-input/frontend.env
 ```
+
+</details>
 
 依赖目录包含 `maven/`、Linux `node_modules/` 和 `manifest.json`，后者需记录 `os=Linux`、`arch`（`uname -m`）与 `npmLockSha256`（锁文件 SHA-256）。Maven 目录排除 `tech/qiantong`，该目录包含全部第三方依赖；qData 自身模块仍从源码编译。Linux `node_modules` 不能由 Mac 目录代替。ZIP 本身不包含工具、第三方依赖或数据库镜像。
 
@@ -152,12 +172,6 @@ python3 deploy/tools/make_dependency_kit.py --maven-repo "$(dirname "$QDATA_BUIL
 ```
 
 输出目录必须不存在。由目标 CPU 架构相同的 Linux 构建生成，再传入内网机器。
-
-直接让安装器组织离线构建：
-
-```bash
-sudo env PATH="$PATH" JAVA_HOME="$JAVA_HOME" python3 deploy/install.py --java-home "$JAVA_HOME" --install-dir /data/qdata --instance qdata --with-ai --offline --dependency-dir /opt/qdata-dependencies
-```
 
 离线安装前将对应版本 / 架构镜像导入目标 Linux Engine，或连接已有基础服务。DataX 和 Spark client 使用第 6 节的匹配发行物；离线命令需追加 `--datax-archive /opt/packages/datax.tar.gz`（或指向已有 `--datax-home`），不能依赖默认联网下载。
 
@@ -196,9 +210,12 @@ python3 deploy/install.py --help
 sudo env PATH="$PATH" JAVA_HOME="$JAVA_HOME" python3 deploy/install.py --java-home "$JAVA_HOME" --install-dir /data/qdata --instance qdata --with-ai
 ```
 
-首次交互设置管理员真实密码（安装器要求 12–20 位），用户为 `admin`。密码 bcrypt 写入新 MySQL 空库；万能密码关闭。实例专用配置与密钥由安装器生成和受限保存。
+首次交互输入管理员登录密码（5–20 位），用户为 `admin`，可以使用原来熟悉的密码。登录方式仍是账号、密码和当前验证码。密码 bcrypt 写入新 MySQL 空库；万能密码关闭。加密配置及指纹校验由安装器自动处理，文件保存在安装目录 `runtime/`，普通新装无需生成、复制或填写密钥。
 
 登录页按照服务器返回的验证码开关展示验证码。启用时获取并填写当前图像结果后提交；后端通过 Redis 一次性校验验证码，失败后页面刷新图像。验证码成功生成、浏览器提交正确 / 错误验证码及过期 / 复用拒绝是独立检查，不能仅凭 `/captchaImage` 返回 200 判定登录校验已通过。
+
+<details>
+<summary>高级操作：无人值守安装时从受限文件读取密码</summary>
 
 非交互方式先建立只有 root 可读的管理员密码文件：
 
@@ -211,7 +228,11 @@ unset QDATA_INSTALL_ADMIN_PASSWORD
 sudo python3 deploy/install.py --install-dir /data/qdata --instance qdata --with-ai --admin-password-file /root/qdata-admin-password
 ```
 
-密码文件与 `runtime/runtime.env` 按凭据管理，不能入 Git。安装器按完整 `schema` → `reference` → `bootstrap` → `five-layers` 初始化，再设置管理员密码；新装不用重复运行全部 migration。五层初始化 SQL 是 **qData MySQL 目录数据**，Hive 物理库需要集群授权并在平台空间绑定。
+密码文件与 `runtime/runtime.env` 按凭据管理，不能入 Git。
+
+</details>
+
+安装器按完整 `schema` → `reference` → `bootstrap` → `five-layers` 初始化，再设置管理员密码；新装不用重复运行全部 migration。五层初始化 SQL 是 **qData MySQL 目录数据**，Hive 物理库需要集群授权并在平台空间绑定。
 
 ### 新装数据范围
 
