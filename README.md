@@ -43,6 +43,8 @@ sudo env PATH="$PATH" JAVA_HOME="$JAVA_HOME" python3 deploy/install.py --java-ho
 
 ## 验收状态
 
+2026-10-12，GitHub 确切源码 `32ed191` 已完成 Linux/JDK21 的 52 模块清洁构建和独立完整新装，主平台/质量/AI 启动、真实登录与项目/会话权限、DataX 以及浏览器实际点击通过，详见[新装验收记录](docs/INSTALLATION-VALIDATION-20261012.md)。
+
 历史样例已经验证 DS 原生 20 节点五库加工与 Kyuubi/Spark 查询，也有独立 Quartz/Tez 批次完成 Hive→Doris→OAuth API 字段级对账。两笔批次的证据分别保留。当前源码可能包含尚未生产发布的候选改动；本次源码提交不构成新的生产部署。
 
 同一 DS+Spark 批次的完整下游发布验收、业务 DECIMAL 精度/舍入及水气土正式质量规则签版仍需完成。非核心容灾与外部系统验收按项目优先级继续跟进。
