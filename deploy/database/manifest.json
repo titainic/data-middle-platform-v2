@@ -1,6 +1,6 @@
 {
-  "schema_version": "qdata-linux-jdk21-20261012",
-  "tables": 217,
+  "schema_version": "qdata-linux-jdk21-20261012-clean",
+  "tables": 203,
   "included_migrations": [
     "20260908_architecture_canvas.sql",
     "20260908_hive_warehouse.sql",
@@ -36,7 +36,42 @@
   "files": {
     "bootstrap.sql": "eb5f229b0692f44b7eec6029ba5ffedc084152b7e9c0c6650c6d773cf56223d3",
     "five-layers.sql": "492894e664c96293ace0ce12e75f25f97f5767a37234be2cbcca0ea950536cec",
-    "reference.sql": "27f56dde934cf344b2f07fba3ecc2ab8d0b55e98932c9e610f1e60b47e678c72",
-    "schema.sql": "f3594e2ba8205c43c984bed03b8e8c00a787d150a4b4e70730c0f25178bc92f9"
-  }
+    "reference.sql": "e22ebb45e0a20f641e03c7af1b03c4990c586837cf2282f7f662f75d06e1f2d0",
+    "schema.sql": "0cea1e70ad4bc516149e11d7f27c5f72564a34f505909a177c413471bf8f4069"
+  },
+  "fresh_seed_rows": {
+    "att_audit_rule": 28,
+    "att_clean_rule": 40,
+    "da_sensitive_level": 5,
+    "system_dict_data": 423,
+    "system_dict_type": 109,
+    "system_menu": 433,
+    "system_dept": 1,
+    "system_user": 1,
+    "system_role": 1,
+    "system_user_role": 1,
+    "system_post": 1,
+    "system_user_post": 1,
+    "att_project": 1,
+    "att_project_user_rel": 1,
+    "system_config": 1,
+    "system_role_menu": 433,
+    "dm_data_layer": 5
+  },
+  "excluded_demo_tables": [
+    "gw_b_stinfo",
+    "huiyuan_age",
+    "huiyuan_fengongsi",
+    "huiyuan_huoyuedu",
+    "huiyuan_sex",
+    "huiyuan_work",
+    "huiyuan_wxtl",
+    "huiyuan_wxtlshuliang",
+    "huiyuan_xueli",
+    "rep_demo_dxtj",
+    "rep_demo_employee",
+    "rep_demo_gongsi",
+    "rep_demo_jianpiao",
+    "rep_demo_xiaoshou"
+  ]
 }

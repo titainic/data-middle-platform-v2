@@ -13,6 +13,38 @@ MODULE_SPEC.loader.exec_module(installer)
 
 
 class InstallationSafetyTest(unittest.TestCase):
+    def test_clean_initialization_policy_accepts_only_system_seed_rows(self):
+        installer.validate_seed_counts({"system_user": "1", "da_datasource": "0"},
+                                       {"system_user", "da_datasource"}, {"system_user": 1})
+
+    def test_business_fixture_blocks_clean_initialization(self):
+        with self.assertRaisesRegex(installer.InstallError, "da_datasource has 1 rows"):
+            installer.validate_seed_counts({"system_user": "1", "da_datasource": "1"},
+                                           {"system_user", "da_datasource"}, {"system_user": 1})
+
+    def test_extra_account_blocks_clean_initialization(self):
+        with self.assertRaisesRegex(installer.InstallError, "system_user has 2 rows"):
+            installer.validate_seed_counts({"system_user": "2"}, {"system_user"}, {"system_user": 1})
+
+    def test_incomplete_table_audit_is_rejected(self):
+        with self.assertRaisesRegex(installer.InstallError, "every initial database table"):
+            installer.validate_seed_counts({"system_user": "1"},
+                                           {"system_user", "da_datasource"}, {"system_user": 1})
+
+    def test_changed_initialization_sql_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {name: "" for name in ("schema.sql", "reference.sql", "bootstrap.sql", "five-layers.sql")}
+            files["schema.sql"] = "CREATE TABLE `system_user` (id INT);\n"
+            for name, content in files.items():
+                (root / name).write_text(content)
+            manifest = {"tables": 1, "fresh_seed_rows": {"system_user": 1},
+                        "files": {name: installer.file_sha256(root / name) for name in files}}
+            (root / "manifest.json").write_text(json.dumps(manifest))
+            (root / "reference.sql").write_text("unexpected fixture")
+            with self.assertRaisesRegex(installer.InstallError, "SQL SHA-256 differs"):
+                installer.checked_database_manifest(root)
+
     def test_existing_tables_block_fresh_installation(self):
         with self.assertRaisesRegex(installer.InstallError, "refuses to overwrite"):
             installer.assert_empty_database("217")

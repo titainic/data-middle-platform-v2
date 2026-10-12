@@ -213,6 +213,16 @@ sudo python3 deploy/install.py --install-dir /data/qdata --instance qdata --with
 
 密码文件与 `runtime/runtime.env` 按凭据管理，不能入 Git。安装器按完整 `schema` → `reference` → `bootstrap` → `five-layers` 初始化，再设置管理员密码；新装不用重复运行全部 migration。五层初始化 SQL 是 **qData MySQL 目录数据**，Hive 物理库需要集群授权并在平台空间绑定。
 
+### 新装数据范围
+
+当前清洁初始化包含 203 张平台结构表。新装只保留 17 张表中的必要系统种子：一个 `admin`、管理员角色/部门/岗位及关系、一个空的默认项目、菜单、字典、内置稽查/清洗规则、敏感级别和五层目录。其他 186 张业务及运行记录表在服务启动前全部为零，包括连接、模型、批次、调度、资产、元数据、质量结果、Doris/API 配置、AI 模型/会话/消息和日志。
+
+旧 `gw_b_stinfo`、`huiyuan_*`、`rep_demo_*` 共 14 张遗留示例表已从新装结构移除，旧自增起点也不导入。内置模板中的说明示例是规则使用帮助，保留其功能内容；历史操作人改为 `bootstrap`，创建时间使用本次安装时间。
+
+安装器校验四份 SQL 的 SHA，并逐表检查种子允许表与精确行数。发现任何额外用户、项目或业务测试记录会停止安装并保留现场，不自动删数据。启动和登录会产生正常调度状态或审计记录，不属于预置测试数据。
+
+`deploy/tests` 是可选验收工具，安装器不会调用。特别是 `run-ai-datasource-live-probe.py --allow-synthetic-mysql` 会在明确选中的测试实例创建并保留合成 MySQL 表/项目/连接；需要保持干净的正式实例时，不执行该工具。
+
 | 默认服务 / 端口 | 用途 |
 |---|---|
 | 访问代理 `--web-port 8080` | 浏览器 / API 入口及 `/prod-ai/` AI 同源代理 |

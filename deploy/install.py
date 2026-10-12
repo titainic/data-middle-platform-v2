@@ -109,6 +109,36 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
+def checked_database_manifest(directory):
+    manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
+    filenames = {"schema.sql", "reference.sql", "bootstrap.sql", "five-layers.sql"}
+    if set(manifest.get("files", {})) != filenames:
+        raise InstallError("Initialization manifest must identify the four reviewed SQL files")
+    for name in filenames:
+        if file_sha256(directory / name) != manifest["files"][name]:
+            raise InstallError("Initialization SQL SHA-256 differs from manifest: " + name)
+    tables = set(re.findall(r"^CREATE TABLE `([a-z][a-z0-9_]*)`", (directory / "schema.sql").read_text(), re.MULTILINE))
+    seeds = manifest.get("fresh_seed_rows", {})
+    if len(tables) != manifest.get("tables") or not seeds or not set(seeds).issubset(tables):
+        raise InstallError("Initialization manifest table or seed policy is invalid")
+    if any(type(count) is not int or count < 1 for count in seeds.values()):
+        raise InstallError("Initialization seed counts must be positive integers")
+    return manifest, tables
+
+
+def validate_seed_counts(rows, schema_tables, seed_rows):
+    if set(rows) != schema_tables:
+        raise InstallError("Unable to verify every initial database table")
+    for name in sorted(schema_tables):
+        expected = seed_rows.get(name, 0)
+        try:
+            actual = int(rows[name])
+        except ValueError as error:
+            raise InstallError("Invalid initial row count for table: " + name) from error
+        if actual != expected:
+            raise InstallError(f"Initial data differs from clean policy: {name} has {actual} rows; expected {expected}")
+
+
 def sql_literal(value):
     return "'" + value.replace("\\", "\\\\").replace("'", "''") + "'"
 
@@ -407,6 +437,7 @@ class Mysql:
         raise InstallError("MySQL did not become ready within 180 seconds")
 
     def initialize(self, administrator_hash):
+        database_manifest, schema_tables = checked_database_manifest(REPOSITORY / "deploy/database")
         database = self.settings["MYSQL_DATABASE"]
         application_user = self.settings["MYSQL_APP_USER"]
         if self.query("SELECT @@lower_case_table_names;") != "1":
@@ -425,9 +456,29 @@ class Mysql:
                     raise InstallError("Bootstrap SQL must contain exactly one administrator hash placeholder")
                 script = script.replace("__QDATA_ADMIN_PASSWORD_HASH__", administrator_hash)
             self.query(script, database)
+        self.verify_clean_database(database, database_manifest, schema_tables)
         password = sql_literal(self.settings["MYSQL_APP_PASSWORD"])
         account = sql_literal(application_user) + "@'%'"
         self.query(f"CREATE USER {account} IDENTIFIED BY {password};\nGRANT ALL PRIVILEGES ON `{database}`.* TO {account};\n")
+
+    def verify_clean_database(self, database, manifest, schema_tables):
+        actual = set(self.query("SELECT table_name FROM information_schema.tables WHERE table_schema="
+                                + sql_literal(database) + " AND table_type='BASE TABLE';").splitlines())
+        if actual != schema_tables:
+            raise InstallError("Initial database table set differs from the reviewed schema")
+        statement = " UNION ALL ".join("SELECT " + sql_literal(name) + ", COUNT(*) FROM `" + name + "`"
+                                       for name in sorted(schema_tables)) + ";"
+        rows = dict(line.split("\t") for line in self.query(statement, database).splitlines())
+        validate_seed_counts(rows, schema_tables, manifest["fresh_seed_rows"])
+        administrator = self.query("SELECT COUNT(*) FROM system_user WHERE user_id=1 AND user_name='admin' "
+                                   "AND status='0' AND del_flag='0' AND CHAR_LENGTH(password)=60 "
+                                   "AND password REGEXP '^[$]2[aby][$][0-9]{2}[$]';", database)
+        layers = set(self.query("SELECT eng_name FROM dm_data_layer;", database).splitlines())
+        project = self.query("SELECT COUNT(*) FROM att_project WHERE id=1 AND code='default' AND manager_id=1;", database)
+        if administrator != "1" or project != "1" or layers != {"ODS", "DWD", "DWS", "DWT", "ADS"}:
+            raise InstallError("Initial administrator, empty default project or five-layer definitions are invalid")
+        print(f"Clean initial database verified: {len(schema_tables)} tables; "
+              f"{len(schema_tables) - len(manifest['fresh_seed_rows'])} business/operational tables empty.", flush=True)
 
 
 def dependency_containers(arguments, settings, runtime, root):
