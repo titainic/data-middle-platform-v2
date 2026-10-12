@@ -21,11 +21,10 @@ package tech.qiantong.qdata.ai.server;
 import org.dromara.x.file.storage.spring.EnableFileStorage;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
-import org.springframework.data.neo4j.repository.config.EnableNeo4jRepositories;
 import tech.qiantong.qdata.common.httpClient.DsRequestUtils;
 import tech.qiantong.qdata.config.FilterConfig;
 import tech.qiantong.qdata.config.I18nConfig;
@@ -35,12 +34,12 @@ import tech.qiantong.qdata.module.system.controller.admin.common.CommonControlle
 import tech.qiantong.qdata.module.system.controller.admin.example.websocket.WebSocketServer;
 import tech.qiantong.qdata.security.config.SecurityConfig;
 import tech.qiantong.qdata.security.filter.JwtAuthenticationTokenFilter;
+import tech.qiantong.qdata.ai.core.service.impl.DualServiceImpl;
 
-@EnableNeo4jRepositories(basePackages = "tech.qiantong.qdata.neo4j.repository")
-@EntityScan(basePackages = "tech.qiantong.qdata.neo4j.node")   // Node/relationship
 @EnableFileStorage
-@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
-@ComponentScan(basePackages = {"tech.qiantong"},
+@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
+@ComponentScan(basePackages = {"tech.qiantong.qdata.ai", "tech.qiantong.qdata.common",
+        "tech.qiantong.qdata.mybatis", "tech.qiantong.qdata.redis", "tech.qiantong.qdata.module.ai.service"},
         excludeFilters = {
                 @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {FilterConfig.class,
                         DsRequestUtils.class,
@@ -50,7 +49,8 @@ import tech.qiantong.qdata.security.filter.JwtAuthenticationTokenFilter;
                         RabbitConfig.class,
                         I18nConfig.class,
                         SecurityConfig.class,
-                        JwtAuthenticationTokenFilter.class
+                        JwtAuthenticationTokenFilter.class,
+                        DualServiceImpl.class
                 }),
                 @ComponentScan.Filter(type = FilterType.REGEX, pattern = "tech\\.qiantong\\.qdata\\.module\\.system\\.controller\\.admin\\..*")
         })

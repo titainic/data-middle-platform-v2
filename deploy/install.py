@@ -147,6 +147,24 @@ def await_tcp(host, port, label):
     raise InstallError(f"{label} did not become reachable within 180 seconds")
 
 
+def await_json_http(url, label, expected_status, field, value):
+    for attempt in range(90):
+        try:
+            request = urllib.request.Request(url, headers={"Accept": "application/json"})
+            try:
+                response = urllib.request.urlopen(request, timeout=3)
+            except urllib.error.HTTPError as error:
+                response = error
+            with response:
+                payload = json.load(response)
+                if response.status == expected_status and payload.get(field) == value:
+                    return
+        except (OSError, ValueError, urllib.error.URLError):
+            pass
+        time.sleep(2)
+    raise InstallError(label + " did not pass its actual HTTP application startup check")
+
+
 def java21(java_home):
     executable = str(java_home / "bin/java") if java_home else shutil.which("java")
     if not executable:
@@ -682,8 +700,12 @@ def check_web(arguments, names):
     frontend_resources = check_frontend(f"http://127.0.0.1:{arguments.web_port}")
     print(f"Login HTML and {frontend_resources} real entry JS/CSS resources verified.", flush=True)
     await_tcp("127.0.0.1", arguments.quality_port, "qData quality service")
+    await_json_http(f"http://127.0.0.1:{arguments.quality_port}/actuator/health",
+                    "qData quality SQL readiness", 200, "status", "UP")
     if arguments.with_ai:
         await_tcp("127.0.0.1", arguments.ai_port, "qData AI service")
+        await_json_http(f"http://127.0.0.1:{arguments.web_port}/prod-ai/chat/conversation/myList",
+                        "qData AI authenticated application routes", 401, "code", 401)
     for name in names:
         if run(["systemctl", "is-active", name]) != "active":
             raise InstallError(f"Service is not active: {name}")

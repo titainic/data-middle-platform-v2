@@ -9,6 +9,7 @@ import re
 import subprocess
 import time
 import urllib.request
+import urllib.error
 
 
 class Browser:
@@ -21,8 +22,12 @@ class Browser:
     def call(self, method, path, payload=None):
         data = None if payload is None else json.dumps(payload).encode()
         request = urllib.request.Request(self.endpoint + path, data=data, method=method, headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.load(response)['value']
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.load(response)['value']
+        except urllib.error.HTTPError as error:
+            value = json.loads(error.read()).get('value', {})
+            raise RuntimeError('WebDriver command failed: ' + value.get('error', str(error.code))) from None
 
     def command(self, method, path, payload=None):
         return self.call(method, '/session/' + self.session + path, payload)
@@ -162,6 +167,16 @@ def main():
             browser.screenshot(arguments.output / (name + '.png'))
             (arguments.output / (name + '.txt')).write_text(text)
             results.append({'page': path, 'status': 'PASS', 'text_length': len(text), 'controls_clicked': True})
+        browser.command('POST', '/element/' + browser.element('.avatar-wrapper') + '/click', {})
+        wait_for(lambda: browser.script('return [...document.querySelectorAll(".el-dropdown-menu__item")].some(x => x.innerText.trim() === "退出登录" && x.getClientRects().length);'))
+        time.sleep(0.6)
+        browser.click_text('.el-dropdown-menu__item', '退出登录')
+        wait_for(lambda: browser.script('return !!document.querySelector(".el-message-box .el-button--primary");'))
+        browser.command('POST', '/element/' + browser.element('.el-message-box .el-button--primary') + '/click', {})
+        wait_for(lambda: '/login' in browser.command('GET', '/url'))
+        wait_for(lambda: browser.script('return !!document.querySelector("form input[type=password]");'))
+        browser.screenshot(arguments.output / 'logged-out.png')
+        results.append({'page': 'avatar/logout/login', 'status': 'PASS', 'controls_clicked': True})
         (arguments.output / 'browser-result.json').write_text(json.dumps({'results': results, 'scope': 'fresh-instance', 'captcha_enabled': captcha.get('captchaEnabled')}, ensure_ascii=False, indent=2) + '\n')
         print(json.dumps({'browser_checks': len(results), 'status': 'PASS'}))
     except Exception:
