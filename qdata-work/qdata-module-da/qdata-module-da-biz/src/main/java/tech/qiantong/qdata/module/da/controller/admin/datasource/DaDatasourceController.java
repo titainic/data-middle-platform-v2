@@ -1,0 +1,390 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.da.controller.admin.datasource;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.json.JSONObject;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.database.core.DbColumn;
+import tech.qiantong.qdata.common.database.core.DbTable;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.module.att.api.project.dto.AttProjectReqDTO;
+import tech.qiantong.qdata.module.att.api.project.dto.AttProjectRespDTO;
+import tech.qiantong.qdata.module.da.api.datasource.dto.DatasourceCreaTeTableReqDTO;
+import tech.qiantong.qdata.module.da.controller.admin.assetColumn.vo.DaAssetColumnRelRuleVO;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourcePageReqVO;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceRespVO;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceSaveReqVO;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceTableVO;
+import tech.qiantong.qdata.module.da.convert.datasource.DaDatasourceConvert;
+import tech.qiantong.qdata.module.da.dal.dataobject.assetColumn.DaAssetColumnDO;
+import tech.qiantong.qdata.module.da.dal.dataobject.datasource.DaDatasourceDO;
+import tech.qiantong.qdata.module.da.service.asset.IDaAssetService;
+import tech.qiantong.qdata.module.da.service.datasource.IDaDatasourceService;
+import tech.qiantong.qdata.module.da.service.datasource.impl.DaDatasourceServiceImpl;
+import tech.qiantong.qdata.module.dp.api.model.dto.DpModelColumnReqDTO;
+
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.*;
+
+/**
+ * Datasource Controller
+ *
+ * @author lhs
+ * @date 2025-01-21
+ */
+@Tag(name = "数据源")
+@RestController
+@RequestMapping("/da/dataSource")
+@Validated
+@RequiredArgsConstructor
+public class DaDatasourceController extends BaseController {
+    @jakarta.annotation.Resource private tech.qiantong.qdata.module.da.service.datasource.DatasourceProjectAccess projectAccess;
+    @jakarta.annotation.Resource private org.springframework.beans.factory.ObjectProvider<tech.qiantong.qdata.module.dp.api.service.model.ModelManagementAccess> modelAccess;
+
+    private void rejectSecretFilter(DaDatasourcePageReqVO request) {
+        if (StringUtils.isNotBlank(request.getDatasourceConfig())) {
+            throw new IllegalArgumentException("Data source credentials cannot be used as a list filter");
+        }
+    }
+
+    @jakarta.annotation.Resource private tech.qiantong.qdata.module.da.api.service.DataResourceAccess resourceAccess;
+    private void scope(DaDatasourcePageReqVO request){request.setAccessibleDatasourceIds(projectAccess.visible("list",true,request.getProjectCode()));}
+    private DaDatasourceRespVO presented(DaDatasourceDO source){var result=BeanUtils.toBean(source,DaDatasourceRespVO.class);if(result!=null){result.setDatasourceConfig(tech.qiantong.qdata.common.database.core.ConnectionDisplayConfig.sanitize(result.getDatasourceConfig()));result.setCapabilities(projectAccess.capabilities(source.getId()));if(result.getProjectList()!=null)result.setProjectList(result.getProjectList().stream().filter(p->resourceAccess.visibleProjectIds().contains(p.getProjectId())).toList());}return result;}
+    private List<DaDatasourceRespVO> presented(List<DaDatasourceDO> values){return presented(values,new HashSet<>(projectAccess.visible("list",true,null)));}
+    private List<DaDatasourceRespVO> presented(List<DaDatasourceDO> values,java.util.Set<Long> allowed){return values.stream().filter(value->allowed.contains(value.getId())).map(this::presented).collect(java.util.stream.Collectors.toList());}
+    private PageResult<DaDatasourceRespVO> presented(PageResult<DaDatasourceDO> page){
+        if(page==null)return PageResult.empty();
+        var rows=page.getRows()==null?List.<DaDatasourceDO>of():page.getRows();
+        return new PageResult<>(rows.stream().map(this::presented).toList(),page.getTotal()==null?0L:page.getTotal());
+    }
+
+    private final IDaDatasourceService daDatasourceService;
+    private final IDaAssetService daAssetService;
+    private final tech.qiantong.qdata.module.da.service.datasource.HiveNamespaceBrowser hiveNamespaces;
+
+    @Operation(summary = "查询数据源列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:list')")
+    @GetMapping("/list")
+    public CommonResult<PageResult<DaDatasourceRespVO>> list(DaDatasourcePageReqVO daDatasource) {
+        rejectSecretFilter(daDatasource);
+        daDatasource.setAccessibleDatasourceIds(projectAccess.visible("list",false,daDatasource.getProjectCode()));
+        PageResult<DaDatasourceDO> page = daDatasourceService.getDaDatasourcePage(daDatasource);
+        return CommonResult.success(presented(page));
+    }
+
+    @Operation(summary = "数据集成中排除Kafka并且是当前项目的数据源列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:list')")
+    @GetMapping("/dppNoKafka/list")
+    public AjaxResult dppNoKafkaList(DaDatasourcePageReqVO daDatasource) {
+        rejectSecretFilter(daDatasource);
+        scope(daDatasource);
+        List<DaDatasourceDO> page = daDatasourceService.getDaDatasourceDppNoKafka(daDatasource);
+        return AjaxResult.success(presented(page,new HashSet<>(daDatasource.getAccessibleDatasourceIds())));
+    }
+
+    @Operation(summary = "数据研发中的查询数据源列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:list')")
+    @GetMapping("/dpp/list")
+    public CommonResult<PageResult<DaDatasourceRespVO>> dppList(DaDatasourcePageReqVO daDatasource) {
+        rejectSecretFilter(daDatasource);
+        scope(daDatasource);
+        PageResult<DaDatasourceDO> page = daDatasourceService.getDaDatasourceDppPage(daDatasource);
+        return CommonResult.success(presented(page));
+    }
+
+    @Operation(summary = "查询项目列表，让研发模块添加的数据不可选中")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:list')")
+    @GetMapping("/noDppAdd/list")
+    public CommonResult<PageResult<AttProjectRespDTO>> noDppAddList(AttProjectReqDTO pageReqVO,@RequestParam(defaultValue="1") int pageNum,@RequestParam(defaultValue="10") int pageSize) {
+        var values=projectAccess.assignmentOptions(pageReqVO.getDatasourceId()).stream().map(row->BeanUtils.toBean(row,AttProjectRespDTO.class)).filter(row->StringUtils.isBlank(pageReqVO.getName()) || row.getName().contains(pageReqVO.getName())).filter(row->StringUtils.isBlank(pageReqVO.getCode()) || row.getCode().contains(pageReqVO.getCode())).filter(row->pageReqVO.getManagerId()==null || Objects.equals(row.getManagerId(),pageReqVO.getManagerId())).toList();
+        int limit=pageSize<1?values.size():Math.min(pageSize,1000),start=(int)Math.min(values.size(),Math.max(0L,(long)pageNum-1)*limit);
+        return CommonResult.success(new PageResult<>(values.subList(start,Math.min(values.size(),start+limit)),(long)values.size()));
+    }
+
+    @GetMapping("/capabilities") @PreAuthorize("@ss.hasPermi('da:dataSource:list')")
+    public CommonResult<?> capabilities(){return CommonResult.success(Map.of("canAdd",!projectAccess.projects("add").isEmpty(),"projects",projectAccess.visibleProjects()));}
+
+    @Operation(summary = "查询数据资产的数据源连接信息")
+    @PreAuthorize("@ss.hasPermi('da:asset:list')")
+    @GetMapping("/getDataSourceByAsset")
+    public AjaxResult getDataSourceByAsset(DaDatasourceRespVO daAsset) {
+        List<DaDatasourceDO> daAssetDOS = daDatasourceService.getDataSourceByAsset(daAsset);
+        return AjaxResult.success(presented(daAssetDOS));
+    }
+
+    @Operation(summary = "查询数据源列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:list')")
+    @GetMapping("/getDaDatasourceList")
+    public CommonResult<List<DaDatasourceRespVO>> getDaDatasourceList(DaDatasourcePageReqVO daDatasource) {
+        rejectSecretFilter(daDatasource);
+        scope(daDatasource);
+        List<DaDatasourceDO> page = daDatasourceService.getDaDatasourceList(daDatasource);
+        return CommonResult.success(presented(page,new HashSet<>(daDatasource.getAccessibleDatasourceIds())));
+    }
+
+    @Operation(summary = "导出数据源列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:export')")
+    @Log(title = "log.op.title.da.datasource", businessType = BusinessType.EXPORT,
+            isSaveRequestData = false, isSaveResponseData = false)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, DaDatasourcePageReqVO exportReqVO) {
+        rejectSecretFilter(exportReqVO);
+        var allowed=new HashSet<>(projectAccess.visible("export",false,exportReqVO.getProjectCode()));
+        exportReqVO.setAccessibleDatasourceIds(new java.util.ArrayList<>(allowed));
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<DaDatasourceDO> list = (List<DaDatasourceDO>) daDatasourceService.getDaDatasourcePage(exportReqVO).getRows();
+        ExcelUtil<DaDatasourceRespVO> util = new ExcelUtil<>(DaDatasourceRespVO.class);
+        util.exportExcel(response, presented(list,allowed), "Application Management Data");
+    }
+
+    @Operation(summary = "导入数据源列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:import')")
+    @Log(title = "log.op.title.da.datasource", businessType = BusinessType.IMPORT,isSaveRequestData=false,isSaveResponseData=false)
+    @PostMapping("/importData")
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        ExcelUtil<DaDatasourceRespVO> util = new ExcelUtil<>(DaDatasourceRespVO.class);
+        List<DaDatasourceRespVO> importExcelList = util.importExcel(file.getInputStream());
+        List<DaDatasourceSaveReqVO> requests=new ArrayList<>();
+        for(var row:importExcelList){
+            var request=BeanUtils.toBean(row,DaDatasourceSaveReqVO.class);
+            if(updateSupport && request.getId()==null)throw new IllegalArgumentException("更新导入必须提供已有连接编号");
+            if(!updateSupport && request.getId()!=null)throw new IllegalArgumentException("新增导入不能指定已有连接编号");
+            projectAccess.validateSave(request,!updateSupport,"import");
+            if(!updateSupport){request.setCreatorId(getUserId());request.setCreateBy(getNickName());request.setCreateTime(DateUtil.date());}
+            request.setUpdatorId(getUserId());request.setUpdateBy(getNickName());request.setUpdateTime(DateUtil.date());requests.add(request);
+        }
+        for(var request:requests)if(updateSupport)daDatasourceService.updateDaDatasource(request);else daDatasourceService.createDaDatasource(request);
+        return success("成功导入 "+requests.size()+" 条数据连接");
+    }
+
+    @Operation(summary = "获取数据源详细信息")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @GetMapping(value = "/{id:\\d+}")
+    public CommonResult<DaDatasourceRespVO> getInfo(@PathVariable("id") Long id) {
+        resourceAccess.requireDatasourceConfiguration(id);
+        projectAccess.read(id,"query");
+        DaDatasourceDO daDatasourceDO = daDatasourceService.getDaDatasourceById(id);
+        return CommonResult.success(presented(daDatasourceDO));
+    }
+
+    @Operation(summary = "新增数据源")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:add')")
+    @Log(title = "log.op.title.da.datasource", businessType = BusinessType.INSERT,isSaveRequestData=false,isSaveResponseData=false)
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody DaDatasourceSaveReqVO daDatasource) {
+        projectAccess.validateSave(daDatasource,true,"add");
+        daDatasource.setCreatorId(getUserId());
+        daDatasource.setCreateBy(getNickName());
+        daDatasource.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(daDatasourceService.createDaDatasource(daDatasource));
+    }
+
+    @Operation(summary = "新增前测试数据源连接")
+    @PreAuthorize("@ss.hasAnyPermi('da:dataSource:add,da:dataSource:edit')")
+    @PostMapping("/testConnection")
+    public CommonResult<Boolean> testConnection(@Valid @RequestBody DaDatasourceSaveReqVO daDatasource) {
+        projectAccess.validateSave(daDatasource,daDatasource.getId()==null,daDatasource.getId()==null?"add":"edit");
+        return CommonResult.success(daDatasourceService.testDatasourceConnection(daDatasource));
+    }
+
+    @Operation(summary = "修改数据源")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:edit')")
+    @Log(title = "log.op.title.da.datasource", businessType = BusinessType.UPDATE,isSaveRequestData=false,isSaveResponseData=false)
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody DaDatasourceSaveReqVO daDatasource) {
+        resourceAccess.requireDatasourceConfiguration(daDatasource.getId());
+        projectAccess.validateSave(daDatasource,false,"edit");
+        daDatasource.setUpdatorId(getUserId());
+        daDatasource.setUpdateBy(getNickName());
+        daDatasource.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(daDatasourceService.updateDaDatasource(daDatasource));
+    }
+
+    @Operation(summary = "删除数据源")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:remove')")
+    @Log(title = "log.op.title.da.datasource", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+        for(Long id:ids){resourceAccess.requireDatasourceConfiguration(id);projectAccess.manage(id,"remove");}
+        return CommonResult.toAjax(daDatasourceService.removeDaDatasource(Arrays.asList(ids)));
+    }
+
+    @Operation(summary = "修改数据源状态")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:edit')")
+    @GetMapping(value = "/editDatasourceStatus/{id}/{status}")
+    public AjaxResult editDatasourceStatus(@PathVariable Long id, @PathVariable Long status) {
+        resourceAccess.requireDatasourceConfiguration(id);
+        projectAccess.manage(id,"edit");
+        Boolean isOk = daDatasourceService.editDatasourceStatus(id, status);
+        if (!isOk) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "common.task.status.update.fail", "Failed to update task status; contact the administrator"));
+        }
+        return AjaxResult.success(MessageUtils.messageWithFallback(
+                "common.update.success", "Update successful"));
+    }
+
+
+    @Operation(summary = "删除数据源带类型判断是数据资产还是数据研发")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:remove')")
+    @Log(title = "log.op.title.da.datasource", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{ids}/{type}")
+    public CommonResult<Integer> removeDppOrDa(@PathVariable("ids") Long[] ids, @PathVariable("type") Long type) {
+        for(Long id:ids){resourceAccess.requireDatasourceConfiguration(id);projectAccess.manage(id,"remove");}
+        return CommonResult.toAjax(daDatasourceService.removeDaDatasourceDppOrDa(Arrays.asList(ids), type));
+    }
+
+    @Operation(summary = "测试连接")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @Log(title = "log.op.title.da.test.connection", businessType = BusinessType.OTHER)
+    @GetMapping("clientsTest/{id}")
+    public AjaxResult clientsTest(@PathVariable("id") Long ids) {
+        projectAccess.execute(ids,"query");
+
+        return daDatasourceService.clientsTest(ids);
+    }
+
+
+    @Operation(summary = "获取数据源里面的数据表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @GetMapping(value = "/tableList/{id}")
+    public AjaxResult getTableList(@PathVariable("id") Long id, @RequestParam(required=false) String databaseName) {
+        projectAccess.databaseScope(id,databaseName,"query");
+        resourceAccess.requireDatasource(id);
+        List<DbTable> tables = StringUtils.isBlank(databaseName) ? daDatasourceService.getDbTables(id) : hiveNamespaces.tables(id,databaseName);
+        return success(tables);
+    }
+
+    @Operation(summary = "获取当前项目有权访问的 Hive 数据库")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @GetMapping("/hiveDatabases/{id}")
+    public AjaxResult hiveDatabases(@PathVariable Long id) { projectAccess.execute(id,"query");resourceAccess.requireDatasource(id);return success(hiveNamespaces.databases(id).stream().filter(database->projectAccess.databaseAllowed(id,database,"query")).toList()); }
+
+
+    @Operation(summary = "获取数据源里面的数据表的数据字段")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @PostMapping(value = "/columnsList")
+    public AjaxResult getColumnsList(@RequestBody JSONObject jsonObject) {
+        if("false".equalsIgnoreCase(jsonObject.getStr("isOld")) && jsonObject.getLong("modelId")!=null)modelAccess.getObject().requireModelColumns(jsonObject.getLong("modelId"));
+        projectAccess.tableScope(jsonObject.getLong("id"),jsonObject.getStr("tableName"),"query");
+        resourceAccess.requireTable(jsonObject.getLong("id"),jsonObject.getStr("tableName"));
+        List<DpModelColumnReqDTO> columns = daDatasourceService.getColumnsList(jsonObject);
+        return success(columns);
+    }
+
+    @Operation(summary = "SQL解析")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @PostMapping("/sqlParse")
+    public AjaxResult sqlParse(@RequestBody JSONObject jsonObject) {
+        if (StringUtils.isEmpty(jsonObject.getStr("sourceId"))) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "da.error.datasource.required", "Data source is required"));
+        }
+        if (StringUtils.isEmpty(jsonObject.getStr("sql"))) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "da.error.sql.required", "SQL statement is required"));
+        }
+       /* try {
+            jsonObject.set("sql",AesEncryptUtil.desEncrypt(jsonObject.getStr("sql")).trim());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }*/
+        projectAccess.queryScope(Long.valueOf(jsonObject.getStr("sourceId")),jsonObject.getStr("sql"),"query");
+        List<DbColumn> dbColumnList = daDatasourceService.sqlParse(jsonObject.getStr("sourceId"), jsonObject.getStr("sql"));
+        List<DaAssetColumnDO> daAssetColumnDOList = DaDatasourceServiceImpl.convertDbColumns(dbColumnList);
+        return AjaxResult.success(daAssetColumnDOList);
+    }
+
+
+
+
+    @Operation(summary = "获取数据源里面的数据表的数据字段")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @PostMapping(value = "/columnsAsAssetColumnList")
+    public CommonResult<List<DaAssetColumnDO>> columnsAsAssetColumnList(@RequestBody @Valid DaDatasourceTableVO param) {
+        projectAccess.tableScope(param.getId(),param.getTableName(),"query");
+        resourceAccess.requireTable(param.getId(),param.getTableName());
+        List<DaAssetColumnDO> columns = daDatasourceService.columnsAsAssetColumnList(param.getId(), param.getTableName());
+        if (param.getWithRule() == null) {
+            return CommonResult.success(columns);
+        }
+        if (param.getWithRule() != 2 && param.getWithRule() != 1) {
+            return CommonResult.success(columns);
+        }
+        List<DaAssetColumnRelRuleVO> assetColumnRelRuleVOS = daAssetService.listRelRule(param.getId(), param.getTableName(), param.getWithRule().toString());
+        if (assetColumnRelRuleVOS.isEmpty()) {
+            return CommonResult.success(columns);
+        }
+        columns.forEach(i -> i.setCleanRuleList(new ArrayList<>()));
+        for (DaAssetColumnRelRuleVO vo : assetColumnRelRuleVOS) {
+            for (DaAssetColumnDO column : columns) {
+                if (column.getColumnName().equalsIgnoreCase(vo.getAssetColumn().getColumnName())) {
+                    column.getCleanRuleList().add(vo.getElemRuleRel());
+                    break;
+                }
+            }
+        }
+        return CommonResult.success(columns);
+    }
+    @Operation(summary = "")
+    @PreAuthorize("@ss.hasPermi('da:dataQuery:list')")
+    @GetMapping(value = "/executeSqlQuery")
+    public AjaxResult executeSqlQuery(DaDatasourcePageReqVO daDatasource) {
+        projectAccess.encodedQueryScope(daDatasource.getId(),daDatasource.getSqlText(),"da:dataQuery:list");
+        resourceAccess.requireDatasource(daDatasource.getId());
+        return success(tech.qiantong.qdata.common.database.core.BrowserQueryValues.convert(daDatasourceService.executeSqlQuery(daDatasource)));
+    }
+
+    @Operation(summary = "通过请求体提交只读SQL查询")
+    @PreAuthorize("@ss.hasPermi('da:dataQuery:list')")
+    @PostMapping(value = "/executeSqlQuery")
+    public AjaxResult executeSqlQueryBody(@RequestBody DaDatasourcePageReqVO daDatasource) {
+        return executeSqlQuery(daDatasource);
+    }
+
+
+    @Operation(summary = "")
+    @PreAuthorize("@ss.hasPermi('da:dataQuery:list')")
+    @RequestMapping(value = "/exportSqlQueryResult/export", method = {RequestMethod.GET, RequestMethod.POST})
+    public void exportSqlQueryResult(HttpServletResponse response, DaDatasourcePageReqVO daDatasource) {
+        projectAccess.encodedQueryScope(daDatasource.getId(),daDatasource.getSqlText(),"da:dataQuery:list");
+        resourceAccess.requireDatasource(daDatasource.getId());
+        daDatasourceService.exportSqlQueryResult(response, daDatasource);
+    }
+
+}

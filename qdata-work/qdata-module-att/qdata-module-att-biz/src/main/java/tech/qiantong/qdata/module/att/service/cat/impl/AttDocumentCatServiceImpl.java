@@ -1,0 +1,178 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.att.service.cat.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.YouBianCodeUtil;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttDocumentCatPageReqVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttDocumentCatSaveReqVO;
+import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttDocumentCatDO;
+import tech.qiantong.qdata.module.att.dal.mapper.cat.AttDocumentCatMapper;
+import tech.qiantong.qdata.module.att.service.cat.IAttDocumentCatService;
+import tech.qiantong.qdata.module.dp.api.service.document.IDpDocumentApiService;
+
+import jakarta.annotation.Resource;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * Standard Document Category Management Service business layer processing
+ *
+ * @author qdata
+ * @date 2025-08-21
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class AttDocumentCatServiceImpl extends ServiceImpl<AttDocumentCatMapper, AttDocumentCatDO> implements IAttDocumentCatService {
+    @Resource
+    private IDpDocumentApiService dpDocumentApiService;
+    @Resource
+    private AttDocumentCatMapper attDocumentCatMapper;
+
+    @Override
+    public PageResult<AttDocumentCatDO> getAttDocumentCatPage(AttDocumentCatPageReqVO pageReqVO) {
+        return attDocumentCatMapper.selectPage(pageReqVO);
+    }
+
+    @Override
+    public List<AttDocumentCatDO> getAttDocumentCatList(AttDocumentCatPageReqVO reqVO) {
+        MPJLambdaWrapper<AttDocumentCatDO> mpjLambdaWrapper = new MPJLambdaWrapper();
+        mpjLambdaWrapper.selectAll(AttDocumentCatDO.class)
+                .like(StringUtils.isNotEmpty(reqVO.getName()), AttDocumentCatDO::getName, reqVO.getName())
+                .eq(reqVO.getParentId() != null, AttDocumentCatDO::getParentId, reqVO.getParentId())
+                .eq(reqVO.getSortOrder() != null, AttDocumentCatDO::getSortOrder, reqVO.getSortOrder())
+                .eq(reqVO.getValidFlag() != null, AttDocumentCatDO::getValidFlag, reqVO.getValidFlag())
+                .eq(StringUtils.isNotEmpty(reqVO.getDescription()), AttDocumentCatDO::getDescription, reqVO.getDescription())
+                .eq(StringUtils.isNotEmpty(reqVO.getCode()), AttDocumentCatDO::getCode, reqVO.getCode());
+        return attDocumentCatMapper.selectList(mpjLambdaWrapper);
+    }
+
+    @Override
+    public Long createAttDocumentCat(AttDocumentCatSaveReqVO createReqVO) {
+        AttDocumentCatDO dictType = BeanUtils.toBean(createReqVO, AttDocumentCatDO.class);
+        dictType.setCode(createCode(createReqVO.getParentId(), null));
+        attDocumentCatMapper.insert(dictType);
+        return dictType.getId();
+    }
+
+    @Override
+    public int updateAttDocumentCat(AttDocumentCatSaveReqVO updateReqVO) {
+        AttDocumentCatDO catDO = baseMapper.selectById(updateReqVO.getId());
+        if (catDO == null) {
+            return 0;
+        }
+        if (Boolean.FALSE.equals(updateReqVO.getValidFlag())) {
+            Long countData = dpDocumentApiService.getCountByCatCode(catDO.getCode());
+            if (countData > 0) {
+                throw new ServiceException("att.error.disable.document", "Standard exists, disable not allowed");
+            }
+            baseMapper.updateValidFlag(catDO.getCode(), updateReqVO.getValidFlag());
+        } else if (Boolean.TRUE.equals(updateReqVO.getValidFlag())) {
+            AttDocumentCatDO parent = baseMapper.selectById(catDO.getParentId());
+            if (parent != null && Boolean.FALSE.equals(parent.getValidFlag())) {
+                throw new ServiceException("att.error.parent.disabled", "Please enable the parent category first");
+            }
+        }
+        // Update Standard Document Category Management
+        AttDocumentCatDO updateObj = BeanUtils.toBean(updateReqVO, AttDocumentCatDO.class);
+        return baseMapper.updateById(updateObj);
+    }
+
+    @Override
+    public int removeAttDocumentCat(Long id) {
+        AttDocumentCatDO catDO = baseMapper.selectById(id);
+        Long countData = dpDocumentApiService.getCountByCatCode(catDO.getCode());
+        if (countData > 0) {
+            throw new ServiceException("att.error.delete.document", "Standard exists, deletion not allowed");
+        }
+        // Delete Standard Document Category Management
+        return baseMapper.deleteById(id);
+    }
+
+    @Override
+    public AttDocumentCatDO getAttDocumentCatById(Long id) {
+        return attDocumentCatMapper.selectById(id);
+    }
+
+    @Override
+    public List<AttDocumentCatDO> getAttDocumentCatList() {
+        return attDocumentCatMapper.selectList();
+    }
+
+    @Override
+    public Map<Long, AttDocumentCatDO> getAttDocumentCatMap() {
+        List<AttDocumentCatDO> attDocumentCatList = attDocumentCatMapper.selectList();
+        return attDocumentCatList.stream()
+                .collect(Collectors.toMap(
+                        AttDocumentCatDO::getId,
+                        attDocumentCatDO -> attDocumentCatDO,
+                        // Keep existing value
+                        (existing, replacement) -> existing
+                ));
+    }
+
+    @Override
+    public boolean hasChildByAttDocumentCatId(Long id) {
+        return attDocumentCatMapper.selectCount(AttDocumentCatDO::getParentId, id) > 0;
+    }
+
+    @Override
+    public String createCode(Long parentId, String parentCode) {
+        String categoryCode = null;
+        /*
+         * Three scenarios:
+         * 1. No data in database - call YouBianCodeUtil.getNextYouBianCode(null);
+         * 2. Adding child node, no sibling elements - YouBianCodeUtil.getSubYouBianCode(parentCode,null);
+         * 3. Adding child node with sibling elements - YouBianCodeUtil.getNextYouBianCode(lastCode);
+         * */
+        // Find same category and determine the previous maximum code value
+        LambdaQueryWrapper<AttDocumentCatDO> query = new LambdaQueryWrapper<AttDocumentCatDO>()
+                .eq(AttDocumentCatDO::getParentId, parentId)
+                .likeRight(StringUtils.isNotBlank(parentCode), AttDocumentCatDO::getCode, parentCode)
+                .isNotNull(AttDocumentCatDO::getCode)
+                .orderByDesc(AttDocumentCatDO::getCode);
+        List<AttDocumentCatDO> list = baseMapper.selectList(query);
+        if (list == null || list.size() == 0) {
+            if (parentId == 0) {
+                // Case 1
+                categoryCode = YouBianCodeUtil.getNextYouBianCode(null);
+            } else {
+                // Case 2
+                AttDocumentCatDO parent = baseMapper.selectById(parentId);
+                categoryCode = YouBianCodeUtil.getSubYouBianCode(parent.getCode(), null);
+            }
+        } else {
+            // Case 3
+            categoryCode = YouBianCodeUtil.getNextYouBianCode(list.get(0).getCode());
+        }
+        return categoryCode;
+    }
+}

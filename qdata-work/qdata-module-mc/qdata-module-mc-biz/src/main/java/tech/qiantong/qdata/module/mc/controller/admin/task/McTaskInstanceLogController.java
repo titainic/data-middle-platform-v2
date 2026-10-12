@@ -1,0 +1,103 @@
+package tech.qiantong.qdata.module.mc.controller.admin.task;
+
+import cn.hutool.core.date.DateUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.module.mc.controller.admin.task.vo.McTaskInstanceLogPageReqVO;
+import tech.qiantong.qdata.module.mc.controller.admin.task.vo.McTaskInstanceLogRespVO;
+import tech.qiantong.qdata.module.mc.controller.admin.task.vo.McTaskInstanceLogSaveReqVO;
+import tech.qiantong.qdata.module.mc.convert.task.McTaskInstanceLogConvert;
+import tech.qiantong.qdata.module.mc.dal.dataobject.task.McTaskInstanceLogDO;
+import tech.qiantong.qdata.module.mc.service.task.IMcTaskInstanceLogService;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * Collection task instance-Log Controller
+ *
+ * @author qdata
+ * @date 2025-12-16
+ */
+@Tag(name = "采集任务实例-日志")
+@RestController
+@RequestMapping("/mc/taskInstanceLog")
+@Validated
+public class McTaskInstanceLogController extends BaseController {
+    @Resource private tech.qiantong.qdata.module.mc.service.task.CollectionResourceAccess resources;
+    private void scope(McTaskInstanceLogPageReqVO request){request.setAccessibleIds(resources.childIds(tech.qiantong.qdata.module.mc.service.task.CollectionResourceAccess.Child.INSTANCE_LOG));}
+
+    @Resource
+    private IMcTaskInstanceLogService mcTaskInstanceLogService;
+
+    @Operation(summary = "查询采集任务实例-日志列表")
+    @GetMapping("/list")
+    public CommonResult<PageResult<McTaskInstanceLogRespVO>> list(McTaskInstanceLogPageReqVO mcTaskInstanceLog) {
+        scope(mcTaskInstanceLog);
+        PageResult<McTaskInstanceLogDO> page = mcTaskInstanceLogService.getMcTaskInstanceLogPage(mcTaskInstanceLog);
+        return CommonResult.success(BeanUtils.toBean(page, McTaskInstanceLogRespVO.class));
+    }
+
+    @Operation(summary = "导出采集任务实例-日志列表")
+    @Log(title = "log.op.title.mc.task.instance.log", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, McTaskInstanceLogPageReqVO exportReqVO) {
+        exportReqVO.setAccessibleIds(resources.childIds(tech.qiantong.qdata.module.mc.service.task.CollectionResourceAccess.Child.INSTANCE_LOG,"export"));
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<McTaskInstanceLogDO> list = (List<McTaskInstanceLogDO>) mcTaskInstanceLogService.getMcTaskInstanceLogPage(exportReqVO).getRows();
+        ExcelUtil<McTaskInstanceLogRespVO> util = new ExcelUtil<>(McTaskInstanceLogRespVO.class);
+        util.exportExcel(response, McTaskInstanceLogConvert.INSTANCE.convertToRespVOList(list), "Application Management Data");
+    }
+
+    @Operation(summary = "获取采集任务实例-日志详细信息")
+    @GetMapping(value = "/{id:\\d+}")
+    public CommonResult<McTaskInstanceLogRespVO> getInfo(@PathVariable("id") Long id) {
+        resources.instance(id);
+        McTaskInstanceLogDO mcTaskInstanceLogDO = mcTaskInstanceLogService.getMcTaskInstanceLogById(id);
+        return CommonResult.success(BeanUtils.toBean(mcTaskInstanceLogDO, McTaskInstanceLogRespVO.class));
+    }
+
+    @Operation(summary = "新增采集任务实例-日志")
+    @Log(title = "log.op.title.mc.task.instance.log", businessType = BusinessType.INSERT)
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody McTaskInstanceLogSaveReqVO mcTaskInstanceLog) {
+        resources.requireManagedWrite();
+        mcTaskInstanceLog.setCreatorId(getUserId());
+        mcTaskInstanceLog.setCreateBy(getNickName());
+        mcTaskInstanceLog.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(mcTaskInstanceLogService.createMcTaskInstanceLog(mcTaskInstanceLog));
+    }
+
+    @Operation(summary = "修改采集任务实例-日志")
+    @Log(title = "log.op.title.mc.task.instance.log", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody McTaskInstanceLogSaveReqVO mcTaskInstanceLog) {
+        resources.requireManagedWrite();
+        mcTaskInstanceLog.setUpdatorId(getUserId());
+        mcTaskInstanceLog.setUpdateBy(getNickName());
+        mcTaskInstanceLog.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(mcTaskInstanceLogService.updateMcTaskInstanceLog(mcTaskInstanceLog));
+    }
+
+    @Operation(summary = "删除采集任务实例-日志")
+    @Log(title = "log.op.title.mc.task.instance.log", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{taskInstanceIds}")
+    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+        resources.requireManagedWrite();
+        return CommonResult.toAjax(mcTaskInstanceLogService.removeMcTaskInstanceLog(Arrays.asList(ids)));
+    }
+
+}

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- 数据中台:多源数据流汇聚于六边形平台核心 -->
+  <defs>
+    <linearGradient id="dmpGrad" x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4d8dff"/>
+      <stop offset="1" stop-color="#135afb"/>
+    </linearGradient>
+  </defs>
+  <!-- 六边形平台 -->
+  <path d="M28 8.5 38.8 14.75v12.5L28 33.5 17.2 27.25v-12.5L28 8.5Z"
+        stroke="url(#dmpGrad)" stroke-width="3" stroke-linejoin="round"/>
+  <!-- 中心数据核 -->
+  <circle cx="28" cy="21" r="4.2" fill="url(#dmpGrad)"/>
+  <!-- 左侧三条数据流汇入 -->
+  <circle cx="7" cy="9" r="2.6" fill="#4d8dff"/>
+  <circle cx="7" cy="21" r="2.6" fill="#2f74ff"/>
+  <circle cx="7" cy="33" r="2.6" fill="#135afb"/>
+  <path d="M9.6 10.2 22.5 18.2M9.6 21h12M9.6 31.8 22.5 23.8"
+        stroke="#4d8dff" stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+  <!-- 输出流 -->
+  <path d="M28 36v4.5" stroke="#135afb" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

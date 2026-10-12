@@ -1,0 +1,595 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dp.service.model.impl;
+
+import cn.hutool.core.bean.BeanUtil;
+import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.domain.BatchDeleteCheck;
+import tech.qiantong.qdata.common.core.domain.TreeData;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.da.api.datasource.dto.DaDatasourceRespDTO;
+import tech.qiantong.qdata.module.da.api.service.asset.IDaDatasourceApiService;
+import tech.qiantong.qdata.module.dm.api.service.businessCategory.IDmBusinessCategoryApiService;
+import tech.qiantong.qdata.module.dm.api.service.themeDomain.IDmThemeDomainApiService;
+import tech.qiantong.qdata.module.dp.api.dataElem.dto.DpDataElemAssetRelReqDTO;
+import tech.qiantong.qdata.module.dp.api.dataElem.dto.DpDataElemAssetRelRespDTO;
+import tech.qiantong.qdata.module.dp.api.dataElem.dto.DpDataElemRespDTO;
+import tech.qiantong.qdata.module.dp.api.model.dto.DpModelColumnRespDTO;
+import tech.qiantong.qdata.module.dp.api.model.dto.DpModelRespDTO;
+import tech.qiantong.qdata.module.dp.api.service.model.IDpModelApiService;
+import tech.qiantong.qdata.module.dp.controller.admin.model.vo.DpModelColumnSaveReqVO;
+import tech.qiantong.qdata.module.dp.controller.admin.model.vo.DpModelPageReqVO;
+import tech.qiantong.qdata.module.dp.controller.admin.model.vo.DpModelRespVO;
+import tech.qiantong.qdata.module.dp.controller.admin.model.vo.DpModelSaveReqVO;
+import tech.qiantong.qdata.module.dp.dal.dataobject.dataElem.DpDataElemAssetRelDO;
+import tech.qiantong.qdata.module.dp.dal.dataobject.dataElem.DpDataElemDO;
+import tech.qiantong.qdata.module.dp.dal.dataobject.document.DpDocumentDO;
+import tech.qiantong.qdata.module.dp.dal.dataobject.model.DpModelColumnDO;
+import tech.qiantong.qdata.module.dp.dal.dataobject.model.DpModelDO;
+import tech.qiantong.qdata.module.dp.dal.mapper.model.DpModelMapper;
+import tech.qiantong.qdata.module.dp.service.dataElem.IDpDataElemAssetRelService;
+import tech.qiantong.qdata.module.dp.service.dataElem.IDpDataElemService;
+import tech.qiantong.qdata.module.dp.service.document.IDpDocumentService;
+import tech.qiantong.qdata.module.dp.service.model.IDpModelColumnService;
+import tech.qiantong.qdata.module.dp.service.model.IDpModelService;
+
+import jakarta.annotation.Resource;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Logical Model Service Business Layer Processing
+ *
+ * @author qdata
+ * @date 2025-01-21
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class DpModelServiceImpl extends ServiceImpl<DpModelMapper, DpModelDO> implements IDpModelService, IDpModelApiService {
+    @Resource
+    private DpModelMapper dpModelMapper;
+    @Resource
+    private IDpModelColumnService iDpModelColumnService;
+    @Resource
+    private IDpDataElemService iDpDataElemService;
+
+    @Resource
+    private IDpDataElemAssetRelService iDpDataElemAssetRelService;
+    @Resource
+    private IDaDatasourceApiService daDatasourceApiService;
+
+    @Resource
+    private IDpDocumentService dpDocumentService;
+
+    @Resource
+    private IDmThemeDomainApiService dmThemeDomainApiService;
+
+    @Resource
+    private IDmBusinessCategoryApiService dmBusinessCategoryApiService;
+
+
+    /**
+     * Query data element info by asset ID and code ID
+     *
+     * @param assetId Asset ID
+     * @param codeId  Code ID
+     * @return
+     */
+    private void requireLegacyModel(Long id) {
+        DpModelDO model = dpModelMapper.selectById(id);
+        if (model != null && model.getWarehouseConfig() != null) throw new IllegalArgumentException("此模型由 Hive 分层建模管理，请在专用入口修改，保留血缘与版本");
+    }
+
+    @Override
+    public List<DpDataElemRespDTO> getDpDataElemListByAssetId(Long assetId, Set<Long> codeId) {
+        // Query IDs of data elements associated with the asset
+        Set<Long> ids = new HashSet<>();
+        List<DpDataElemAssetRelDO> list = iDpDataElemAssetRelService.lambdaQuery()
+                .eq(DpDataElemAssetRelDO::getAssetId, assetId)
+                .list();
+        if (CollectionUtils.isNotEmpty(list)) {
+            for (DpDataElemAssetRelDO dpDataElemAssetRelDO : list) {
+                ids.add(Long.valueOf(dpDataElemAssetRelDO.getDataElemId()));
+            }
+        }
+        ids.addAll(codeId);
+        List<DpDataElemDO> dpDataElemDOS = new ArrayList<>();
+        if (StringUtils.isNotEmpty(ids)) {
+            dpDataElemDOS = iDpDataElemService.lambdaQuery().in(DpDataElemDO::getId, ids).list();
+            for (DpDataElemDO dpDataElemDO : dpDataElemDOS) {
+                Set<Long> columnId = new HashSet<>();
+                for (DpDataElemAssetRelDO dpDataElemAssetRelDO : list) {
+                    if (dpDataElemAssetRelDO.getDataElemId().equals(dpDataElemDO.getId().toString())) {
+                        columnId.add(Long.valueOf(dpDataElemAssetRelDO.getColumnId()));
+                    }
+                }
+                dpDataElemDO.setColumnId(columnId);
+            }
+        }
+
+        return BeanUtils.toBean(dpDataElemDOS, DpDataElemRespDTO.class);
+    }
+
+    /**
+     * Get column set under model by model ID
+     *
+     * @param modelId Model ID
+     */
+    @Override
+    public List<DpModelColumnRespDTO> getModelIdColumnList(Long modelId) {
+        DpModelColumnSaveReqVO dpModelColumnSaveReqVO = new DpModelColumnSaveReqVO();
+        dpModelColumnSaveReqVO.setModelId(modelId);
+        List<DpModelColumnDO> dpModelColumnList = iDpModelColumnService.getDpModelColumnList(dpModelColumnSaveReqVO);
+        List<DpModelColumnRespDTO> dpModelColumnRespDTOList = BeanUtils.toBean(dpModelColumnList, DpModelColumnRespDTO.class);
+        return dpModelColumnRespDTOList;
+    }
+
+    /**
+     * Get data element ID set by column ID
+     *
+     * @param columnId
+     * @return
+     */
+    @Override
+    public Set<Long> getDpDataElemListByAssetIdApi(Long columnId) {
+        Set<Long> result = new HashSet<>();
+        List<DpDataElemAssetRelDO> list = iDpDataElemAssetRelService.lambdaQuery()
+                .select(DpDataElemAssetRelDO::getDataElemId)
+                .eq(DpDataElemAssetRelDO::getColumnId, columnId)
+                .eq(DpDataElemAssetRelDO::getDelFlag, "0")
+                .list();
+        if (CollectionUtils.isNotEmpty(list)) {
+            for (DpDataElemAssetRelDO dpDataElemAssetRelDO : list) {
+                result.add(Long.valueOf(dpDataElemAssetRelDO.getDataElemId()));
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<DpDataElemAssetRelRespDTO> getDpDataElemListByColumnIdInApi(Collection<Long> columnIds) {
+        List<DpDataElemAssetRelDO> list = iDpDataElemAssetRelService.lambdaQuery()
+                .in(DpDataElemAssetRelDO::getColumnId, columnIds)
+                .eq(DpDataElemAssetRelDO::getDelFlag, "0")
+                .list();
+        return BeanUtils.toBean(list, DpDataElemAssetRelRespDTO.class);
+    }
+
+    @Override
+    public Set<Long> getDpDataElemListByAssetIdAndColumnId(Long assetId, Long columnId) {
+        Set<Long> result = new HashSet<>();
+        List<DpDataElemAssetRelDO> list = iDpDataElemAssetRelService.lambdaQuery()
+                .select(DpDataElemAssetRelDO::getDataElemId)
+                .eq(DpDataElemAssetRelDO::getAssetId, assetId)
+                .eq(DpDataElemAssetRelDO::getColumnId, columnId)
+                .list();
+        if (CollectionUtils.isNotEmpty(list)) {
+            for (DpDataElemAssetRelDO dpDataElemAssetRelDO : list) {
+                result.add(Long.valueOf(dpDataElemAssetRelDO.getDataElemId()));
+            }
+        }
+        return result;
+    }
+
+
+    /**
+     * Update data element and asset relation data
+     *
+     * @param dpDataElemAssetRel
+     * @return
+     */
+    @Override
+    public boolean updateElementAssetRelation(DpDataElemAssetRelReqDTO dpDataElemAssetRel) {
+        Set<Long> elementIds = dpDataElemAssetRel.getElementIds();
+        // Missing fields in partial metadata updates preserve existing standard bindings.
+        if (elementIds == null) return true;
+        Long assetId = dpDataElemAssetRel.getAssetId();
+        Long columnId = dpDataElemAssetRel.getColumnId();
+        if (assetId == null || columnId == null) throw new IllegalArgumentException("更新标准关联必须指定资产和字段");
+        iDpDataElemAssetRelService.lambdaUpdate()
+                .eq(DpDataElemAssetRelDO::getAssetId, assetId)
+                .eq(DpDataElemAssetRelDO::getColumnId, columnId).remove();
+        boolean save = true;
+        List<DpDataElemAssetRelDO> dpDataElemAssetRelDOList = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(elementIds)) {
+            dpDataElemAssetRelDOList = elementIds.stream().map(item -> {
+                DpDataElemAssetRelDO dpDataElemAssetRelDO = new DpDataElemAssetRelDO();
+                dpDataElemAssetRelDO.setAssetId(String.valueOf(assetId));// Asset ID
+                dpDataElemAssetRelDO.setDataElemId(String.valueOf(item));// Data Element ID
+                dpDataElemAssetRelDO.setDataElemType("1");// Is data element
+                dpDataElemAssetRelDO.setTableName(dpDataElemAssetRel.getTableName());
+                dpDataElemAssetRelDO.setColumnId(String.valueOf(dpDataElemAssetRel.getColumnId()));
+                dpDataElemAssetRelDO.setColumnName(dpDataElemAssetRel.getColumnName());
+                return dpDataElemAssetRelDO;
+            }).collect(Collectors.toList());
+        }
+        for (DpDataElemAssetRelDO dpDataElemAssetRelDO : dpDataElemAssetRelDOList) {
+            save = iDpDataElemAssetRelService.save(dpDataElemAssetRelDO);
+        }
+        return save;
+    }
+
+    /**
+     * Insert data element and asset relation data
+     *
+     * @param dpDataElemAssetRel
+     * @return
+     */
+    @Override
+    public boolean insertElementAssetRelation(List<DpDataElemAssetRelReqDTO> dpDataElemAssetRel) {
+        boolean result = false;
+        if (CollectionUtils.isNotEmpty(dpDataElemAssetRel)) {
+            // DpDataElemAssetRelReqDTO Convert to DpDataElemAssetRelDO
+            List<DpDataElemAssetRelDO> dpDataElemAssetRelDOList = dpDataElemAssetRel.stream().map(item -> {
+                DpDataElemAssetRelDO dpDataElemAssetRelDO = new DpDataElemAssetRelDO();
+                BeanUtil.copyProperties(item, dpDataElemAssetRelDO);
+                return dpDataElemAssetRelDO;
+            }).collect(Collectors.toList());
+//            result = iDpDataElemAssetRelService.saveBatch(dpDataElemAssetRelDOList);
+            for (DpDataElemAssetRelDO dpDataElemAssetRelDO : dpDataElemAssetRelDOList) {
+                result = iDpDataElemAssetRelService.save(dpDataElemAssetRelDO);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public Long getCountByCatCode(String catCode) {
+        return baseMapper.selectCount(Wrappers.lambdaQuery(DpModelDO.class).likeRight(DpModelDO::getCatCode, catCode));
+    }
+
+    /**
+     * Query data element info by data element ID
+     *
+     * @param ids
+     * @return
+     */
+    @Override
+    public List<DpDataElemRespDTO> getDpDataElemListByIdsApi(Set<Long> ids) {
+
+        List<DpDataElemDO> list = iDpDataElemService.lambdaQuery()
+                .in(DpDataElemDO::getId, ids)
+                .eq(DpDataElemDO::getDelFlag, 0)
+                .list();
+        // Convert list type to DpDataElemRespDTO
+        return list.stream().map(item -> {
+            DpDataElemRespDTO dpModelColumnRespDTO = new DpDataElemRespDTO();
+            BeanUtil.copyProperties(item, dpModelColumnRespDTO);
+            return dpModelColumnRespDTO;
+        }).collect(Collectors.toList());
+    }
+
+    /**
+     * Get logical model column info by logical model ID
+     *
+     * @param modelId Logical Model ID
+     * @return Logical model column info
+     */
+    @Override
+    public List<DpModelColumnRespDTO> getDpModelColumnListByModelIdApi(Long modelId) {
+        List<DpModelColumnDO> list = iDpModelColumnService.lambdaQuery()
+                .eq(DpModelColumnDO::getModelId, modelId)
+                .list();
+        // Convert list type to DpModelColumnRespDTO
+        return list.stream().map(item -> {
+            DpModelColumnRespDTO dpModelColumnRespDTO = new DpModelColumnRespDTO();
+            BeanUtil.copyProperties(item, dpModelColumnRespDTO);
+            return dpModelColumnRespDTO;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public PageResult<DpModelDO> getDpModelPage(DpModelPageReqVO pageReqVO) {
+        PageResult<DpModelDO> dpModelDOPageResult = dpModelMapper.selectPage(pageReqVO);
+//        List<DpModelDO> rows = (List<DpModelDO>) dpModelDOPageResult.getRows();
+//        if (CollectionUtils.isEmpty(rows)) {
+//            return dpModelDOPageResult;
+//        }
+//        for (DpModelDO row : rows) {
+//            // Fields
+//            DpModelColumnSaveReqVO dpModelColumnSaveReqVO = new DpModelColumnSaveReqVO();
+//            dpModelColumnSaveReqVO.setModelId(row.getId());
+//            long count = iDpModelColumnService.countByDpModelColumn(dpModelColumnSaveReqVO);
+//            row.setColumnCount(count);
+//
+//            // Asset
+//
+//        }
+//        dpModelDOPageResult.setRows(rows);
+        return dpModelDOPageResult;
+    }
+
+    @Override
+    public Long createDpModel(DpModelSaveReqVO createReqVO) {
+        throw new IllegalArgumentException("新建模型请使用 Hive 五层建模，绑定数仓空间和物理数据库");
+    }
+
+    @Override
+    public int updateDpModel(DpModelSaveReqVO updateReqVO) {
+        requireLegacyModel(updateReqVO.getId());
+        // Related validation
+
+        // Update logical model
+        DpModelDO updateObj = BeanUtils.toBean(updateReqVO, DpModelDO.class);
+        return dpModelMapper.updateById(updateObj);
+    }
+
+    @Override
+    public int removeDpModel(Collection<Long> idList) {
+        idList.forEach(this::requireLegacyModel);
+        // Batch delete logical model
+        return dpModelMapper.deleteBatchIds(idList);
+    }
+
+    @Override
+    public DpModelDO getDpModelById(Long id) {
+        MPJLambdaWrapper<DpModelDO> mpjLambdaWrapper = new MPJLambdaWrapper();
+        mpjLambdaWrapper.selectAll(DpModelDO.class)
+                .select("t2.name AS catName",
+                        "t3.NAME AS dataLayerName",
+                        "t3.ENG_NAME AS dataLayerEngName",
+                        "t4.NAME AS businessCategoryName",
+                        "t4.ENG_NAME AS businessCategoryEngName",
+                        "t5.NAME AS dataDomainName",
+                        "t5.ENG_NAME AS dataDomainEngName",
+                        "t6.NAME AS themeDomainName",
+                        "t6.ENG_NAME AS themeDomainEngName",
+                        "u.PHONENUMBER AS createUserPhoneNumber",
+                        "u2.PHONENUMBER AS updateUserPhoneNumber")
+                .leftJoin("SYSTEM_USER u on t.CREATOR_ID = u.USER_ID AND u.DEL_FLAG = '0'")
+                .leftJoin("SYSTEM_USER u2 on t.UPDATER_ID = u2.USER_ID AND u2.DEL_FLAG = '0'")
+                .leftJoin("ATT_MODEL_CAT t2 on t.CAT_CODE = t2.CODE AND t2.DEL_FLAG = '0'")
+                .leftJoin("DM_DATA_LAYER t3 ON t.DATA_LAYER_ID = t3.id AND t3.DEL_FLAG = '0'")
+                .leftJoin("DM_BUSINESS_CATEGORY t4 ON t.BUSINESS_CATEGORY_ID = t4.id AND t4.DEL_FLAG = '0'")
+                .leftJoin("DM_DATA_DOMAIN t5 ON t.DATA_DOMAIN_ID = t5.id AND t5.DEL_FLAG = '0'")
+                .leftJoin("DM_THEME_DOMAIN t6 ON t.THEME_DOMAIN_ID = t6.id AND t6.DEL_FLAG = '0'")
+                .eq(DpModelDO::getId, id);
+        DpModelDO dpModelDO = dpModelMapper.selectJoinOne(DpModelDO.class, mpjLambdaWrapper);
+        if (dpModelDO == null) {
+            return null;
+        }
+        if ("2".equals(dpModelDO.getCreateType())) {
+            DaDatasourceRespDTO datasource = daDatasourceApiService.getDatasourceById(dpModelDO.getDatasourceId());
+            if (datasource != null) {
+                dpModelDO.setPort(datasource.getPort());
+                dpModelDO.setIp(datasource.getIp());
+                dpModelDO.setDatasourceConfig(datasource.getDatasourceConfig());
+                dpModelDO.setDatasourceType(datasource.getDatasourceType());
+                dpModelDO.setDatasourceName(datasource.getDatasourceName());
+            }
+        }
+        if (dpModelDO.getDocumentId() != null) {
+            DpDocumentDO dpDocument = dpDocumentService.getDpDocumentById(dpModelDO.getDocumentId());
+            if (dpDocument != null) {
+                dpModelDO.setDocumentCode(dpDocument.getCode());
+                dpModelDO.setDocumentName(dpDocument.getName());
+                dpModelDO.setDocumentType(dpDocument.getType());
+            }
+        }
+        return dpModelDO;
+    }
+
+    /**
+     * Get logical model info by logical model ID
+     *
+     * @param id
+     * @return
+     */
+    @Override
+    public DpModelRespDTO getWarehouseModelByTableApi(Long datasourceId, String tableName) {
+        return getWarehouseModelByTableApi(datasourceId, null, tableName);
+    }
+
+    @Override
+    public DpModelRespDTO getWarehouseModelByTableApi(Long datasourceId, String databaseName, String tableName) {
+        var matches = dpModelMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DpModelDO>()
+                .eq("datasource_id", datasourceId).eq("model_name", tableName)
+                .eq(org.apache.commons.lang3.StringUtils.isNotBlank(databaseName), "database_name", databaseName)
+                .eq("del_flag", "0").isNotNull("warehouse_config"));
+        if (matches.isEmpty()) return null;
+        if (matches.size() != 1) throw new IllegalStateException("库表身份不完整或存在多个模型关联，请提供数据库名");
+        return getDpModelByIdApi(matches.get(0).getId());
+    }
+
+    @Override
+    public DpModelRespDTO getDpModelByIdApi(Long id) {
+        DpModelRespDTO dto = new DpModelRespDTO();
+        DpModelDO dpModelDO = this.getDpModelById(id);
+        BeanUtil.copyProperties(dpModelDO, dto);
+        return dto;
+    }
+
+
+    @Override
+    public List<DpModelDO> getDpModelList() {
+        return dpModelMapper.selectList();
+    }
+
+    @Override
+    public Map<Long, DpModelDO> getDpModelMap() {
+        List<DpModelDO> dpModelList = dpModelMapper.selectList();
+        return dpModelList.stream().collect(Collectors.toMap(DpModelDO::getId, dpModelDO -> dpModelDO,
+                // Keep existing value
+                (existing, replacement) -> existing));
+    }
+
+
+    /**
+     * Import logical model data
+     *
+     * @param importExcelList Logical model data list
+     * @param isUpdateSupport Whether to support update, if exists then update the data
+     * @param operName        Operator
+     * @return Result
+     */
+    @Override
+    public String importDpModel(List<DpModelRespVO> importExcelList, boolean isUpdateSupport, String operName) {
+        if (StringUtils.isNull(importExcelList) || importExcelList.size() == 0) {
+            throw new ServiceException("dp.error.import.empty", "Import data cannot be empty!");
+        }
+        if (!isUpdateSupport) {
+            throw new IllegalArgumentException("新建模型请使用 Hive 五层建模；导入仅支持已有旧模型更新");
+        }
+
+        int successNum = 0;
+        int failureNum = 0;
+        List<String> successMessages = new ArrayList<>();
+        List<String> failureMessages = new ArrayList<>();
+
+        for (DpModelRespVO respVO : importExcelList) {
+            try {
+                DpModelDO dpModelDO = BeanUtils.toBean(respVO, DpModelDO.class);
+                dpModelDO.setUpdatorId(respVO.getUpdaterId());
+                Long dpModelId = respVO.getId();
+                if (isUpdateSupport) {
+                    if (dpModelId != null) {
+                        DpModelDO existingDpModel = dpModelMapper.selectById(dpModelId);
+                        if (existingDpModel != null) {
+                            requireLegacyModel(dpModelId);
+                            dpModelMapper.updateById(dpModelDO);
+                            successNum++;
+                            successMessages.add(MessageUtils.messageWithFallback("dp.import.update.success",
+                                    "Data update successful, ID {0} {1} record.", dpModelId, MessageUtils.messageWithFallback("dp.entity.logical.model", "Logical model")));
+                        } else {
+                            failureNum++;
+                            failureMessages.add(MessageUtils.messageWithFallback("dp.import.update.fail",
+                                    "Data update failed, ID {0} {1} record does not exist.", dpModelId, MessageUtils.messageWithFallback("dp.entity.logical.model", "Logical model")));
+                        }
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("dp.import.update.id.missing",
+                                "Data update failed, record ID does not exist."));
+                    }
+                } else {
+                    QueryWrapper<DpModelDO> queryWrapper = new QueryWrapper<>();
+                    queryWrapper.eq("id", dpModelId);
+                    DpModelDO existingDpModel = dpModelMapper.selectOne(queryWrapper);
+                    if (existingDpModel == null) {
+                        dpModelMapper.insert(dpModelDO);
+                        successNum++;
+                        successMessages.add(MessageUtils.messageWithFallback("dp.import.insert.success",
+                                "Data insert successful, ID {0} {1} record.", dpModelId, MessageUtils.messageWithFallback("dp.entity.logical.model", "Logical model")));
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("dp.import.insert.fail",
+                                "Data insert failed, ID {0} {1} record already exists.", dpModelId, MessageUtils.messageWithFallback("dp.entity.logical.model", "Logical model")));
+                    }
+                }
+            } catch (Exception e) {
+                failureNum++;
+                String errorMsg = MessageUtils.messageWithFallback("dp.import.error.detail",
+                "Data import failed, error: {0}", e.getMessage());
+                failureMessages.add(errorMsg);
+                log.error(errorMsg, e);
+            }
+        }
+        StringBuilder resultMsg = new StringBuilder();
+        if (failureNum > 0) {
+            String failureDetails = String.join("<br/>", failureMessages);
+            resultMsg.append(MessageUtils.messageWithFallback("dp.import.result.fail",
+                    "Import failed! {0} records have incorrect format, errors:<br/>{1}",
+                    failureNum, failureDetails));
+            throw new ServiceException("dp.error.import.fail", resultMsg.toString(), resultMsg.toString());
+        } else {
+            resultMsg.append(MessageUtils.messageWithFallback("dp.import.result.success",
+                    "Congratulations! All data imported! Total: {0} records.", successNum));
+        }
+        return resultMsg.toString();
+    }
+
+    @Override
+    public int removeDpModelAndColumnAll(List<Long> asList) {
+        asList.forEach(this::requireLegacyModel);
+        int i = dpModelMapper.deleteBatchIds(asList);
+        iDpModelColumnService.removeDpModelColumnByModelId(asList);
+        return i > 0 ? 1 : 0;
+    }
+
+    @Override
+    public Boolean updateStatus(Long id, Long status) {
+        requireLegacyModel(id);
+        return this.update(Wrappers.lambdaUpdate(DpModelDO.class)
+                .eq(DpModelDO::getId, id)
+                .set(DpModelDO::getStatus, status));
+    }
+
+    @Override
+    public List<TreeData> getTreeData() {
+        List<TreeData> treeData = new ArrayList<>();
+
+        treeData.add(TreeData.builder()
+                .name(MessageUtils.messageWithFallback("dp.model.tree.public.layer", "公共层"))
+                .type("0")
+                .otherData(buildTooltipData(MessageUtils.messageWithFallback("dp.model.tree.public.layer.tooltip", "主要面向数据开发人员，作为应用层的数据地基，把杂乱的数据建成通用的明细模型，方便大家复用。")))
+                .children(dmBusinessCategoryApiService.getTreeData(null))
+                .build());
+        treeData.add(TreeData.builder()
+                .name(MessageUtils.messageWithFallback("dp.model.tree.application.layer", "应用层"))
+                .type("0")
+                .otherData(buildTooltipData(MessageUtils.messageWithFallback("dp.model.tree.application.layer.tooltip", "主要面向业务及分析人员，通过加工公共层的基础数据计算而来，直接用来做可视化大屏或业务报表。")))
+                .children(dmThemeDomainApiService.getTreeData(null))
+                .build());
+        return treeData;
+    }
+
+    private com.alibaba.fastjson2.JSONObject buildTooltipData(String tooltip) {
+        return JSON.parseObject(JSON.toJSONString(Collections.singletonMap("tooltipStr", tooltip)));
+    }
+
+    @Override
+    public int updateCatCode(String oldCatCode, String newCatCode) {
+        return dpModelMapper.updateCatCode(oldCatCode, newCatCode);
+    }
+
+    @Override
+    public PageResult<DpModelDO> getReleaseListPage(DpModelPageReqVO pageReqVO) {
+        return dpModelMapper.getReleaseListPage(pageReqVO);
+    }
+
+    @Override
+    public BatchDeleteCheck<Long> batchDeleteCheck(List<Long> ids) {
+        List<DpModelDO> list = baseMapper.selectList(Wrappers.lambdaQuery(DpModelDO.class)
+                .select(DpModelDO::getId, DpModelDO::getStatus)
+                .in(DpModelDO::getId, ids));
+        int cannotDeleteCount = 0;
+        List<Long> canDeleteIds = new ArrayList<>();
+        for (DpModelDO one : list) {
+            if ("1".equals(one.getStatus())) {
+                cannotDeleteCount++;
+                continue;
+            }
+            canDeleteIds.add(one.getId());
+        }
+        return new BatchDeleteCheck<>(cannotDeleteCount, canDeleteIds);
+    }
+}

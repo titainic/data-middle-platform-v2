@@ -1,0 +1,28 @@
+title = "qData source credential scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+targetRules = ["private-key"]
+description = "RSA parser strips PEM delimiters; no embedded key material"
+condition = "AND"
+paths = ['''/RSAUtil\.java$''']
+regexTarget = "match"
+regexes = ['''-----BEGIN PRIVATE KEY-----", ""\);\s*privateKey = privateKey\.replace\("-----END PRIVATE KEY-----''']
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Vue form label positioning attributes"
+condition = "AND"
+paths = ['''\.vue$''']
+regexTarget = "line"
+regexes = ['''^\s*<el-form-item\b[^>]*:label-position="labelPosition"[^>]*>$''']
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Example DS endpoint paired with an environment placeholder"
+condition = "AND"
+paths = ['''/application-(dev|prod)\.example\.yml$''']
+regexTarget = "line"
+regexes = ['''^\s*base_url: http://bigdata-ds-api:12345/dolphinscheduler$''']

@@ -1,0 +1,391 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <el-dialog
+      title="学生-多选"
+      v-model="visible"
+      width="1200px"
+      :append-to="$refs['app-container']"
+      draggable
+      destroy-on-close
+      @close="cancel"
+  >
+    <el-form
+        class="btn-style"
+        :model="queryParams"
+        ref="queryRef"
+        :inline="true"
+        v-show="showSearch"
+
+     :label-position="labelPosition">
+      <el-form-item label="姓名" prop="name" :label-position="labelPosition">
+        <el-input
+            style="width:240px"
+            v-model="queryParams.name"
+            placeholder="请输入姓名"
+            clearable
+            @keyup.enter="handleQuery"
+        />
+      </el-form-item>
+      <el-form-item label="性别" prop="sex" :label-position="labelPosition">
+        <el-select style="width:240px" v-model="queryParams.sex" placeholder="请选择性别" clearable>
+          <el-option
+              v-for="dict in sys_user_sex"
+              :key="dict.value"
+              :label="dict.label"
+              :value="dict.value"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="年龄" prop="age" :label-position="labelPosition">
+        <el-input
+            style="width:240px"
+            v-model="queryParams.age"
+            placeholder="请输入年龄"
+            clearable
+            @keyup.enter="handleQuery"
+        />
+      </el-form-item>
+      <el-form-item label="学号" prop="studentNumber" :label-position="labelPosition">
+        <el-input
+            style="width:240px"
+            v-model="queryParams.studentNumber"
+            placeholder="请输入学号"
+            clearable
+            @keyup.enter="handleQuery"
+        />
+      </el-form-item>
+      <el-form-item label="班级" prop="grade" :label-position="labelPosition">
+        <el-input
+            style="width:240px"
+            v-model="queryParams.grade"
+            placeholder="请输入班级"
+            clearable
+            @keyup.enter="handleQuery"
+        />
+      </el-form-item>
+      <el-form-item :label="t('common.texts.createdTime')" prop="createTime" :label-position="labelPosition">
+        <el-date-picker style="width:240px"
+                        clearable
+                        v-model="queryParams.createTime"
+                        type="date"
+                        value-format="YYYY-MM-DD"
+                        placeholder="请选择创建时间">
+        </el-date-picker>
+      </el-form-item>
+      <el-form-item :label-position="labelPosition">
+        <el-button
+            plain
+            type="primary"
+            @click="handleQuery"
+            @mousedown="(e) => e.preventDefault()"
+        >
+          <i class="iconfont-mini icon-a-zu22377 mr5"></i>{{ t('common.button.query') }}
+        </el-button>
+        <el-button @click="resetQuery" @mousedown="(e) => e.preventDefault()">
+          <i class="iconfont-mini icon-a-zu22378 mr5"></i>{{ t('common.button.reset') }}
+        </el-button>
+      </el-form-item>
+    </el-form>
+
+    <el-table
+        ref="multipletableRef"
+        stripe
+        height="300px"
+        v-loading="loading"
+        :data="dataList"
+        reserve-selection
+        row-key="id"
+        @selection-change="handleSelectionChange"
+        @row-click="handleRowClick"
+    >
+      <el-table-column type="selection" width="55" align="center" />
+      <el-table-column label="ID" align="center" prop="id" />
+      <el-table-column label="姓名" align="center" prop="name">
+        <template #default="scope">
+          {{ scope.row.name || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="学生照" align="center" prop="pictureUrl" width="100">
+        <template #default="scope">
+          <image-preview :src="scope.row.pictureUrl" :width="50" :height="50"/>
+        </template>
+      </el-table-column>
+      <el-table-column label="教育经历" align="center" prop="experience">
+        <template #default="scope">
+          {{ scope.row.experience || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="性别" align="center" prop="sex">
+        <template #default="scope">
+              <dict-tag :options="sys_user_sex" :value="scope.row.sex"/>
+        </template>
+      </el-table-column>
+      <el-table-column label="年龄" align="center" prop="age">
+        <template #default="scope">
+          {{ scope.row.age || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="学号" align="center" prop="studentNumber">
+        <template #default="scope">
+          {{ scope.row.studentNumber || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="班级" align="center" prop="grade">
+        <template #default="scope">
+          {{ scope.row.grade || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="爱好" align="center" prop="hobby">
+        <template #default="scope">
+              <dict-tag :options="message_level" :value="scope.row.hobby ? scope.row.hobby.split(',') : []"/>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('common.texts.createdBy')" align="center" prop="createBy">
+        <template #default="scope">
+          {{ scope.row.createBy || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('common.texts.createdTime')" align="center" prop="createTime" width="180">
+        <template #default="scope">
+          <span>{{ parseTime(scope.row.createTime, '{y}-{m}-{d}') }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('common.texts.remark')" align="center" prop="remark">
+        <template #default="scope">
+          {{ scope.row.remark || '-' }}
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <pagination
+        v-show="total > 0"
+        :total="total"
+        v-model:page="queryParams.pageNum"
+        v-model:limit="queryParams.pageSize"
+        @pagination="getList"
+    />
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button size="mini" @click="cancel">{{ t('common.button.cancel') }}</el-button>
+        <el-button type="primary" size="mini" @click="confirm">
+          {{ t('common.button.confirm') }}
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup name="StudentMultiple">
+import { useI18n } from 'vue-i18n'
+import { listStudent } from "@/api/example/genStudent/student";
+  import { ref } from "vue";
+
+const { t } = useI18n();
+  const { proxy } = getCurrentInstance();
+
+  const { sys_user_sex, message_level } = proxy.useDict('sys_user_sex', 'message_level');
+
+  const dataList = ref([]);
+  const loading = ref(true);
+  const showSearch = ref(true);
+  const total = ref(0);
+  const dateRange = ref([]);
+  const data = reactive({
+    form: {},
+    queryParams: {
+      pageNum: 1,
+      pageSize: 10,
+      name: null,
+      pictureUrl: null,
+      experience: null,
+      sex: null,
+      age: null,
+      studentNumber: null,
+      grade: null,
+      hobby: null,
+      createTime: null,
+    }
+  });
+  const { queryParams, form } = toRefs(data);
+
+  // -------------------------------------------
+  const visible = ref(false);
+  // Define multiple selection data
+  const multiple = ref([]);
+  // Define the last checked data == used for comparison and deletion
+  const oldSelection = ref([]);
+  // Whether to switch between pages
+  const isAuto = ref(false);
+  // Current interface table
+  const multipletableRef = ref();
+
+  const emit = defineEmits(["open", "confirm", "cancel"]);
+
+  /** Multi-select box selection event */
+  function handleSelectionChange(selection) {
+    // console.log(selection, "===handleSelectionChange");
+    if (selection.length > 0) {
+      // If the selected value is not a null value and one less value is selected
+      if (oldSelection.value.length > selection.length) {
+        oldSelection.value.forEach((item) => {
+          let index = selection.findIndex((ece) => ece.id == item.id);
+          if (index == -1) {
+            multiple.value = multiple.value.filter(
+                (ece) => item.id != ece.id
+            );
+          }
+        });
+      }
+      if (multiple.value.length > 0) {
+        selection.forEach((item) => {
+          let index = multiple.value.findIndex(
+              (ece) => ece.id == item.id
+          );
+          if (index == -1) {
+            multiple.value.push(item);
+          }
+        });
+      } else {
+        multiple.value.push(...selection);
+      }
+    } else {
+      // If it is not caused by paging
+      if (!isAuto.value) {
+        // If a value is selected, cancel to no value selected
+        oldSelection.value.forEach((item) => {
+          let index = selection.findIndex((ece) => ece.id == item.id);
+          if (index == -1) {
+            multiple.value = multiple.value.filter(
+                (ece) => item.id != ece.id
+            );
+          }
+        });
+      }
+    }
+    oldSelection.value = selection;
+  }
+
+  /** Single machine event */
+  function handleRowClick(row) {
+    // Check if current row is already in multiple
+    const index = multiple.value.findIndex(item => item.id === row.id);
+
+    // If the row is already selected, remove it
+    if (index > -1) {
+      multiple.value = multiple.value.filter(item => item.id !== row.id);
+    } else {
+      // If row is not selected, add to multiple
+      multiple.value.push(row);
+    }
+
+    // Synchronously update the selected status of the table
+    multipletableRef.value.toggleRowSelection(row, index === -1);
+  }
+
+  /**
+   * Select the checkbox of the table
+   * @param {Array} rows Array of selected objects
+   * @param {Boolean} ignoreSelectable Whether to ignore optional
+   */
+  function setSelectionRow(rows, ignoreSelectable) {
+    // Select data
+    if (rows.length > 0) {
+      rows.forEach((row) => {
+        let data = dataList.value.filter((item) => item.id == row.id);
+        if (data.length > 0) {
+          multipletableRef.value.toggleRowSelection(data[0], undefined, ignoreSelectable);
+        }
+      });
+    }
+  }
+
+  function rest(){
+    queryParams.value.pageNum = 1;
+    proxy.resetForm("queryRef");
+    oldSelection.value = []
+  }
+
+  /**
+   * Open selection box
+   * @param {Array} val array of selected objects
+   */
+  function open(val) {
+    if (!Array.isArray(val)) {
+      val = [val];  // Convert non-iterable values to array
+    }
+    visible.value = true;
+    multiple.value = [...val];
+    getList();
+  }
+
+  /**
+   * Cancel button
+   * @description When canceling the button, reset all states
+   */
+  function cancel() {
+    rest();
+    visible.value = false;
+  }
+
+  /**
+   * OK button
+   * @description When confirming the button, emit the confirm event so that the parent component receives the selected data
+   */
+  function confirm() {
+    if (multiple.value.length == 0) {
+      proxy.$modal.msgWarning("未选择数据！");
+      return;
+    }
+    emit("confirm", [...multiple.value]);
+    rest();
+    visible.value = false;
+  }
+
+  /** Query dictionary type list */
+  function getList() {
+    loading.value = true;
+    listStudent(proxy.addDateRange(queryParams.value, dateRange.value)).then(
+        async (response) => {
+          dataList.value = response.data.rows;
+          total.value = response.data.total;
+          loading.value = false;
+          // Initialization and paging switching selection logic
+          isAuto.value = true;
+          await nextTick();
+          setSelectionRow(multiple.value);
+          isAuto.value = false;
+        }
+    );
+  }
+
+  /** Search button action */
+  function handleQuery() {
+    getList();
+  }
+
+  /** reset button action */
+  function resetQuery() {
+    proxy.resetForm("queryRef");
+    queryParams.value.pageNum = 1;
+    handleQuery();
+  }
+
+  defineExpose({ open });
+</script>

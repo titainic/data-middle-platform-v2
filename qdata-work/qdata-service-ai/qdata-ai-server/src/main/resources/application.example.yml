@@ -1,0 +1,91 @@
+
+qdata:
+  name: qData
+  version: 1.6.1
+  copyrightYear: 2024
+  profile: ${user.dir}/upload/ # Storage path
+  addressEnabled: false
+  captchaType: math
+
+server:
+  port: 8087
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    accept-count: 1000
+    threads:
+      max: 800
+      min-spare: 100
+
+logging:
+  level:
+    tech.qiantong: debug
+    org.springframework: warn
+
+user:
+  password:
+    maxRetryCount: 5
+    lockTime: 10
+    universalPassword: "${QDATA_QDATA_SERVICE_AI_USER_PASSWORD_UNIVERSALPASSWORD:}"
+
+spring:
+  main:
+    allow-circular-references: true
+  messages:
+    basename: i18n/messages,i18n/ai-messages,i18n/log-messages
+    encoding: UTF-8
+  profiles:
+    active: dev  # The environment activated by default, which can be overridden at startup
+  config:
+    import:
+      - "application-${spring.profiles.active}.yml"
+      - "classpath:application-auth-${spring.profiles.active}.yml"
+      - "classpath:application-file-${spring.profiles.active}.yml"
+      - "classpath:application-system-${spring.profiles.active}.yml"
+  servlet:
+    multipart:
+      max-file-size: 3000MB
+      max-request-size: 3000MB
+
+token:
+  header: Authorization
+  rpHeader: token
+  secret: "${QDATA_QDATA_SERVICE_AI_TOKEN_SECRET:}"
+  expireTime: 600
+
+mybatis-plus:
+  typeAliasesPackage: tech.qiantong.**.dataobject,tech.qiantong.**.dataobject.assetchild, tech.qiantong.**.domain
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  configLocation: classpath:mybatis/mybatis-config.xml
+  global-config:
+    banner: false
+    db-config:
+      idType: AUTO
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      insertStrategy: NOT_NULL
+      updateStrategy: NOT_NULL
+      where-strategy: NOT_NULL
+
+mybatis-plus-join:
+  banner: false
+  sub-table-logic: true
+  ms-cache: true
+  table-alias: t
+  logic-del-type: on
+
+pagehelper:
+  helperDialect: mysql
+  supportMethodsArguments: true
+  params: count=countSql
+
+xss:
+  enabled: true
+  excludes: /system/notice
+  urlPatterns: /system/*,/monitor/*,/tool/*
+
+
+id.workerId: 1
+id.datacenterId: 1

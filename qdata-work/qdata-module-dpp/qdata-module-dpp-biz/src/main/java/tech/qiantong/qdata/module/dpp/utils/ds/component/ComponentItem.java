@@ -1,0 +1,72 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.utils.ds.component;
+
+import tech.qiantong.qdata.common.enums.TaskComponentTypeEnum;
+import tech.qiantong.qdata.module.dpp.utils.model.DsResource;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * <P>
+ * Purpose:
+ * </p>
+ *
+ * @author: FXB
+ * @create: 2025-03-12 16:29
+ **/
+public interface ComponentItem {
+
+    long DEFAULT_ENVIRONMENT_CODE = 133155949418208L; // Default environment code
+    String DEFAULT_WORKER_GROUP = "default"; // Default worker group
+    String DEFAULT_FLAG = "YES"; // Default flag, indicates the node is enabled
+    String DEFAULT_IS_CACHE = "NO"; // Default cache disabled
+    String DEFAULT_TASK_PRIORITY = "MEDIUM"; // Default task priority
+    String DEFAULT_TASK_TYPE = "SPARK"; // Default task type, SPARK or DATAX etc.
+    String DEFAULT_PROGRAM_TYPE = "JAVA"; // Default program type, JAVA
+    String DEFAULT_MAIN_JAR = "file:/dolphinscheduler/default/resources/spart-demo-1.0.jar"; // Default main Jar path
+    String DEFAULT_DEPLOY_MODE = "client"; // Default deploy mode
+    int DEFAULT_DRIVER_CORES = 1; // Default driver cores
+    String DEFAULT_DRIVER_MEMORY = "512M"; // Default driver memory
+    int DEFAULT_NUM_EXECUTORS = 1; // Default number of executors
+    String DEFAULT_EXECUTOR_MEMORY = "1G"; // Default executor memory
+    int DEFAULT_EXECUTOR_CORES = 1; // Default executor cores
+    String DEFAULT_SQL_EXECUTION_TYPE = "SCRIPT"; // Default SQL execution type
+    String DEFAULT_CONDITION_TYPE = "NONE"; // Default condition type is "NONE"
+
+    default Map<String, Object> parse(Map<String, Object> params) {
+        return null;
+    }
+
+    default Map<String, Object> parse2(String nodeCode, Integer nodeVersion, TaskComponentTypeEnum componentType, Map<String, Object> taskParams, String resourceUrl, List<DsResource> resourceList) {
+        return null;
+    }
+
+    default Map<String, Object> mapNode(String nodeCode, Integer nodeVersion, TaskComponentTypeEnum componentType){
+        Map<String, Object> nodeMap = new HashMap<>(16);
+        nodeMap.put("nodeCode", nodeCode);
+        nodeMap.put("nodeVersion", nodeVersion);
+        nodeMap.put("componentType", componentType.getCode());
+        return nodeMap;
+    }
+
+    String code();
+}

@@ -1,0 +1,125 @@
+
+datasource:
+  type: mysql
+
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 0
+      password:
+      timeout: 10s
+      lettuce:
+        pool:
+          min-idle: 0
+          max-idle: 8
+          max-active: 8
+          max-wait: -1ms
+    neo4j:
+      uri: bolt:/127.0.0.1:7687
+      username: neo4j
+      password: "${QDATA_QDATA_SERVER_SPRING_DATA_NEO4J_PASSWORD:}"
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: username
+    password: "${QDATA_QDATA_SERVER_SPRING_RABBITMQ_PASSWORD:}"
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 1
+        max-concurrency: 10
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: false
+        loginUsername: qdata
+        loginPassword: 123456
+    dynamic:
+      druid:
+        initial-size: 5
+        min-idle: 5
+        maxActive: 20
+        maxWait: 60000
+        connectTimeout: 30000
+        socketTimeout: 60000
+        timeBetweenEvictionRunsMillis: 60000
+        minEvictableIdleTimeMillis: 300000
+        validationQuery: SELECT 1 FROM DUAL
+        testWhileIdle: true
+        testOnBorrow: false
+        testOnReturn: false
+        poolPreparedStatements: true
+        maxPoolPreparedStatementPerConnectionSize: 20
+        filters: stat,slf4j
+        connectionProperties: druid.stat.mergeSql\=true;druid.stat.slowSqlMillis\=5000
+      datasource:
+        master:
+          driver-class-name: ${${datasource.type}.driver-class-name}
+          url: ${${datasource.type}.url}
+          username: ${${datasource.type}.username}
+          password: "${QDATA_QDATA_SERVER_SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD:}"
+
+mysql:
+  driver-class-name: com.mysql.cj.jdbc.Driver
+  url: jdbc:mysql://mysql:3306/qdata?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+  username: root
+  password: "${QDATA_QDATA_SERVER_MYSQL_PASSWORD:}"
+
+dm8:
+  driver-class-name: dm.jdbc.driver.DmDriver
+  url: jdbc:dm://127.0.0.1:5236/QDATA?STU&zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=utf-8&schema=QDATA&serverTimezone=Asia/Shanghai
+  username: QDATA
+  password: "${QDATA_QDATA_SERVER_DM8_PASSWORD:}"
+
+kingbase8:
+  driver-class-name: com.kingbase8.Driver
+  url: jdbc:kingbase8://127.0.0.1:54321/qdata_dev?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=UTC&currentSchema=qdata
+  username: kingbase
+  password: "${QDATA_QDATA_SERVER_KINGBASE8_PASSWORD:}"
+
+oracle:
+  driver-class-name: oracle.jdbc.OracleDriver
+  url: jdbc:oracle:thin:@127.0.0.1:1521:xe?oracle.jdbc.timezoneAsRegion=true&oracle.jdbc.defaultTimezone=Asia/Shanghai&currentSchema=ANIVIA
+  username: ANIVIA
+  password: "${QDATA_QDATA_SERVER_ORACLE_PASSWORD:}"
+
+ds:
+  base_url: http://bigdata-ds-api:12345/dolphinscheduler
+  quality_url: http://127.0.0.1:8083/quality/qualityTaskExecutor/runExecuteTask
+  quality_scheduler: quartz
+  project_scheduler: QUARTZ
+  mc_url: http://127.0.0.1:8080/mc/taskExecutor/runExecuteTask
+  http_quality_projectCode: 181413901444928
+  http_mc_projectCode: 181413901444928
+  token: "${QDATA_QDATA_SERVER_DS_TOKEN:}"
+  resource_url: /dolphinscheduler/
+  spark:
+    master_url: spark://127.0.0.1:7077
+    hive_metastore_uris: thrift://bigdata-hdfs-3:9083
+    main_jar: file:/dolphinscheduler/default/resources/spark-jar/qdata-executor-etl-3.8.8.jar
+    main_class: tech.qiantong.qdata.spark.etl.EtlApplication
+  hdfs:
+    url: hdfs://127.0.0.1:8020
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+    password:
+
+datax:
+  home: ${user.dir}/datax
+  python-command: python3
+  datax-py-path: ${user.dir}/datax/bin/datax.py
+  lib-dir: ${user.dir}/datax/lib
+  job-dir: ${user.dir}/upload/datax/job
+
+path:
+  quality_url: http://127.0.0.1:8083/quality/qualityTaskExecutor
+  mc_url: http://127.0.0.1:8080/mc/taskExecutor
+
+warehouse:
+  ds:
+    project-code: ${WAREHOUSE_DS_PROJECT_CODE:}
+    health-url: ${WAREHOUSE_DS_HEALTH_URL:}

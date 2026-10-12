@@ -1,0 +1,106 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.spark.etl.transition;
+
+import cn.hutool.core.date.DateUtil;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import org.apache.spark.sql.*;
+import tech.qiantong.qdata.common.enums.TaskComponentTypeEnum;
+import tech.qiantong.qdata.spark.etl.utils.LogUtils;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+import static com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat;
+import static org.apache.spark.sql.functions.col;
+
+/**
+ * Sorting converter (similar to Kettle's sorting records)
+ *
+ * @author
+ * @date 2025/06/20
+ **/
+public class SortTransition implements Transition {
+
+    /**
+     * {
+     * "tableFields": [
+     * {"columnName": "age", "order": "asc"},
+     * {"columnName": "name", "order": "desc"}
+     * ]
+     * }
+     *
+     * @param spark
+     * @param dataset
+     * @param transition
+     * @param logParams
+     * @return
+     */
+    @Override
+    public Dataset<Row> transition(SparkSession spark, Dataset<Row> dataset, JSONObject transition, LogUtils.Params logParams) {
+        LogUtils.writeLog(logParams, "*********************************  Initialize task context  ***********************************");
+        LogUtils.writeLog(logParams, "Starting sort node");
+        LogUtils.writeLog(logParams, "Task start time: " + DateUtil.format(new Date(), "yyyy-MM-dd HH:mm:ss.SSS"));
+        LogUtils.writeLog(logParams, "Task parameters: " + transition.toJSONString(PrettyFormat));
+        JSONObject parameter = transition.getJSONObject("parameter");
+
+        // 1. Parse sort fields
+        JSONArray sortFields = parameter.getJSONArray("tableFields");
+        if (sortFields == null || sortFields.isEmpty()) {
+            // There is no sorting field, and the original data is returned directly.
+            return dataset;
+        }
+
+        List<Column> orderColumns = new ArrayList<>();
+        for (int i = 0; i < sortFields.size(); i++) {
+            JSONObject sortField = sortFields.getJSONObject(i);
+            String field = sortField.getString("columnName");
+            String order = sortField.getString("order");
+            boolean caseSensitive = sortField.containsKey("caseSensitive") ? sortField.getBoolean("caseSensitive") : false;
+
+            Column sortCol;
+            if (!caseSensitive) {
+                sortCol = functions.lower(col(field));
+            } else {
+                sortCol = col(field);
+            }
+
+            if ("desc".equalsIgnoreCase(order)) {
+                orderColumns.add(sortCol.desc());
+            } else {
+                orderColumns.add(sortCol.asc());
+            }
+        }
+
+        // 2. Sort
+        // Before sorting
+        dataset.show(false);
+        Dataset<Row> sorted = dataset.sort(orderColumns.toArray(new Column[0]));
+        // After sorting
+        sorted.show(false);
+        return sorted;
+    }
+
+    @Override
+    public String code() {
+        return TaskComponentTypeEnum.SORT_RECORD.getCode();
+    }
+}

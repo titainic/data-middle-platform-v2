@@ -1,0 +1,159 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.quartz.util;
+
+import org.quartz.Job;
+import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import tech.qiantong.qdata.common.constant.Constants;
+import tech.qiantong.qdata.common.constant.ScheduleConstants;
+import tech.qiantong.qdata.common.utils.ExceptionUtil;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.bean.BeanUtils;
+import tech.qiantong.qdata.common.utils.spring.SpringUtils;
+import tech.qiantong.qdata.quartz.domain.QuartzJob;
+import tech.qiantong.qdata.quartz.domain.SysJob;
+import tech.qiantong.qdata.quartz.domain.SysJobLog;
+import tech.qiantong.qdata.quartz.service.IQuartzJobLogService;
+import tech.qiantong.qdata.quartz.service.ISysJobLogService;
+
+import java.util.Date;
+
+/**
+ * Abstract quartz call
+ *
+ * @author qdata
+ */
+public abstract class AbstractQuartzJob implements Job
+{
+    private static final Logger log = LoggerFactory.getLogger(AbstractQuartzJob.class);
+
+    /**
+     * Thread local variables
+     */
+    private static ThreadLocal<Date> threadLocal = new ThreadLocal<>();
+
+    @Override
+    public void execute(JobExecutionContext context) throws JobExecutionException
+    {
+        Object taskProperties = context.getMergedJobDataMap().get(ScheduleConstants.TASK_PROPERTIES);
+        SysJob sysJob;
+        if (taskProperties instanceof SysJob)
+        {
+            sysJob = (SysJob) taskProperties;
+        }
+        else
+        {
+            sysJob = new SysJob();
+            BeanUtils.copyBeanProp(sysJob, taskProperties);
+        }
+        Exception executionError = null;
+        try
+        {
+            before(context, sysJob);
+            if (sysJob != null)
+            {
+                doExecute(context, sysJob);
+            }
+        }
+        catch (Exception e)
+        {
+            executionError = e;
+            log.error(MessageUtils.messageEn("log.task.execution.error"), e);
+        }
+        try
+        {
+            after(context, sysJob, executionError);
+        }
+        catch (Exception logError)
+        {
+            if (executionError != null && executionError != logError)
+            {
+                logError.addSuppressed(executionError);
+            }
+            throw new JobExecutionException("Failed to record scheduled task result", logError);
+        }
+    }
+
+    /**
+     * Before execution
+     *
+     * @param context work execution context object
+     * @param sysJob system scheduled task
+     */
+    protected void before(JobExecutionContext context, SysJob sysJob)
+    {
+        threadLocal.set(new Date());
+    }
+
+    /**
+     * After execution
+     *
+     * @param context work execution context object
+     * @param sysJob system scheduled task
+     */
+    protected void after(JobExecutionContext context, SysJob sysJob, Exception e)
+    {
+        Date startTime = threadLocal.get();
+        threadLocal.remove();
+
+        final SysJobLog sysJobLog = new SysJobLog();
+        // Legacy schedules may have an empty name; the log table requires a value.
+        sysJobLog.setJobName(StringUtils.isBlank(sysJob.getJobName())
+                ? "QuartzJob-" + sysJob.getJobId() : sysJob.getJobName());
+        sysJobLog.setJobGroup(sysJob.getJobGroup());
+        sysJobLog.setInvokeTarget(sysJob.getInvokeTarget());
+        sysJobLog.setStartTime(startTime);
+        sysJobLog.setStopTime(new Date());
+        long runMs = sysJobLog.getStopTime().getTime() - sysJobLog.getStartTime().getTime();
+        sysJobLog.setJobMessage(MessageUtils.messageEn("log.task.duration", sysJobLog.getJobName(), runMs));
+        if (e != null)
+        {
+            sysJobLog.setStatus(Constants.FAIL);
+            String errorMsg = StringUtils.substring(ExceptionUtil.getExceptionMessage(e), 0, 2000);
+            sysJobLog.setExceptionInfo(errorMsg);
+        }
+        else
+        {
+            sysJobLog.setStatus(Constants.SUCCESS);
+        }
+
+        // Write to database
+        if (sysJob instanceof QuartzJob)
+        {
+            SpringUtils.getBean(IQuartzJobLogService.class).addJobLog(sysJobLog);
+        }
+        else
+        {
+            SpringUtils.getBean(ISysJobLogService.class).addJobLog(sysJobLog);
+        }
+    }
+
+    /**
+     * Execution method, overloaded by subclasses
+     *
+     * @param context work execution context object
+     * @param sysJob system scheduled task
+     * @throws Exception Exceptions during execution
+     */
+    protected abstract void doExecute(JobExecutionContext context, SysJob sysJob) throws Exception;
+}

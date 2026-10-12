@@ -1,0 +1,150 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.system.controller.admin.system;
+
+import org.apache.commons.lang3.ArrayUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.constant.UserConstants;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.domain.entity.SysDept;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.module.system.service.ISysDeptService;
+
+import java.util.List;
+
+/**
+ * Department Information
+ *
+ * @author qdata
+ */
+@RestController
+@RequestMapping("/system/dept")
+public class SysDeptController extends BaseController
+{
+    @Autowired
+    private ISysDeptService deptService;
+
+    @GetMapping("/test")
+    public AjaxResult test(){
+        return AjaxResult.success();
+    }
+
+    /**
+     * Get department list
+     */
+    @PreAuthorize("@ss.hasPermi('system:dept:list')")
+    @GetMapping("/list")
+    public AjaxResult list(SysDept dept)
+    {
+        List<SysDept> depts = deptService.selectDeptList(dept);
+        return success(depts);
+    }
+
+    /**
+     * Query department list (exclude node)
+     */
+    @PreAuthorize("@ss.hasPermi('system:dept:list')")
+    @GetMapping("/list/exclude/{deptId}")
+    public AjaxResult excludeChild(@PathVariable(value = "deptId", required = false) Long deptId)
+    {
+        List<SysDept> depts = deptService.selectDeptList(new SysDept());
+        depts.removeIf(d -> d.getDeptId().intValue() == deptId ||
+                ArrayUtils.contains(StringUtils.split(d.getAncestors(), ","), deptId + ""));
+        return success(depts);
+    }
+
+    /**
+     * Get detailed information by department ID
+     */
+    @PreAuthorize("@ss.hasPermi('system:dept:query')")
+    @GetMapping(value = "/{deptId}")
+    public AjaxResult getInfo(@PathVariable Long deptId)
+    {
+        deptService.checkDeptDataScope(deptId);
+        return success(deptService.selectDeptById(deptId));
+    }
+
+    /**
+     * Add department
+     */
+    @PreAuthorize("@ss.hasPermi('system:dept:add')")
+    @Log(title = "log.op.title.system.dept", businessType = BusinessType.INSERT)
+    @PostMapping
+    public AjaxResult add(@Validated @RequestBody SysDept dept)
+    {
+        if (!deptService.checkDeptNameUnique(dept))
+        {
+            return error("Add department '" + dept.getDeptName() + "' failed, department name already exists");
+        }
+        dept.setCreateBy(getUsername());
+        return toAjax(deptService.insertDept(dept));
+    }
+
+    /**
+     * Modify department
+     */
+    @PreAuthorize("@ss.hasPermi('system:dept:edit')")
+    @Log(title = "log.op.title.system.dept", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public AjaxResult edit(@Validated @RequestBody SysDept dept)
+    {
+        Long deptId = dept.getDeptId();
+        deptService.checkDeptDataScope(deptId);
+        if (!deptService.checkDeptNameUnique(dept))
+        {
+            return error("Modify department '" + dept.getDeptName() + "' failed, department name already exists");
+        }
+        else if (dept.getParentId().equals(deptId))
+        {
+            return error("Modify department '" + dept.getDeptName() + "' failed, parent department cannot be itself");
+        }
+        else if (StringUtils.equals(UserConstants.DEPT_DISABLE, dept.getStatus()) && deptService.selectNormalChildrenDeptById(deptId) > 0)
+        {
+            return error("This department contains non-disabled sub-departments!");
+        }
+        dept.setUpdateBy(getUsername());
+        return toAjax(deptService.updateDept(dept));
+    }
+
+    /**
+     * Delete department
+     */
+    @PreAuthorize("@ss.hasPermi('system:dept:remove')")
+    @Log(title = "log.op.title.system.dept", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{deptId}")
+    public AjaxResult remove(@PathVariable Long deptId)
+    {
+        if (deptService.hasChildByDeptId(deptId))
+        {
+            return warn("Sub-departments exist, deletion is not allowed");
+        }
+        if (deptService.checkDeptExistUser(deptId))
+        {
+            return warn("Department has users, deletion is not allowed");
+        }
+        deptService.checkDeptDataScope(deptId);
+        return toAjax(deptService.deleteDeptById(deptId));
+    }
+}

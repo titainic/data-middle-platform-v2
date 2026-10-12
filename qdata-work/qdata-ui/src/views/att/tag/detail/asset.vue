@@ -1,0 +1,543 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <qt-wrap
+    :columns="tableStore.columns"
+    :tableRef="tableRef"
+    :config="{ fullContent: false, actions: { table: { search: false } } }"
+  >
+    <qt-table v-bind="tableStore" ref="tableRef">
+      <template #themeNames="{ row }">
+        {{
+          row.daAssetThemeRelList?.length
+            ? row.daAssetThemeRelList.map((item) => item.themeName).join(", ")
+            : "-"
+        }}
+      </template>
+      <template #action="{ row }">
+        <el-button
+          link
+          type="danger"
+          icon="Delete"
+          style="padding-left: 14px"
+          @click="handleDelete(row)"
+          >{{ td('common.button.delete') }}</el-button
+        >
+      </template>
+    </qt-table>
+  </qt-wrap>
+
+  <!-- Add or modify the tag management dialog box -->
+  <el-dialog
+    :title="title"
+    v-model="open"
+    width="800px"
+    :append-to="$refs['app-container']"
+    draggable
+  >
+    <template #header="{ close, titleId, titleClass }">
+      <span role="heading" aria-level="2" class="el-dialog__title">
+        {{ title }}
+      </span>
+    </template>
+    <el-form ref="AttTagRef" :model="form" :rules="rules" label-width="80px" :label-position="labelPosition">
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.code')" prop="code" :label-position="labelPosition">
+            <el-input v-model="form.code" :placeholder="td('att.common.codePlaceholder')" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.name')" prop="name" :label-position="labelPosition">
+            <el-input v-model="form.name" :placeholder="td('common.form.namePlaceholder')" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.description')" prop="description" :label-position="labelPosition">
+            <el-input
+              v-model="form.description"
+              :placeholder="td('common.form.descriptionPlaceholder')"
+              maxlength="500"
+              show-word-limit
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.catCode')" prop="catCode" :label-position="labelPosition">
+            <el-input v-model="form.catCode" :placeholder="td('att.common.catCodePlaceholder')" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.assetCount')" prop="aeestCount" :label-position="labelPosition">
+            <el-input v-model="form.aeestCount" :placeholder="td('att.common.assetCountPlaceholder')" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.status')" prop="status" :label-position="labelPosition">
+            <el-input v-model="form.status" :placeholder="td('att.common.statusPlaceholder')" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.extendAlias')" prop="allas" :label-position="labelPosition">
+            <el-input v-model="form.allas" :placeholder="td('att.common.extendAliasPlaceholder')" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.nearSynonyms')" prop="nearSynonyms" :label-position="labelPosition">
+            <el-input v-model="form.nearSynonyms" :placeholder="td('att.common.nearSynonymsPlaceholder')" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.synonyms')" prop="synonyms" :label-position="labelPosition">
+            <el-input v-model="form.synonyms" :placeholder="td('att.common.synonymsPlaceholder')" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.remark')" prop="remark" :label-position="labelPosition">
+            <el-input
+              v-model="form.remark"
+              :placeholder="td('common.form.remarkPlaceholder')"
+              maxlength="500"
+              show-word-limit
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+    </el-form>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button size="mini" @click="cancel">{{ td('common.button.cancel') }}</el-button>
+        <el-button type="primary" size="mini" :loading="submitLoading" @click="submitForm"
+          >{{ td('common.button.confirm') }}</el-button
+        >
+      </div>
+    </template>
+  </el-dialog>
+
+  <!-- Tag management details dialog box -->
+  <el-dialog
+    :title="title"
+    v-model="openDetail"
+    width="800px"
+    :append-to="$refs['app-container']"
+    draggable
+  >
+    <template #header="{ close, titleId, titleClass }">
+      <span role="heading" aria-level="2" class="el-dialog__title">
+        {{ title }}
+      </span>
+    </template>
+    <el-form ref="AttTagRef" :model="form" label-width="80px" :label-position="labelPosition">
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.code')" prop="code" :label-position="labelPosition">
+            <div>
+              {{ form.code }}
+            </div>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.name')" prop="name" :label-position="labelPosition">
+            <div>
+              {{ form.name }}
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.description')" prop="description" :label-position="labelPosition">
+            <div>
+              {{ form.description }}
+            </div>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.catCode')" prop="catCode" :label-position="labelPosition">
+            <div>
+              {{ form.catCode }}
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.assetCount')" prop="aeestCount" :label-position="labelPosition">
+            <div>
+              {{ form.aeestCount }}
+            </div>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.status')" prop="status" :label-position="labelPosition">
+            <div>
+              {{ form.status }}
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.extendAlias')" prop="allas" :label-position="labelPosition">
+            <div>
+              {{ form.allas }}
+            </div>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.nearSynonyms')" prop="nearSynonyms" :label-position="labelPosition">
+            <div>
+              {{ form.nearSynonyms }}
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item :label="td('att.common.synonyms')" prop="synonyms" :label-position="labelPosition">
+            <div>
+              {{ form.synonyms }}
+            </div>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item :label="td('common.texts.remark')" prop="remark" :label-position="labelPosition">
+            <div>
+              {{ form.remark }}
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
+    </el-form>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button size="mini" @click="cancel">{{ td('common.button.close') }}</el-button>
+      </div>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup name="asset">
+import {
+  listAttTag,
+  getAttTag,
+  delAttTag,
+  addAttTag,
+  updateAttTag,
+} from "@/api/att/tag/tag.js";
+import { pageListByIds } from "@/api/da/asset/asset.js";
+import { defineProps } from "vue";
+import { delByTagIdAndAesstId } from "@/api/att/tag/tagAssetRel.js";
+const { proxy } = getCurrentInstance();
+const submitLoading = ref(false);
+import { useRoute } from "vue-router";
+import useDefaultLang from "@/composables/useDefaultLang.js";
+
+const { td } = useDefaultLang();
+const route = useRoute();
+const { da_assets_status, da_asset_source, da_asset_type } = proxy.useDict(
+  "da_assets_status",
+  "da_asset_source",
+  "da_asset_type"
+);
+const AttTagList = ref([]);
+
+const open = ref(false);
+const openDetail = ref(false);
+const ids = ref([]);
+const single = ref(true);
+const multiple = ref(true);
+const title = ref("");
+
+const defaultSort = ref({ prop: "create_time", order: "desc" });
+const props = defineProps({
+  ids: { type: Object, default: null },
+});
+const data = reactive({
+  AttTagDetail: {},
+  form: {},
+  queryParams: {
+    pageNum: 1,
+    pageSize: 10,
+    code: null,
+    name: null,
+    description: null,
+    catCode: null,
+    aeestCount: null,
+    status: null,
+    allas: null,
+    nearSynonyms: null,
+    synonyms: null,
+    createTime: null,
+  },
+  rules: {},
+});
+
+const { queryParams, form, AttTagDetail, rules } = toRefs(data);
+
+const tableRef = ref(null);
+const tableStore = reactive({
+  config: {
+    sort: true,
+    table: {
+      stripe: true,
+      rowKey: "id",
+      height: 374,
+      defaultSort: { prop: "create_time", order: "descending" },
+    },
+  },
+  columns: [
+    { label: td('common.texts.number'), prop: "id", width: 60, sortable: true },
+    {
+      label: td('dpp.asset.assetName'),
+      prop: "name",
+      align: "left",
+      showOverflowTooltip: { effect: "light" },
+    },
+    {
+      label: td('common.texts.description'),
+      prop: "description",
+      align: "left",
+      showOverflowTooltip: { effect: "light" },
+      width: 230,
+    },
+    {
+      label: td('dpp.asset.assetCategory'),
+      prop: "catName",
+      align: "left",
+      showOverflowTooltip: { effect: "light" },
+    },
+
+    {label: td('dpp.asset.detail.index.assetType'), prop: "type", dict: "da_asset_type"},
+    {
+      label: td('dpp.asset.applyThemeName'),
+      prop: "daAssetThemeRelList",
+      showOverflowTooltip: { effect: "light" },
+      slot: "themeNames",
+    },
+    {
+      label: td('common.texts.createdBy'),
+      prop: "createBy",
+      showOverflowTooltip: { effect: "light" },
+    },
+    {
+      label: td('common.texts.createdTime'),
+      prop: "createTime",
+      sortable: true,
+      sortableKey: "create_time",
+      date: true,
+      width: 160,
+    },
+
+    { label: td('common.texts.operation'), width: 120, fixed: "right", slot: "action" },
+  ],
+  func: (params) => pageListByIds({ tagIdList: route.query.id, ...params }),
+  params: queryParams.value,
+});
+function handleQueryClick() {
+  tableRef.value && tableRef.value.getList();
+}
+
+// Cancel button
+function cancel() {
+  open.value = false;
+  openDetail.value = false;
+  reset();
+}
+
+// form reset
+function reset() {
+  form.value = {
+    id: null,
+    code: null,
+    name: null,
+    description: null,
+    catCode: null,
+    aeestCount: null,
+    status: "1",
+    allas: null,
+    nearSynonyms: null,
+    synonyms: null,
+    validFlag: true,
+    delFlag: null,
+    createBy: null,
+    creatorId: null,
+    createTime: null,
+    updateBy: null,
+    updaterId: null,
+    updateTime: null,
+    remark: null,
+  };
+  proxy.resetForm("AttTagRef");
+}
+
+/** Search button action */
+function handleQuery() {
+  queryParams.value.pageNum = 1;
+  handleQueryClick();
+}
+
+/** reset button action */
+function resetQuery() {
+  proxy.resetForm("queryRef");
+  handleQuery();
+}
+
+// Multiple selection box selected data
+function handleSelectionChange(selection) {
+  ids.value = selection.map((item) => item.id);
+  single.value = selection.length != 1;
+  multiple.value = !selection.length;
+}
+
+/** Sorting trigger events */
+function handleSortChange(column, prop, order) {
+  queryParams.value.orderByColumn = column.prop;
+  queryParams.value.isAsc = column.order;
+  handleQueryClick();
+}
+
+/** Add button operation */
+function handleAdd() {
+  reset();
+  open.value = true;
+  title.value = td('att.tag.title.add');
+}
+
+/** Modify button actions */
+function handleUpdate(row) {
+  reset();
+  const _id = row.id || ids.value;
+  getAttTag(_id).then((response) => {
+    form.value = response.data;
+    open.value = true;
+    title.value = td('att.tag.title.edit');
+  });
+}
+
+/** Detail button operation */
+function handleDetail(row) {
+  reset();
+  const _id = row.id || ids.value;
+  getAttTag(_id).then((response) => {
+    form.value = response.data;
+    openDetail.value = true;
+    title.value = td('att.tag.title.detail');
+  });
+}
+
+/** submit button */
+function submitForm() {
+  if (submitLoading.value) return;
+  submitLoading.value = true;
+  proxy.$refs["AttTagRef"].validate((valid) => {
+    if (valid) {
+      if (form.value.id != null) {
+        updateAttTag(form.value)
+          .then((response) => {
+            submitLoading.value = false;
+            proxy.$modal.msgSuccess(td('common.message.editSuccess'));
+            open.value = false;
+            handleQueryClick();
+          })
+          .catch((error) => {
+            submitLoading.value = false;
+          });
+      } else {
+        addAttTag(form.value)
+          .then((response) => {
+            submitLoading.value = false;
+            proxy.$modal.msgSuccess(td('common.message.addSuccess'));
+            open.value = false;
+            handleQueryClick();
+          })
+          .catch((error) => {
+            submitLoading.value = false;
+          });
+      }
+    } else {
+      submitLoading.value = false;
+    }
+  });
+}
+
+/** Delete button action */
+function handleDelete(row) {
+  const _ids = row.id || ids.value;
+  let map = {
+    tagId: props.ids.id,
+    assetId: row.id,
+  };
+  proxy.$modal
+      .confirm(td('att.tag.message.deleteConfirm', '', { ids: _ids }))
+      .then(function () {
+        return delByTagIdAndAesstId(map);
+      })
+      .then(() => {
+      handleQueryClick();
+      proxy.$modal.msgSuccess(td('common.message.deleteSuccess'));
+    })
+    .catch(() => {});
+}
+
+function handleDeleteAll() {
+  if (!ids.value.length) return;
+  proxy.$modal
+    .confirm(td('att.tag.message.batchDeleteConfirm'))
+    .then(function () {
+      return Promise.all(
+        ids.value.map((id) =>
+          delByTagIdAndAesstId({ tagId: props.ids.id, assetId: id })
+        )
+      );
+    })
+    .then(() => {
+      handleQueryClick();
+      proxy.$modal.msgSuccess(td('common.message.deleteSuccess'));
+    })
+    .catch(() => {});
+}
+
+/** Export button action */
+function handleExport() {
+  proxy.download(
+    "att/AttTag/export",
+    {
+      ...queryParams.value,
+    },
+    `AttTag_${new Date().getTime()}.xlsx`
+  );
+}
+
+watch(
+  () => props.ids,
+  (newId) => {
+    handleQueryClick();
+  },
+  { immediate: true } // `immediate` is true, which means that a watch will be executed immediately when the page is loaded.
+);
+</script>

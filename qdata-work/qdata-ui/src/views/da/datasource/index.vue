@@ -1,0 +1,1652 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <div class="app-container" ref="app-container">
+
+    <div class="pagecont-top" v-show="showSearch">
+      <el-form
+        class="btn-style"
+        :model="queryParams"
+        ref="queryRef"
+        :inline="true"
+        v-show="showSearch"
+        @submit.prevent
+      >
+        <el-form-item label="所属项目" prop="projectCode">
+          <el-select class="el-form-input-width" v-model="queryParams.projectCode" aria-label="数据连接项目筛选" placeholder="所有可访问项目" clearable @change="handleQuery">
+            <el-option v-for="project in connectionProjects" :key="project.id" :label="project.name" :value="project.code" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="td('da.datasource.datasourceName')" prop="datasourceName" >
+          <el-input
+            class="el-form-input-width"
+            v-model="queryParams.datasourceName"
+            :placeholder="td('da.datasource.datasourceNamePlaceholder')"
+            clearable
+            @keyup.enter="handleQuery"
+          />
+        </el-form-item>
+        <el-form-item :label="td('da.datasource.datasourceType')" prop="datasourceType" >
+          <el-select
+            class="el-form-input-width"
+            v-model="queryParams.datasourceType"
+            :placeholder="td('da.datasource.datasourceTypePlaceholder')"
+            clearable
+          >
+            <el-option
+              v-for="dict in datasource_type"
+              :key="dict.value"
+              :label="dict.label"
+              :value="dict.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item >
+          <el-button
+            plain
+            type="primary"
+            @click="handleQuery"
+            @mousedown="(e) => e.preventDefault()"
+          >
+            <i class="iconfont-mini icon-a-zu22377 mr5"></i>{{ td('common.button.query') }}
+          </el-button>
+          <el-button @click="resetQuery" @mousedown="(e) => e.preventDefault()">
+            <i class="iconfont-mini icon-a-zu22378 mr5"></i>{{ td('common.button.reset') }}
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <div class="pagecont-bottom">
+      <div class="justify-between mb15">
+        <el-row :gutter="15" class="btn-style">
+          <el-col :span="1.5">
+            <el-button
+              type="primary"
+              plain
+              @click="handleAdd"
+              v-hasPermi="['da:dataSource:add']"
+              :disabled="!canAddConnection"
+              @mousedown="(e) => e.preventDefault()"
+            >
+              <i class="iconfont-mini icon-xinzeng mr5"></i>{{ td('common.button.add') }}
+            </el-button>
+          </el-col>
+          <!--         <el-col :span="1.5">-->
+          <!--           <el-button type="primary" plain :disabled="single" @click="handleUpdate" v-hasPermi="['da:dataSource:edit']"-->
+          <!--                      @mousedown="(e) => e.preventDefault()">-->
+          <!--             <i class = "iconfont-mini econ-xiugai & #45; copy mr5">/i>-->
+          <!--           </el-button>-->
+          <!--         </el-col>-->
+          <!--         <el-col :span="1.5">-->
+          <!--           <el-button type="danger" plain :disabled="multiple" @click="handleDelete" v-hasPermi="['da:dataSource:remove']"-->
+          <!--                      @mousedown="(e) => e.preventDefault()">-->
+          <!--             <i calass="iconfont-mini icon-shanchu-huise mr5">/i>-->
+          <!--           </el-button>-->
+          <!--         </el-col>-->
+        </el-row>
+        <div class="justify-end top-right-btn">
+          <right-toolbar
+            v-model:showSearch="showSearch"
+            @queryTable="getList"
+            :columns="columns"
+          ></right-toolbar>
+        </div>
+      </div>
+      <el-table
+        stripe
+        v-loading="loading"
+        :data="daDatasourceList"
+        @selection-change="handleSelectionChange"
+        :default-sort="defaultSort"
+        @sort-change="handleSortChange"
+      >
+        <el-table-column
+          v-if="getColumnVisibility(1)"
+          width="80"
+          :label="td('da.datasource.columnVisibility.id')"
+          align="center"
+          prop="id"
+          :show-overflow-tooltip="{ effect: 'light' }"
+        >
+          <template #default="scope">
+            {{ scope.row.id || "-" }}
+          </template>
+        </el-table-column>
+        <!--       <el-table-column type="selection" width="55" align="center" />-->
+        <el-table-column
+          v-if="getColumnVisibility(2)"
+          width="250"
+          :label="td('da.datasource.columnVisibility.datasourceName')"
+          align="left"
+          prop="datasourceName"
+          :show-overflow-tooltip="{ effect: 'light' }"
+        >
+          <template #default="scope">
+            {{ scope.row.datasourceName || "-" }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="getColumnVisibility(3)"
+          :label="td('da.datasource.columnVisibility.description')"
+          width="240"
+          align="left"
+          prop="description"
+          :show-overflow-tooltip="{ effect: 'light' }"
+        >
+          <template #default="scope">
+            {{ scope.row.description || "-" }}
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          v-if="getColumnVisibility(4)"
+          width="160"
+          :label="td('da.datasource.columnVisibility.datasourceType')"
+          align="center"
+          prop="datasourceType"
+        >
+          <template #default="scope">
+            <dict-tag
+              :options="datasource_type"
+              :value="scope.row.datasourceType"
+            />
+          </template>
+        </el-table-column>
+        <!-- <el-table-column
+            v-if="getColumnVisibility(2) && type == 1"
+            width="120"
+            :label="td('da.datasource.belongProject')"
+            align="center"
+            prop="projectName"
+        >
+            <template #default="scope">
+                {{ scope.row.projectName || '-' }}
+            </template>
+        </el-table-column> -->
+        <el-table-column
+          v-if="getColumnVisibility(5)"
+          :label="td('da.datasource.columnVisibility.createdBy')"
+          width="120"
+          align="center"
+          prop="createBy"
+          :show-overflow-tooltip="{ effect: 'light' }"
+        >
+          <template #default="scope">
+            {{ scope.row.createBy || "-" }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="getColumnVisibility(6)"
+          :label="td('da.datasource.columnVisibility.createdTime')"
+          align="center"
+          prop="createTime"
+          width="160"
+          sortable="custom"
+          :sort-orders="['descending', 'ascending']"
+        >
+          <template #default="scope">
+            <span>{{
+              parseTime(scope.row.createTime, "{y}-{m}-{d} {h}:{i}")
+            }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="getColumnVisibility(7)"
+          :label="td('da.datasource.columnVisibility.status')"
+          align="center"
+          prop="validFlag"
+          width="100"
+        >
+          <template #default="scope">
+            <!--              <dict-tag :options="sys_valid" :value="scope.row.validFlag"/>-->
+
+            <el-switch
+              v-model="scope.row.validFlag"
+              :disabled="!scope.row.capabilities?.edit"
+              active-color="#13ce66"
+              inactive-color="#ff4949"
+              :loading="statusLoadingMap[scope.row.id] === true"
+              @change="handleStatusChange(scope.row)"
+            >
+            </el-switch>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="getColumnVisibility(8)"
+          :label="td('da.datasource.columnVisibility.remark')"
+          align="left"
+          prop="remark"
+          :show-overflow-tooltip="{ effect: 'light' }"
+        >
+          <template #default="scope">
+            {{ scope.row.remark || "-" }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-if="getColumnVisibility(9)"
+          :label="td('common.texts.operation')"
+          align="center"
+          class-name="small-padding fixed-width"
+          fixed="right"
+          width="280"
+        >
+          <template #default="scope">
+            <el-button
+              link
+              type="primary"
+              icon="Connection"
+              :loading="testConnectionLoadingMap[scope.row.id] === true"
+              @click="handleTestConnection(scope.row)"
+              :disabled="!scope.row.capabilities?.test"
+              v-hasPermi="['da:dataSource:query']"
+              >{{ td('dpp.datasource.testConnection') }}
+            </el-button>
+
+            <el-button
+              link
+              type="primary"
+              icon="view"
+              @click="handleDetail(scope.row)"
+              :disabled="!scope.row.capabilities?.query"
+              v-hasPermi="['da:dataSource:query']"
+              >{{ td('common.button.details') }}
+            </el-button>
+            <el-popover placement="bottom" :width="100" trigger="click">
+              <template #reference>
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="scope.row.isAdminAddTo == false"
+                  icon="ArrowDown"
+                >
+                  <el-tooltip
+                    class="box-item"
+                    effect="dark"
+                    :content="td('common.noPermission')"
+                    placement="top"
+                    :disabled="scope.row.isAdminAddTo != false"
+                  >
+                    {{ td('common.button.more') }}
+                  </el-tooltip>
+                </el-button>
+              </template>
+              <div class="butgdlist">
+                <el-button
+                  link
+                  type="primary"
+                  icon="Edit"
+                  @click="handleUpdate(scope.row)"
+                  :disabled="!scope.row.capabilities?.edit"
+                  v-hasPermi="['da:dataSource:edit']"
+                  >{{ td('common.button.update') }}
+                </el-button>
+                <el-button
+                  link
+                  type="danger"
+                  icon="Delete"
+                  @click="handleDelete(scope.row)"
+                  :disabled="!scope.row.capabilities?.remove"
+                  v-hasPermi="['da:dataSource:remove']"
+                  >{{ td('common.button.delete') }}
+                </el-button>
+              </div>
+            </el-popover>
+            <!--           <el-button link type="primary" icon="view" @click="routeTo('/da/datasource/daDatasourceDetail',scope.row)"-->
+            <!--                      v-hasPermi="['da:dataSource:edit']">Complex Detail</el-button>-->
+          </template>
+        </el-table-column>
+
+        <template #empty>
+          <div class="emptyBg">
+            <img src="@/assets/images/system/no_data/empty-nodata.png" alt="" />
+            <p>{{td('common.noData')}}</p>
+          </div>
+        </template>
+      </el-table>
+
+      <pagination
+        v-show="total > 0"
+        :total="total"
+        v-model:page="queryParams.pageNum"
+        v-model:limit="queryParams.pageSize"
+        @pagination="getList"
+      />
+    </div>
+
+    <!-- Add or edit data source dialog -->
+    <el-dialog
+      :title="title"
+      v-model="open"
+      width="1000px"
+      :append-to="$refs['app-container']"
+      draggable
+    >
+      <template #header="{ close, titleId, titleClass }">
+        <span role="heading" aria-level="2" class="el-dialog__title">
+          {{ title }}
+        </span>
+      </template>
+      <el-form
+        ref="daDatasourceRef"
+        :model="form"
+        :rules="rules"
+        label-width="140px"
+        @submit.prevent
+        :disabled="title == td('da.datasource.datasourceDetail')"
+        :label-position="labelPosition"
+       >
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.datasourceName')" prop="datasourceName">
+              <el-input
+                v-model="form.datasourceName"
+                :placeholder="td('da.datasource.datasourceNamePlaceholder')"
+              />
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.datasourceType')" prop="datasourceType">
+              <el-select
+                v-model="form.datasourceType"
+                :placeholder="td('da.datasource.datasourceTypePlaceholder')"
+                @change="handleDatasourceChange"
+                :disabled="form.id"
+              >
+                <el-option
+                  v-for="dict in datasource_type"
+                  :key="dict.value"
+                  :label="dict.label"
+                  :value="dict.value"
+                ></el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20" v-if="form.datasourceType !== 'OSS-ALIYUN'">
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.ip')" prop="ip" >
+              <el-input v-model="form.ip" :placeholder="td('da.datasource.ipPlaceholder')" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.port')" prop="port" >
+              <el-input v-model="form.port" :placeholder="form.datasourceType === 'Hive' ? '10009(Kyuubi) / 10000(HiveServer2)' : td('da.datasource.portPlaceholder')" @input="form.port = $event.replace(/\D/g, '')" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row
+          :gutter="20"
+          v-if="
+            form.datasourceType !== 'Kafka' &&
+            form.datasourceType !== 'HDFS' &&
+            form.datasourceType !== 'OSS-ALIYUN'
+          "
+        >
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.account')" prop="username" >
+              <el-input v-model="form.username" :placeholder="td('da.datasource.accountPlaceholder')" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.password')" prop="password" >
+              <el-input
+                type="password"
+                v-model="form.password"
+                :placeholder="td('da.datasource.passwordPlaceholder')"
+                v-if="title === td('da.datasource.addDatasource')"
+              />
+              <el-input
+                type="password"
+                v-model="form.password"
+                :placeholder="td('da.datasource.keepSecretPlaceholder', '留空保持原凭据')"
+                v-if="title !== td('da.datasource.addDatasource')"
+                :disabled="clearPassword"
+              />
+              <el-checkbox v-if="form.id" v-model="clearPassword" @change="form.password = ''">
+                {{ td('da.datasource.clearPassword', '清除已保存密码') }}
+              </el-checkbox>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <template v-if="form.datasourceType === 'OSS-ALIYUN'">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.keyID')" prop="keyId" >
+                <el-input v-model="form.keyId" :placeholder="td('da.datasource.keyIDPlaceholder')" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.keySecret')" prop="keySecret" >
+              <el-input
+                  type="password"
+                  v-model="form.keySecret"
+                  :placeholder="td('da.datasource.keySecretPlaceholder')"
+                  v-if="title === td('da.datasource.addDatasource')"
+                />
+                <el-input
+                  type="password"
+                  v-model="form.keySecret"
+                  :placeholder="td('da.datasource.keepSecretPlaceholder', '留空保持原凭据')"
+                  v-if="title !== td('da.datasource.addDatasource')"
+                  :disabled="clearKeySecret"
+                />
+                <el-checkbox v-if="form.id" v-model="clearKeySecret" @change="form.keySecret = ''">
+                  {{ td('da.datasource.clearKeySecret', '清除已保存密钥') }}
+                </el-checkbox>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.bucket')" prop="bucket" >
+                <el-input
+                  v-model="form.bucket"
+                  :placeholder="td('da.datasource.bucketPlaceholder')"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.endpoint')" prop="endpoint" >
+                <el-input
+                  v-model="form.endpoint"
+                  :placeholder="td('da.datasource.endpointPlaceholder')"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="24">
+              <el-form-item :label="td('da.datasource.domain')" prop="domain" >
+                <el-input
+                  v-model="form.domain"
+                  :placeholder="td('da.datasource.domainPlaceholder')"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <el-row
+          :gutter="20"
+          v-if="
+            form.datasourceType !== 'Kafka' &&
+            form.datasourceType !== 'HDFS' &&
+            form.datasourceType !== 'FTP' &&
+            form.datasourceType !== 'OSS-ALIYUN'
+          "
+        >
+          <el-col :span="12" v-if="form.datasourceType !== null">
+            <el-form-item :label="td('da.datasource.dbName')" prop="dbname" >
+              <el-input
+                v-model="form.dbname"
+                :placeholder="td('da.datasource.dbNamePlaceholder')"
+                :disabled="form.id"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col
+            :span="12"
+            v-if="
+              form.datasourceType !== null &&
+              (form.datasourceType == 'Oracle' ||
+                form.datasourceType == 'Oracle11' ||
+                form.datasourceType == 'Kingbase8' ||
+                form.datasourceType == 'MongoDB' ||
+                form.datasourceType == 'SQL_Server' ||
+                form.datasourceType == 'SQL_Server2008' ||
+                form.datasourceType == 'PostgreSQL')
+            "
+          >
+            <el-form-item :label="td('da.datasource.schemaName')" prop="sid" >
+              <el-input
+                v-model="form.sid"
+                :placeholder="td('da.datasource.schemaNamePlaceholder')"
+                :disabled="form.id"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row
+          :gutter="20"
+          v-if="
+            form.datasourceType !== null &&
+            (form.datasourceType === 'Kafka' || form.datasourceType === 'HDFS')
+          "
+        >
+          <el-col :span="24">
+            <el-form-item :label="td('da.datasource.configParams')" prop="config" >
+              <el-input
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                v-model="form.config"
+                :placeholder="
+                  form.datasourceType === 'Kafka'
+                    ? 'For example: {&quot;security.protocol&quot;&colon;&quot;SASL_PLAINTEXT&quot;}'
+                    : 'For example: {&quot;kerberosKeytabFilePath&quot;&colon;&quot;/path/to/keytab/file&quot;}'
+                "
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item :label="td('common.texts.description')" prop="description" >
+              <el-input
+                type="textarea"
+                :min-height="192"
+                v-model="form.description"
+                :placeholder="td('da.datasource.descriptionPlaceholder')"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item :label="td('da.datasource.belongProject')" prop="projectNameList" >
+              <el-input
+                style="width: 83.5%"
+                v-model="form.projectNameList"
+                :placeholder="td('da.datasource.projectPlaceholder')"
+                disabled
+              >
+              </el-input>
+              <el-button
+                style="margin-left: 11px"
+                type="primary"
+                @click="getListProject"
+                >{{ td('da.datasource.projectSelect') }}</el-button
+              >
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item :label="td('common.texts.status')" prop="validFlag" >
+              <el-radio-group v-model="form.validFlag">
+                <el-radio
+                  v-for="dict in sys_disable"
+                  :key="dict.value"
+                  :label="dict.value === '1'"
+                >
+                  {{ dict.label }}
+                </el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item :label="td('common.texts.remark')" >
+              <el-input
+                type="textarea"
+                v-model="form.remark"
+                :placeholder="td('common.form.remarkPlaceholder')"
+                :min-height="192"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button size="mini" @click="cancel">{{ td('common.button.cancel') }}</el-button>
+          <el-button
+            type="primary"
+            size="mini"
+            :loading="btnLoading"
+            @click="submitForm"
+            >{{ td('common.button.confirm') }}</el-button
+          >
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- Detail -->
+    <el-dialog
+      :title="title"
+      v-model="openDetail"
+      width="1000px"
+      :append-to="$refs['app-container']"
+      draggable
+    >
+      <template #header="{ close, titleId, titleClass }">
+        <span role="heading" aria-level="2" class="el-dialog__title">
+          {{ title }}
+        </span>
+      </template>
+      <el-form
+        ref="daDatasourceRef"
+        :model="form"
+        :rules="rules"
+        label-width="130px"
+        :label-position="labelPosition"
+       >
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.datasourceName')" >
+              <div class="form-readonly">
+                {{ form.datasourceName || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.datasourceType')" >
+              <div>
+                <dict-tag
+                  :options="datasource_type"
+                  :value="form.datasourceType"
+                />
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20" v-if="form.datasourceType !== 'OSS-ALIYUN'">
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.ip')" >
+              <div class="form-readonly">
+                {{ form.ip || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.port')" >
+              <div class="form-readonly">
+                {{ form.port || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row
+          :gutter="20"
+          v-if="
+            form.datasourceType !== 'Kafka' &&
+            form.datasourceType !== 'HDFS' &&
+            form.datasourceType !== 'OSS-ALIYUN'
+          "
+        >
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.account')" >
+              <div class="form-readonly">
+                {{ form.username || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="td('da.datasource.password')" >
+              <div class="form-readonly">***********</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <template v-if="form.datasourceType === 'OSS-ALIYUN'">
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.keyID')" >
+                <div class="form-readonly">
+                  {{ form.keyId || "-" }}
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.keySecret')" >
+                <div class="form-readonly">
+                  {{ td('da.datasource.secretHidden', '凭据不可查看') }}
+                </div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.bucket')" >
+                <div class="form-readonly">
+                  {{ form.bucket || "-" }}
+                </div>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="td('da.datasource.endpoint')" >
+                <div class="form-readonly">
+                  {{ form.endpoint || "-" }}
+                </div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="24">
+              <el-form-item :label="td('da.datasource.domain')" >
+                <div class="form-readonly">
+                  {{ form.domain || "-" }}
+                </div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+        <el-row
+          :gutter="20"
+          v-if="
+            form.datasourceType !== 'Kafka' &&
+            form.datasourceType !== 'HDFS' &&
+            form.datasourceType !== 'FTP' &&
+            form.datasourceType !== 'OSS-ALIYUN'
+          "
+        >
+          <el-col :span="12" v-if="form.datasourceType !== null">
+            <el-form-item :label="td('da.datasource.dbName')" >
+              <div class="form-readonly">
+                {{ form.dbname || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col
+            :span="12"
+            v-if="
+              form.datasourceType !== null &&
+              (form.datasourceType == 'Oracle' ||
+                form.datasourceType == 'Oracle11' ||
+                form.datasourceType == 'Kingbase8' ||
+                form.datasourceType == 'MongoDB' ||
+                form.datasourceType == 'SQL_Server' ||
+                form.datasourceType == 'SQL_Server2008' ||
+                form.datasourceType == 'PostgreSQL')
+            "
+          >
+            <el-form-item :label="td('da.datasource.schemaName')" >
+              <div class="form-readonly">
+                {{ form.sid || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row
+          :gutter="20"
+          v-if="
+            form.datasourceType !== null &&
+            (form.datasourceType === 'Kafka' || form.datasourceType === 'HDFS')
+          "
+        >
+          <el-col :span="24">
+            <el-form-item :label="td('da.datasource.configParams')" >
+              <div class="form-readonly">
+                {{ form.config || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item :label="td('common.texts.description')" >
+              <div class="form-readonly textarea">
+                {{ form.description || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20" v-if="type == 0">
+          <el-col :span="24">
+            <el-form-item :label="td('da.datasource.belongProject')" >
+              <div class="form-readonly">
+                {{ form.projectNameListStr || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item :label="td('common.texts.status')" >
+              <dict-tag
+                :options="sys_disable"
+                :value="form.validFlag ? '1' : '0'"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item :label="td('common.texts.remark')" >
+              <div class="form-readonly textarea">
+                {{ form.remark || "-" }}
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button size="mini" @click="cancel">{{ td('common.button.close') }}</el-button>
+        </div>
+      </template>
+    </el-dialog>
+    <el-dialog :title="td('da.datasource.projectDialogTitle')" v-model="openProject" width="1000px" draggable>
+      <template>
+        <span role="heading" aria-level="2" class="el-dialog__title">
+          {{ td('da.datasource.projectDialogTitle') }}
+        </span>
+      </template>
+      <!-- User data -->
+      <el-form
+        class="btn-style"
+        :model="queryParamsProject"
+        ref="queryRef"
+        :inline="true"
+       >
+        <el-form-item :label="td('da.datasource.projectName')" prop="name" >
+          <el-input
+            class="el-form-input-width"
+            v-model="queryParamsProject.name"
+            :placeholder="td('da.datasource.projectNamePlaceholder')"
+            clearable
+            @keyup.enter="handleQuery"
+          />
+        </el-form-item>
+        <el-form-item :label="td('da.datasource.projectLeader')" prop="managerId" >
+          <el-select
+            v-model="queryParamsProject.managerId"
+            class="el-form-input-width"
+            filterable
+            :placeholder="td('da.datasource.projectLeaderPlaceholder')"
+          >
+            <el-option
+              v-for="item in projectOptions"
+              :key="item.userId"
+              :label="item.nickName"
+              :value="item.userId"
+            >
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            plain
+            type="primary"
+            @click="handleQueryProject"
+            @mousedown="(e) => e.preventDefault()"
+          >
+            <i class="iconfont-mini icon-a-zu22377 mr5"></i>{{ td('common.button.query') }}
+          </el-button>
+          <el-button
+            @click="resetQueryProject"
+            @mousedown="(e) => e.preventDefault()"
+          >
+            <i class="iconfont-mini icon-a-zu22378 mr5"></i>{{ td('common.button.reset') }}
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <el-table
+        ref="projectTableRef"
+        stripe
+        v-loading="loadingProject"
+        :data="projectList"
+        @selection-change="handleSelectionChangeProject"
+      >
+        <el-table-column
+          type="selection"
+          width="55"
+          :selectable="selectable"
+          align="center"
+        />
+        <el-table-column :label="td('da.datasource.columnVisibility.id')" prop="id" width="80">
+          <template #default="scope">
+            {{ scope.row.id || "-" }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="td('da.datasource.projectName')" align="center" prop="name">
+          <template #default="scope">
+            {{ scope.row.name || "-" }}
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="td('da.datasource.projectLeader')" align="center" prop="managerId">
+          <template #default="scope">
+            {{ scope.row.nickName || "-" }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="td('da.datasource.projectContact')" align="center" prop="managerPhone">
+          <template #default="scope">
+            {{ scope.row.managerPhone || "-" }}
+          </template>
+        </el-table-column>
+      </el-table>
+      <pagination
+        v-show="totalProject > 0"
+        :total="totalProject"
+        v-model:page="queryParamsProject.pageNum"
+        v-model:limit="queryParamsProject.pageSize"
+        @pagination="getListProject"
+      />
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button size="mini" @click="openProject = false">{{ td('common.button.cancel') }}</el-button>
+          <el-button type="primary" size="mini" @click="submitFormProject"
+            >{{ td('common.button.confirm') }}</el-button
+          >
+        </div>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup name="DataSource">
+import { onActivated, onBeforeUnmount } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
+import { ElMessageBox } from "element-plus";
+import {
+  listDaDatasource,
+  getDaDatasource,
+  clientsTest,
+  delDaDatasource,
+  removeDppOrDa,
+  addDaDatasource,
+  testDatasourceConnection,
+  updateDaDatasource,
+  listDaDatasourceByProjectCode,
+  editDatasourceStatus,
+  noDppAdd,
+  datasourceCapabilities,
+} from "@/api/da/dataSource/dataSource";
+import { encrypt } from "@/utils/aesEncrypt";
+import { getToken } from "@/utils/auth.js";
+import { config } from "ace-builds";
+import useDefaultLang from "@/composables/useDefaultLang";
+import { mergeProjectSelection } from './projectSelection.mjs';
+
+const { td } = useDefaultLang();
+const { proxy } = getCurrentInstance();
+const { datasource_type, sys_disable } = proxy.useDict(
+  "datasource_type",
+  "sys_disable"
+);
+const daDatasourceList = ref([]);
+const connectionProjects = ref([]);
+const connectionCanAdd = ref(false);
+const canAddConnection = computed(() => queryParams.value.projectCode ? Boolean(connectionProjects.value.find(p => p.code === queryParams.value.projectCode)?.canAdd) : connectionCanAdd.value);
+
+// Column visibility information
+const columns = ref([
+  { key: 1, label: td('da.datasource.columnVisibility.id'), visible: true },
+  { key: 2, label: td('da.datasource.columnVisibility.dataSourceName'), visible: true },
+  { key: 3, label: td('da.datasource.columnVisibility.description'), visible: true },
+  { key: 4, label: td('da.datasource.columnVisibility.dataSourceType'), visible: true },
+  { key: 5, label: td('da.datasource.columnVisibility.createdBy'), visible: true },
+  { key: 6, label: td('da.datasource.columnVisibility.createdTime'), visible: true },
+  { key: 7, label: td('da.datasource.columnVisibility.status'), visible: true },
+  { key: 8, label: td('da.datasource.columnVisibility.remark'), visible: true },
+  { key: 9, label: td('common.texts.operation'), visible: true },
+]);
+
+const getColumnVisibility = (key) => {
+  const column = columns.value.find((col) => col.key === key);
+  // If no corresponding column configuration found, default to showing it
+  if (!column) return true;
+  // If corresponding column configuration found, control visibility based on the visible property
+  return column.visible;
+};
+
+const open = ref(false);
+const openProject = ref(false);
+const openDetail = ref(false);
+const loading = ref(true);
+const showSearch = ref(true);
+const ids = ref([]);
+const single = ref(true);
+const multiple = ref(true);
+const total = ref(0);
+const title = ref("");
+const defaultSort = ref({ prop: "createTime", order: "desc" });
+const router = useRouter();
+const projectOptions = ref([]);
+const projectList = ref([]);
+const totalProject = ref(0);
+const projectTableRef = ref(null);
+const loadingProject = ref(false);
+const projectIdAndCodeList = ref([]);
+let restoringProjectSelection = false;
+const route = useRoute();
+let type = route.query.type || null;
+let isDatasourcePageActive = true;
+
+onActivated(() => {
+  isDatasourcePageActive = true;
+});
+
+onBeforeRouteLeave(() => {
+  isDatasourcePageActive = false;
+});
+
+onBeforeUnmount(() => {
+  isDatasourcePageActive = false;
+});
+
+/*** User Import Parameters */
+const upload = reactive({
+  // Whether to show the popup layer (user import)
+  open: false,
+  // Popup layer title (user import)
+  title: "",
+  // Whether to disable upload
+  isUploading: false,
+  // Whether to update existing user data
+  updateSupport: 0,
+  // Set upload request headers
+  headers: { Authorization: "Bearer " + getToken() },
+  // Upload URL
+  url: import.meta.env.VITE_APP_BASE_API + "/da/daDatasource/importData",
+});
+
+const data = reactive({
+  form: {
+    projectNameListStr: "-",
+    projectNameList: [],
+    projectIdList: [],
+    projectList: [],
+  },
+  queryParamsProject: {
+    pageNum: 1,
+    pageSize: 10,
+    name: null,
+    managerId: null,
+    datasourceId: null,
+  },
+  queryParams: {
+    pageNum: 1,
+    pageSize: 10,
+    datasourceName: null,
+    datasourceType: null,
+    datasourceConfig: null,
+    ip: null,
+    port: null,
+    listCount: null,
+    syncCount: null,
+    dataSize: null,
+    description: null,
+    createTime: null,
+  },
+  rules: {
+    datasourceName: [
+      { required: true, message: td('da.datasource.datasourceNameRequired'), trigger: "blur" },
+    ],
+    datasourceType: [
+      { required: true, message: td('da.datasource.datasourceTypeRequired'), trigger: "change" },
+    ],
+    datasourceConfig: [
+      {
+        required: true,
+        message: td('da.datasource.configRequired'),
+        trigger: "blur",
+      },
+    ],
+    ip: [
+      { required: true, message: td('da.datasource.ipRequired'), trigger: "blur" },
+      {
+        pattern: /^(?:((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)|(?![\d.]+$)(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)$/,
+        message: td('da.datasource.ipOrHostnameInvalid'),
+        trigger: "blur",
+      },
+    ],
+    port: [
+      { required: true, message: td('da.datasource.portRequired'), trigger: "blur" },
+      {
+        pattern: /^\d{1,9}$/,
+        message: td('da.datasource.portInvalid'),
+        trigger: "blur",
+      },
+    ],
+    username: [{ required: true, message: td('da.datasource.accountRequired'), trigger: "blur" }],
+    password: [{ required: true, message: td('da.datasource.passwordRequired'), trigger: "blur" }],
+    keyId: [{ required: true, message: td('da.datasource.keyIDRequired'), trigger: "blur" }],
+    keySecret: [
+      { required: true, message: td('da.datasource.keySecretRequired'), trigger: "blur" },
+    ],
+    bucket: [{ required: true, message: td('da.datasource.bucketRequired'), trigger: "blur" }],
+    endpoint: [
+      { required: true, message: td('da.datasource.endpointRequired'), trigger: "blur" },
+    ],
+    dbname: [
+      { required: true, message: td('da.datasource.dbNameRequired'), trigger: "blur" },
+      // {
+      //   pattern: /^[^\u4e00-\u9fa5]+$/,
+      //   Message: 'Cannot contact Chinese agents',
+      //   trigger: 'blur'
+      // }
+    ],
+    sid: [{ required: true, message: td('da.datasource.schemaRequired'), trigger: "blur" }],
+    config: [
+      {
+        trigger: "blur",
+        validator: (rule, value, callback) => {
+          if (value === null || value === undefined || value === "") {
+            callback();
+            return;
+          }
+          var flag = false;
+          if (typeof value === "string") {
+            try {
+              const obj = JSON.parse(value);
+              if (typeof obj === "object" && obj) {
+                flag = true;
+              }
+            } catch (e) {}
+          }
+          if (flag) {
+            callback();
+          } else {
+            callback(td('da.datasource.jsonInvalid'));
+          }
+        },
+      },
+    ],
+  },
+});
+
+const { queryParams, form, rules, queryParamsProject } = toRefs(data);
+const clearPassword = ref(false);
+const clearKeySecret = ref(false);
+const selectable = (row) => !row.dppAssigned;
+
+function getProjectOptions() {
+  datasourceCapabilities().then((response) => {
+    connectionProjects.value = response.data.projects || [];
+    connectionCanAdd.value = response.data.canAdd;
+    projectOptions.value = [...new Map(connectionProjects.value.filter(p => p.managerId).map(p => [p.managerId,{userId:p.managerId,nickName:p.nickName}])).values()];
+  });
+}
+
+// Keep validation in sync when an existing datasource is loaded as well as when its type is selected.
+watch(() => [form.value.datasourceType, form.value.id], ([type, id]) => {
+  rules.value.password[0].required = id == null && type !== "Hive";
+  rules.value.keySecret[0].required = id == null;
+}, { immediate: true });
+
+//Data Connection Type Change Event
+function handleDatasourceChange(type) {
+  rules.value.password[0].required = form.value.id == null && type !== "Hive";
+}
+
+function getListProject() {
+  if (!openProject.value) projectIdAndCodeList.value = (form.value.projectList || []).map(row => ({...row}));
+  openProject.value = true;
+  loadingProject.value = true;
+  restoringProjectSelection = true;
+  noDppAdd(queryParamsProject.value).then((response) => {
+    projectList.value = response.data.rows;
+    totalProject.value = response.data.total;
+    loadingProject.value = false;
+
+    // Set previously selected items after table loading completes
+    nextTick(() => {
+      projectList.value.forEach((project) => {
+        projectIdAndCodeList.value.forEach((item) => {
+          if (item.projectId === project.id) {
+            proxy.$refs.projectTableRef.toggleRowSelection(project, true);
+          }
+        });
+      });
+      restoringProjectSelection = false;
+    });
+  }).catch(() => { loadingProject.value = false; restoringProjectSelection = false; });
+}
+
+function handleSelectionChangeProject(selection) {
+  if (restoringProjectSelection) return;
+  projectIdAndCodeList.value = mergeProjectSelection(projectIdAndCodeList.value, projectList.value, selection);
+}
+
+function submitFormProject() {
+  openProject.value = false;
+  form.value.projectList = projectIdAndCodeList.value;
+  form.value.projectNameList = projectIdAndCodeList.value.map(item => item.projectName);
+}
+
+function handleQueryProject() {
+  queryParamsProject.value.pageNum = 1;
+  getListProject();
+}
+
+function resetQueryProject() {
+  queryParamsProject.value.pageNum = 1;
+  queryParamsProject.value.pageSize = 10;
+  queryParamsProject.value.name = null;
+  queryParamsProject.value.managerId = null;
+  getListProject();
+}
+
+/** Query data source list */
+function getList() {
+  loading.value = true;
+  if (type == 1) {
+    listDaDatasourceByProjectCode(queryParams.value).then((response) => {
+      daDatasourceList.value = response.data.rows;
+      total.value = response.data.total;
+      loading.value = false;
+    });
+  } else {
+    listDaDatasource(queryParams.value).then((response) => {
+      daDatasourceList.value = response.data.rows;
+      total.value = response.data.total;
+      loading.value = false;
+    });
+  }
+}
+
+// Cancel button
+function cancel() {
+  open.value = false;
+  openDetail.value = false;
+  reset();
+}
+
+// Reset form
+function reset() {
+  clearPassword.value = false;
+  clearKeySecret.value = false;
+  queryParamsProject.value.datasourceId = null;
+  queryParamsProject.value.pageNum = 1;
+  form.value = {
+    id: null,
+    projectNameList: [],
+    projectIdList: [],
+    projectList: [],
+    datasourceName: null,
+    datasourceType: null,
+    datasourceConfig: null,
+    ip: null,
+    port: null,
+    listCount: null,
+    syncCount: null,
+    dataSize: null,
+    description: null,
+    validFlag: false,
+    skipConnectionValidation: false,
+    createBy: null,
+    creatorId: null,
+    createTime: null,
+    updateBy: null,
+    updaterId: null,
+    updateTime: null,
+    remark: null,
+  };
+  proxy.resetForm("daDatasourceRef");
+}
+
+/** Search button operation */
+function handleQuery() {
+  queryParams.value.pageNum = 1;
+  getList();
+}
+
+/** Reset button operation */
+function resetQuery() {
+  proxy.resetForm("queryRef");
+  handleQuery();
+}
+
+// Checkbox selection data
+function handleSelectionChange(selection) {
+  ids.value = selection.map((item) => item.id);
+  single.value = selection.length != 1;
+  multiple.value = !selection.length;
+}
+
+/** Sort trigger event */
+function handleSortChange(column, prop, order) {
+  queryParams.value.orderByColumn = column.prop;
+  queryParams.value.isAsc = column.order;
+  getList();
+}
+
+/** Add button operation */
+function handleAdd() {
+  if (!canAddConnection.value) return;
+  reset();
+  const project=connectionProjects.value.find(p=>p.code===queryParams.value.projectCode && p.canAdd);
+  form.value.isDaOrDpp = type == 1;
+  form.value.projectList = project ? [{projectId:project.id,projectCode:project.code,projectName:project.name}] : [];
+  form.value.projectNameList = project ? [project.name] : [];
+  open.value = true;
+  title.value = td('da.datasource.addDatasource');
+}
+
+/** Edit button operation */
+function handleUpdate(row, type) {
+  if (!row.capabilities?.edit) return;
+  reset();
+  const _id = row.id || ids.value;
+  loading.value = true;
+  getDaDatasource(_id)
+    .then((response) => {
+      form.value = response.data;
+      form.value.projectIdList = form.value.projectList.map(
+        (item) => item.projectId
+      );
+      form.value.projectNameList = form.value.projectList.map(
+        (item) => item.projectName
+      );
+
+      // Parse datasourceConfig
+      if (form.value.datasourceConfig) {
+        const config = JSON.parse(form.value.datasourceConfig);
+        form.value.username = config.username;
+        form.value.password = "";
+        form.value.dbname = config.dbname;
+        form.value.sid = config.sid;
+        if (config.keyId) form.value.keyId = config.keyId;
+        form.value.keySecret = "";
+        if (config.bucket) form.value.bucket = config.bucket;
+        if (config.endpoint) form.value.endpoint = config.endpoint;
+        if (config.domain) form.value.domain = config.domain;
+        if (config.config) form.value.config = config.config;
+      }
+      form.value.projectListOld = form.value.projectIdList;
+      queryParamsProject.value.datasourceId = form.value.id;
+      open.value = true;
+      if (type == 3) {
+        title.value = td('da.datasource.datasourceDetail');
+      } else {
+        title.value = td('da.datasource.editDatasource');
+      }
+    })
+    .finally(() => {
+      loading.value = false; // End loading regardless of success or failure
+    });
+}
+
+/** Detail button operation */
+function handleDetail(row) {
+  reset();
+  const _id = row.id || ids.value;
+  getDaDatasource(_id).then((response) => {
+    form.value = response.data;
+    form.value.projectNameListStr = form.value.projectList
+      .map((item) => item.projectName)
+      .join(", ");
+    if (form.value.datasourceConfig) {
+      const config = JSON.parse(form.value.datasourceConfig);
+      form.value.username = config.username;
+      form.value.password = "";
+      form.value.dbname = config.dbname;
+      form.value.sid = config.sid;
+      if (config.keyId) {
+        form.value.keyId = config.keyId;
+      }
+      form.value.keySecret = "";
+      if (config.bucket) {
+        form.value.bucket = config.bucket;
+      }
+      if (config.endpoint) {
+        form.value.endpoint = config.endpoint;
+      }
+      if (config.domain) {
+        form.value.domain = config.domain;
+      }
+    }
+    openDetail.value = true;
+    title.value = td('da.datasource.datasourceDetail');
+  });
+}
+
+/** Detail button operation */
+function handleTestConnection(row) {
+  if (!row.capabilities?.test) return;
+  reset();
+  const _id = row.id || ids.value;
+  testConnectionLoadingMap.value[_id] = true;
+  clientsTest(_id, { hideErrorMessage: true })
+    .then((response) => {
+      console.log(response);
+      proxy.$modal.msgSuccess(response.msg);
+    })
+    .catch((error) => {
+      proxy.$modal.msgWarning(error.message);
+    })
+    .finally(() => {
+      testConnectionLoadingMap.value[_id] = false;
+    });
+}
+const btnLoading = ref(false);
+const testConnectionLoadingMap = ref({});
+const statusLoadingMap = ref({});
+/** Submit button */
+function submitForm() {
+  proxy.$refs["daDatasourceRef"].validate((valid) => {
+    if (valid) {
+      btnLoading.value = true;
+      if (form.value.id != null) {
+        const connectionConfig = {
+          username: form.value.username,
+          dbname: form.value.dbname,
+          sid: form.value.sid,
+          keyId: form.value.keyId,
+          bucket: form.value.bucket,
+          endpoint: form.value.endpoint,
+          domain: form.value.domain,
+          config: form.value.config,
+        };
+        if (form.value.password) connectionConfig.password = encrypt(form.value.password);
+        if (form.value.keySecret) connectionConfig.keySecret = form.value.keySecret;
+        form.value.clearSecrets = [clearPassword.value && "password", clearKeySecret.value && "keySecret"].filter(Boolean);
+        form.value.datasourceConfig = JSON.stringify(connectionConfig);
+
+        let projectListOld = [];
+        form.value.projectListOld.forEach((item) => {
+          if (!form.value.projectList.includes(item)) {
+            projectListOld.push(item);
+          }
+        });
+        form.value.projectListOld = projectListOld;
+        updateDaDatasource(form.value)
+          .then((response) => {
+            proxy.$modal.msgSuccess(td('da.datasource.editSuccess'));
+            open.value = false;
+            getList();
+          })
+          .finally(() => {
+            btnLoading.value = false;
+          });
+      } else {
+        form.value.datasourceConfig = JSON.stringify({
+          username: form.value.username,
+          ...(form.value.password ? { password: encrypt(form.value.password) } : {}),
+          dbname: form.value.dbname,
+          sid: form.value.sid,
+          keyId: form.value.keyId,
+          keySecret: form.value.keySecret,
+          bucket: form.value.bucket,
+          endpoint: form.value.endpoint,
+          domain: form.value.domain,
+        });
+        testDatasourceConnection(form.value)
+          .then((response) => response.data === true)
+          .catch(() => false)
+          .then((isConnected) => {
+            if (isConnected) {
+              form.value.skipConnectionValidation = false;
+              return true;
+            }
+            return proxy.$modal
+              .confirm(
+                td(
+                  'da.datasource.connectionValidationFailedConfirm',
+                  '数据源校验未通过，确认继续新增吗？若点击确认，该数据源启用状态将自动置为禁用'
+                )
+              )
+              .then(() => {
+                form.value.skipConnectionValidation = true;
+                form.value.validFlag = false;
+              });
+          })
+          .then(() => addDaDatasource(form.value))
+          .then((response) => {
+            proxy.$modal.msgSuccess(td('da.datasource.addSuccess'));
+            open.value = false;
+            getList();
+          })
+          .finally(() => {
+            btnLoading.value = false;
+          });
+      }
+    }
+  });
+}
+
+/** Delete button operation */
+function handleDelete(row) {
+  if (!row.capabilities?.remove) return;
+  const _ids = row.id || ids.value;
+  proxy.$modal
+    .confirm(td('da.datasource.confirmDelete', '', { id: _ids }))
+    .then(function () {
+      return removeDppOrDa(_ids, type ?? 0);
+    })
+    .then(() => {
+      getList();
+      proxy.$modal.msgSuccess(td('da.datasource.deleteSuccess'));
+    })
+    .catch(() => {});
+}
+
+/** Export button operation */
+function handleExport() {
+  proxy.download(
+    "da/daDatasource/export",
+    {
+      ...queryParams.value,
+    },
+    `daDatasource_${new Date().getTime()}.xlsx`
+  );
+}
+
+/** ---------------- Import related operations -----------------**/
+/** Import button operation */
+function handleImport() {
+  upload.title = td('da.datasource.importTitle');
+  upload.open = true;
+}
+
+/** Download template operation */
+function importTemplate() {
+  proxy.download(
+    "system/user/importTemplate",
+    {},
+    `daDatasource_template_${new Date().getTime()}.xlsx`
+  );
+}
+
+/** Submit upload file */
+function submitFileForm() {
+  proxy.$refs["uploadRef"].submit();
+}
+
+/** File upload in progress handler */
+const handleFileUploadProgress = (event, file, fileList) => {
+  upload.isUploading = true;
+};
+
+/** File upload success handler */
+const handleFileSuccess = (response, file, fileList) => {
+  upload.open = false;
+  upload.isUploading = false;
+  proxy.$refs["uploadRef"].handleRemove(file);
+  proxy.$alert(
+    "<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" +
+      response.msg +
+      "</div>",
+    td('da.datasource.importResult'),
+    { dangerouslyUseHTMLString: true }
+  );
+  getList();
+};
+
+/** ---------------------------------**/
+
+function routeTo(link, row) {
+  if (link !== "" && link.indexOf("http") !== -1) {
+    window.location.href = link;
+    return;
+  }
+  if (link !== "") {
+    if (link === router.currentRoute.value.path) {
+      window.location.reload();
+    } else {
+      router.push({
+        path: link,
+        query: {
+          id: row.id,
+        },
+      });
+    }
+  }
+}
+
+/** Toggle enable status value */
+function handleStatusChange(row) {
+  const isEnabling = row.validFlag === true;
+  const text = isEnabling ? td('da.datasource.enable') : td('da.datasource.disable');
+  const status = isEnabling ? 1 : 0;
+  proxy.$modal
+    .confirm(td('da.datasource.confirmStatusChange', '', { text: text, name: row.datasourceName }))
+    .then(function () {
+      statusLoadingMap.value[row.id] = true;
+      return editDatasourceStatus(row.id, status, {
+        hideErrorMessage: isEnabling,
+      })
+        .then(() => {
+          if (isDatasourcePageActive) {
+            proxy.$modal.msgSuccess(td('da.datasource.statusSuccess', '', { text: text }));
+          }
+        })
+        .catch((error) => {
+          if (!isEnabling) {
+            return Promise.reject(error);
+          }
+          if (!isDatasourcePageActive) {
+            return Promise.reject(error);
+          }
+          return ElMessageBox.alert(
+            td('da.datasource.enableFailedMessage', '数据连接启动失败,请查看数据库连接信息'),
+            td('da.datasource.enableFailedTitle', '数据连接'),
+            {
+              type: "warning",
+              confirmButtonText: td("common.button.confirm"),
+              closeOnClickModal: false,
+              closeOnPressEscape: false,
+              showClose: false,
+            }
+          ).then(() => Promise.reject(error));
+        });
+    })
+    .catch(function () {
+      row.validFlag = !row.validFlag;
+    })
+    .finally(function () {
+      statusLoadingMap.value[row.id] = false;
+      if (isDatasourcePageActive) {
+        getList();
+      }
+    });
+}
+
+queryParams.value.orderByColumn = defaultSort.value.prop;
+queryParams.value.isAsc = defaultSort.value.order;
+getList();
+getProjectOptions();
+</script>

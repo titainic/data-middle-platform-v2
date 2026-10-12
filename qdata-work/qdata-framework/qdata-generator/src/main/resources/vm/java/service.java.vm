@@ -1,0 +1,123 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package ${packageName}.service.${moduleName};
+
+import java.util.List;
+import java.util.Map;
+import java.util.Collection;
+import com.baomidou.mybatisplus.extension.service.IService;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import ${packageName}.controller.admin.${moduleName}.vo.${ClassName}SaveReqVO;
+import ${packageName}.controller.admin.${moduleName}.vo.${ClassName}PageReqVO;
+import ${packageName}.dal.dataobject.${moduleName}.${ClassName}DO;
+#if($table.sub)
+#elseif($table.tree)
+#end
+/**
+ * ${functionName}Service interface
+ *
+ * @author ${author}
+ * @date ${datetime}
+ */
+public interface I${ClassName}Service extends IService<${ClassName}DO> {
+
+    /**
+     * Get ${functionName} paginated list
+     *
+     * @param pageReqVO paging request
+     * @return ${functionName}paginated list
+     */
+    PageResult<${ClassName}DO> get${ClassName}Page(${ClassName}PageReqVO pageReqVO);
+
+    /**
+     * Create ${functionName}
+     *
+     * @param createReqVO ${functionName} information
+     * @return ${functionName} number
+     */
+    Long create${ClassName}(${ClassName}SaveReqVO createReqVO);
+
+    /**
+     * Update ${functionName}
+     *
+     * @param updateReqVO ${functionName} information
+     */
+    int update${ClassName}(${ClassName}SaveReqVO updateReqVO);
+
+    #if($table.crud || $table.sub)
+    /**
+     * Delete ${functionName}
+     *
+     * @param idList ${functionName}number
+     */
+    int remove${ClassName}(Collection<Long> idList);
+    #elseif($table.tree)
+    /**
+     * Delete ${functionName}
+     *
+     * @param id ${functionName} number
+     */
+    int remove${ClassName}(Long id);
+    #end
+
+    /**
+     * Get ${functionName} details
+     *
+     * @param id ${functionName} number
+     * @return ${functionName}
+     */
+    ${ClassName}DO get${ClassName}ById(Long id);
+
+    /**
+     * Get the list of all ${functionName}
+     *
+     * @return ${functionName} list
+     */
+    List<${ClassName}DO> get${ClassName}List();
+
+    /**
+     * Get all ${functionName} Map
+     *
+     * @return ${functionName} Map
+     */
+    Map<Long, ${ClassName}DO> get${ClassName}Map();
+
+    #if($table.tree)
+    /**
+     * Whether there is a ${functionName} child node
+     *
+     * @param id ${functionName}id
+     * @return result true exists false does not exist
+     */
+    boolean hasChildBy${ClassName}Id(Long id);
+    #end
+
+    #if($table.crud || $table.sub)
+    /**
+     * Import ${functionName} data
+     *
+     * @param importExcelList ${functionName}data list
+     * @param isUpdateSupport Whether to update support, if it already exists, update the data
+     * @param operName operating user
+     * @return result
+     */
+    String import${ClassName}(List<${ClassName}RespVO> importExcelList, boolean isUpdateSupport, String operName);
+    #end
+
+}

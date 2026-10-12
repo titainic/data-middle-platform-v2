@@ -1,0 +1,21 @@
+
+dromara:
+  x-file-storage: #File storage configuration
+    default-platform: local #The storage platform used by default
+    thumbnail-suffix: ".min.jpg" #Thumbnail suffix, such as [.min.jpg] [.png]
+    local-plus:
+      - platform: local # Storage platform identification
+        enable-storage: true  #Enable storage
+        enable-access: false #Enable access (please use Nginx configuration online for higher efficiency)
+        domain: "" # Access the domain name, for example: "http://127.0.0.1:8081/file/". Please note that the following must be consistent with path-patterns, ending with "/". It is recommended to use relative paths for local storage to facilitate changing the domain name later.
+        path-patterns: /** # Access path
+        base-path: / # Base path
+        storage-path: ${user.dir}/upload/ # Storage path
+    aliyun-oss:
+      - platform: xxxx-oss-xx # Storage platform identification
+        enable-storage: true # Enable storage
+        access-key: "${QDATA_QDATA_FRAMEWORK_DROMARA_X_FILE_STORAGE_ALIYUN_OSS_ACCESS_KEY:}"
+        secret-key: "${QDATA_QDATA_FRAMEWORK_DROMARA_X_FILE_STORAGE_ALIYUN_OSS_SECRET_KEY:}"
+        end-point: https://abc.oss-cn-shanghai.aliyuncs.com # OSS service node
+        bucket-name: xxxxx # Bucket name
+        domain: https://abc.oss-cn-shanghai.aliyuncs.com/ # When accessing the domain name, pay attention to the “/” ending, for example: https://abc.oss-cn-shanghai.aliyuncs.com/

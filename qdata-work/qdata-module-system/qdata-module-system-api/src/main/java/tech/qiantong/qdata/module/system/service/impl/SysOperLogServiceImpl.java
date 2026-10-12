@@ -1,0 +1,95 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.system.service.impl;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import tech.qiantong.qdata.module.system.domain.SysOperLog;
+import tech.qiantong.qdata.module.system.mapper.SysOperLogMapper;
+import tech.qiantong.qdata.module.system.service.ISysOperLogService;
+
+import java.util.List;
+
+/**
+ * Operation Log Service Layer Processing
+ *
+ * @author qdata
+ */
+@Service
+public class SysOperLogServiceImpl implements ISysOperLogService
+{
+    @Autowired
+    private SysOperLogMapper operLogMapper;
+
+    /**
+     * Insert an operation log entry
+     *
+     * @param operLog the operation log object
+     */
+    @Override
+    public void insertOperlog(SysOperLog operLog)
+    {
+        operLogMapper.insertOperlog(operLog);
+    }
+
+    /**
+     * Query a list of system operation logs
+     *
+     * @param operLog the operation log object
+     * @return list of operation logs
+     */
+    @Override
+    public List<SysOperLog> selectOperLogList(SysOperLog operLog)
+    {
+        return operLogMapper.selectOperLogList(operLog);
+    }
+
+    /**
+     * Batch delete system operation logs
+     *
+     * @param operIds the IDs of the operation logs to delete
+     * @return the number of rows affected
+     */
+    @Override
+    public int deleteOperLogByIds(Long[] operIds)
+    {
+        return operLogMapper.deleteOperLogByIds(operIds);
+    }
+
+    /**
+     * Query detailed information of an operation log
+     *
+     * @param operId the operation ID
+     * @return the operation log object
+     */
+    @Override
+    public SysOperLog selectOperLogById(Long operId)
+    {
+        return operLogMapper.selectOperLogById(operId);
+    }
+
+    /**
+     * Clear all operation logs
+     */
+    @Override
+    public void cleanOperLog()
+    {
+        operLogMapper.cleanOperLog();
+    }
+}

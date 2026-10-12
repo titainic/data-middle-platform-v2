@@ -1,0 +1,1102 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.ds.service.api.impl;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.parser.Feature;
+import com.alibaba.fastjson.serializer.*;
+import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.extern.slf4j.Slf4j;
+import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.expression.*;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.parser.SimpleNode;
+import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.StatementVisitorAdapter;
+import net.sf.jsqlparser.statement.select.*;
+import net.sf.jsqlparser.util.SelectUtils;
+import net.sf.jsqlparser.util.TablesNamesFinder;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.database.DataSourceFactory;
+import tech.qiantong.qdata.common.database.DbQuery;
+import tech.qiantong.qdata.common.database.constants.DbQueryProperty;
+import tech.qiantong.qdata.common.database.constants.DbType;
+import tech.qiantong.qdata.common.database.core.DbColumn;
+import tech.qiantong.qdata.common.enums.ConfigType;
+import tech.qiantong.qdata.common.enums.DataConstant;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.JSONUtils;
+import tech.qiantong.qdata.common.utils.PageUtil;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.da.api.datasource.dto.DaDatasourceRespDTO;
+import tech.qiantong.qdata.module.da.api.sensitiveLevel.dto.DaSensitiveLevelRespDTO;
+import tech.qiantong.qdata.module.da.api.service.asset.IDaDatasourceApiService;
+import tech.qiantong.qdata.module.da.api.service.assetchild.api.IDaApiOutService;
+import tech.qiantong.qdata.module.da.api.service.assetchild.gis.IDaAssetGisOutService;
+import tech.qiantong.qdata.module.ds.api.service.api.DsApiService;
+import tech.qiantong.qdata.module.ds.async.AsyncTask;
+import tech.qiantong.qdata.module.ds.controller.admin.api.vo.*;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.DsApiDO;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.ExecuteConfig;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.SqlParseDto;
+import tech.qiantong.qdata.module.ds.dal.dataobject.apiLog.DsApiLogDO;
+import tech.qiantong.qdata.module.ds.dal.dataobject.dto.ReqParam;
+import tech.qiantong.qdata.module.ds.dal.dataobject.dto.ResParam;
+import tech.qiantong.qdata.module.ds.dal.mapper.api.DsApiMapper;
+import tech.qiantong.qdata.module.ds.service.api.IDsApiService;
+import tech.qiantong.qdata.module.ds.utils.JsonUtil;
+import tech.qiantong.qdata.module.ds.utils.SqlBuilderUtil;
+import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * API service service implementation
+ *
+ * @author lhs
+ * @date 2025-02-12
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class DsApiServiceImpl extends ServiceImpl<DsApiMapper, DsApiDO> implements IDsApiService, DsApiService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private ServiceSqlExecutor serviceSql;
+
+    @Resource private tech.qiantong.qdata.module.ds.service.api.ServiceResourceAccess resources;
+
+    @Autowired
+    private org.springframework.beans.factory.ObjectProvider<tech.qiantong.qdata.module.dp.api.warehouse.WarehouseServingGateway> warehouseServing;
+    @Resource
+    private DsApiMapper dsApiMapper;
+
+    @Resource
+    private IDaDatasourceApiService iDaDatasourceApiService;
+
+    @Autowired
+    private DataSourceFactory dataSourceFactory;
+
+    @Resource
+    private AsyncTask asyncTask;
+
+    @Resource
+    private IDaApiOutService iDaApiOutService;
+    @Resource
+    private IDaAssetGisOutService iDaAssetGisOutService;
+
+    private DsApiDO lockedApi(Long id) {
+        var row = dsApiMapper.selectOne(Wrappers.<DsApiDO>lambdaQuery().eq(DsApiDO::getId, id).last("FOR UPDATE"));
+        if (row == null) throw new IllegalArgumentException("服务不存在或已归档");
+        return row;
+    }
+
+    @Override
+    public void releaseDataApi(String id, Long updateId, String updateBy) {
+        lockedApi(Long.valueOf(id));
+        invokeReleaseOrCancelApi(id, "1");
+        setPublicationStatus(id, "1", updateId, updateBy);
+    }
+
+    private void invokeReleaseOrCancelApi(String id, String type) {
+        asyncTask.releaseOrCancelDataApi(Map.of("id", id, "type", type));
+    }
+
+    private void setPublicationStatus(String id, String status, Long userId, String username) {
+        var update = new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<DsApiDO>();
+        update.set("status", status).set("updater_id", userId)
+                .set("update_by", username).set("update_time", LocalDateTime.now()).eq("id", id);
+        if (dsApiMapper.update(null, update) != 1) throw new IllegalStateException("服务状态保存失败，发布操作已回滚");
+    }
+
+    @Override
+    public void cancelDataApi(String id, Long updateId, String updateBy) {
+        lockedApi(Long.valueOf(id));
+        invokeReleaseOrCancelApi(id, "2");
+        setPublicationStatus(id, "0", updateId, updateBy);
+    }
+
+    @Override
+    public DsApiDO repeatFlag(JSONObject jsonObject) {
+        LambdaQueryWrapperX<DsApiDO> queryWrapperX = new LambdaQueryWrapperX<>();
+        queryWrapperX.eqIfPresent(DsApiDO::getName, jsonObject.getString("name"))
+                .eqIfPresent(DsApiDO::getApiVersion, jsonObject.getString("apiVersion"))
+                .eqIfPresent(DsApiDO::getApiUrl, jsonObject.getString("apiUrl"))
+                .neIfPresent(DsApiDO::getId, jsonObject.getString("id"));
+        DsApiDO dsApiDO = dsApiMapper.selectOne(queryWrapperX);
+        return dsApiDO;
+    }
+
+    @Override
+    public void queryServiceForwarding(HttpServletResponse response, DsApiReqVO dsApiReqVO) {
+        Map<String, Object> result = JsonUtil.buildRequestObject(BeanUtils.toBean(dsApiReqVO, DsApiDO.class),
+                dsApiReqVO.getQueryParams());
+        String transmitType = dsApiReqVO.getTransmitType();
+        if (org.apache.commons.lang3.StringUtils.equals("1", transmitType)) {
+            iDaApiOutService.executeServiceForwarding(response, JSONUtils.convertToLong(dsApiReqVO.getApiId()), result);
+        } else if (org.apache.commons.lang3.StringUtils.equals("2", transmitType)) {
+            iDaAssetGisOutService.executeServiceForwarding(response, JSONUtils.convertToLong(dsApiReqVO.getApiId()),
+                    result);
+        } else {
+            return;
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AjaxResult updateDataApi(DsApiDO dataApi) {
+        requireEditable(dataApi.getId());
+        String apiServiceType = dataApi.getApiServiceType();
+        if (StringUtils.equals("3", apiServiceType)) {
+            resources.definition(dataApi,"1".equals(dataApi.getStatus()));
+            dataApiDaoUpdateById(dataApi);
+            return AjaxResult.success();
+        }
+        DsApiDO apiDO = shareCode(dataApi);
+        resources.definition(apiDO,"1".equals(apiDO.getStatus()));
+        dataApiDaoUpdateById(apiDO);
+        return AjaxResult.success();
+    }
+
+    /**
+     * Saves the API.
+     *
+     * @param dataApi
+     * @return
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AjaxResult saveDataApi(DsApiDO dataApi) {
+        String apiServiceType = dataApi.getApiServiceType();
+        if (StringUtils.equals("3", apiServiceType)) {
+            resources.definition(dataApi,"1".equals(dataApi.getStatus()));
+            dataApiDaoInsert(dataApi);
+            return AjaxResult.success();
+        }
+        DsApiDO apiDO = shareCode(dataApi);
+        resources.definition(apiDO,"1".equals(apiDO.getStatus()));
+        dataApiDaoInsert(apiDO);
+        return AjaxResult.success();
+    }
+
+    /**
+     * Tests call parameters.
+     *
+     * @param dataApi
+     * @return
+     */
+    private void requireEditable(Long id) {
+        var serving=warehouseServing.getIfAvailable();
+        if(id!=null && serving!=null && serving.handles(id))throw new IllegalArgumentException("数仓服务契约已固定，请从数仓批次创建新契约版本；可通过下线或撤销应用授权停止访问");
+    }
+
+    @Override
+    public Object serviceTesting(DsApiDO dataApi) {
+        var serving=warehouseServing.getIfAvailable();
+        if(dataApi.getId()!=null && serving!=null && serving.handles(dataApi.getId()))return serving.preview(dataApi.getId(),dataApi.getParams());
+        DsApiDO dataApiEntity = shareCode(dataApi);
+        resources.definition(dataApiEntity,true);
+        List<ResParam> resParamsList = dataApiEntity.getResParamsList();
+        Map<String, Object> params = dataApi.getParams();
+
+        // Result type (1: paginated, 2: list, 3: detail) - deprecated
+        // Result type (1: detail, 2: list, 3: paginated)
+        String resDataType = dataApiEntity.getResDataType();
+        DaDatasourceRespDTO dataSource = iDaDatasourceApiService
+                .getDatasourceById(Long.valueOf(dataApiEntity.getExecuteConfig().getSourceId()));
+
+        DbQueryProperty dbQueryProperty = new DbQueryProperty(
+                dataSource.getDatasourceType(),
+                dataSource.getIp(),
+                dataSource.getPort(),
+                dataSource.getDatasourceConfig());
+        // Parameter
+
+        Integer pageNum = Integer.parseInt(MapUtils.getString(params, "pageNum", "1"));
+        Integer pageSize = Integer.parseInt(MapUtils.getString(params, "pageSize", "20"));
+        PageUtil pageUtil = new PageUtil(pageNum, pageSize);
+        Integer offset = pageUtil.getOffset();
+        SqlBuilderUtil.SqlFilterResult sqlFilterResult;
+        try {
+            sqlFilterResult = SqlBuilderUtil.getInstance().applyFilters(dataApiEntity.getExecuteConfig().getSqlText(),
+                    params);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            throw new ServiceException("ds.error.api.sql.build", "API call: failed to build dynamic SQL");
+        }
+        Map<String, Object> acceptedFilters = sqlFilterResult.getAcceptedFilters();
+
+        Object result = null;
+        try {
+            Object bounded = serviceSql.query(Long.parseLong(dataApiEntity.getExecuteConfig().getSourceId()),
+                    dbQueryProperty, sqlFilterResult.getSql(), acceptedFilters, resDataType, pageNum, pageSize);
+            switch (resDataType) {
+                case "3":
+                    tech.qiantong.qdata.common.database.core.PageResult<Map<String, Object>> pageResult = (tech.qiantong.qdata.common.database.core.PageResult<Map<String, Object>>) bounded;
+                    List<Map<String, Object>> data = pageResult.getData();
+                    List<Map<String, Object>> list = this.encryptQueryResultList(data,
+                            String.valueOf(dataApiEntity.getId()));
+                    this.dateToStr(resParamsList, list);
+
+                    pageResult.setPageNum(pageNum).setPageSize(pageSize).setData(list);
+                    result = pageResult;
+                    break;
+                case "2":
+                    List<Map<String, Object>> listResult = (List<Map<String, Object>>) bounded;
+                    this.dateToStr(resParamsList, listResult);
+                    result = this.encryptQueryResultList(listResult, String.valueOf(dataApiEntity.getId()));
+                    break;
+                case "1":
+                    Map<String, Object> mapResult = (Map<String, Object>) bounded;
+                    this.dateToStr(resParamsList, mapResult);
+                    result = encryptQueryResultMap(mapResult, String.valueOf(dataApiEntity.getId()));
+                    break;
+            }
+        } catch (tech.qiantong.qdata.common.exception.DependencyUnavailableException | tech.qiantong.qdata.module.dp.api.warehouse.ServingRequestException rejected) {
+            throw rejected;
+        } catch (Exception e) {
+            throw new ServiceException("ds.error.api.query.rs", "API call: failed to query result set");
+        }
+
+        return tech.qiantong.qdata.common.database.core.BrowserQueryValues.convert(JSON.parse(JSON.toJSONString(result, new ValueFilter() {
+            @Override
+            public Object process(Object o, String s, Object o1) {
+                if (o1 instanceof Long) {
+                    return String.valueOf(o1);
+                }
+                return o1;
+            }
+        }), Feature.OrderedField));
+    }
+
+    /**
+     * Converts a time value to a string.
+     *
+     * @param resParamsList
+     * @param data
+     */
+    void dateToStr(List<ResParam> resParamsList, Object data) {
+        try {
+            if (data instanceof List) {
+                List<Map<String, Object>> list = (List<Map<String, Object>>) data;
+                list.forEach(map -> {
+                    this.dateToStr(resParamsList, map);
+                });
+            } else {
+                Map<String, Object> map = (Map<String, Object>) data;
+                this.dateToStr(resParamsList, map);
+            }
+        } catch (Exception e) {
+            log.error("Failed to convert time to string", e);
+        }
+    }
+
+    /**
+     * Converts a time value to a string.
+     *
+     * @param resParamsList
+     * @param data
+     */
+    void dateToStr(List<ResParam> resParamsList, Map<String, Object> data) {
+        try {
+            resParamsList.forEach(resParam -> {
+                if (tech.qiantong.qdata.common.utils.StringUtils.isNotEmpty(resParam.getDataType()) && resParam.getDataType().equals("4") && data.get(resParam.getFieldName()) instanceof Date) {
+                    data.put(resParam.getFieldName(), DateUtil.format((Date) data.get(resParam.getFieldName()), tech.qiantong.qdata.common.utils.StringUtils.isNotEmpty(resParam.getDateFormat()) ? resParam.getDateFormat() : "yyyy-MM-dd HH:mm:ss"));
+                }
+            });
+        } catch (Exception e) {
+            log.error("Failed to convert time to string", e);
+        }
+    }
+
+    /**
+     * Parses SQL.
+     *
+     * @param sqlParseDto
+     * @return
+     */
+    @Override
+    public SqlParseVo sqlParse(SqlParseDto sqlParseDto) {
+
+        String sourceId = sqlParseDto.getSourceId();
+        String sql = sqlParseDto.getSqlText();
+        sql = sql.replace(SqlBuilderUtil.getInstance().MARK_KEY_START, "");
+        sql = sql.replace(SqlBuilderUtil.getInstance().MARK_KEY_END, "");
+        Statement stmt;
+        try {
+            stmt = CCJSqlParserUtil.parse(sql);
+        } catch (JSQLParserException e) {
+            throw new ServiceException("ds.error.sql.parse", "SQL syntax error, parsing failed");
+        }
+        // Query data source information.
+        DaDatasourceRespDTO datasourceById = iDaDatasourceApiService.getDatasourceById(Long.valueOf(sourceId));
+        DbQueryProperty dbQueryProperty = new DbQueryProperty(
+                datasourceById.getDatasourceType(),
+                datasourceById.getIp(),
+                datasourceById.getPort(),
+                datasourceById.getDatasourceConfig());
+        DbQuery dbQuery = dataSourceFactory.createDbQuery(dbQueryProperty);
+        // Maintain metadata cache data.
+        TablesNamesFinder tablesNamesFinder = new TablesNamesFinder();
+        List<String> tables = tablesNamesFinder.getTableList(stmt);
+        // Query fields.
+        final List<Map<String, String>> cols = new ArrayList<>();
+        // Query parameters.
+        final List<String> vars = new ArrayList<>();
+        // Disable single-table parsing because multi-table parsing also supports single-table queries.
+        multipleSqlParse(stmt, cols, vars, dbQuery);
+        SqlParseVo sqlParseVo = new SqlParseVo();
+        List<ReqParam> reqParams = vars.stream().map(s -> {
+            ReqParam reqParam = new ReqParam();
+            reqParam.setParamName(s);
+            reqParam.setNullable(DataConstant.TrueOrFalse.FALSE.getKey());
+            return reqParam;
+        }).collect(Collectors.toList());
+
+        sqlParseVo.setReqParams(reqParams);
+        List<ResParam> resParams = new ArrayList<>();
+
+        if (datasourceById != null) {
+            Map<String, List<Map<String, String>>> map = cols.stream()
+                    .collect(Collectors.groupingBy(e -> e.get("tableName").toString()));
+            for (Map.Entry<String, List<Map<String, String>>> entry : map.entrySet()) {
+                String entryKey = entry.getKey();
+                List<Map<String, String>> entryValue = entry.getValue();
+                String arr[] = entryKey.split("\\.");
+                String tableName;
+                String dbName;
+                if (arr.length > 1) {
+                    tableName = arr[1];
+                    dbName = arr[0];
+                } else {
+                    tableName = arr[0];
+                    dbName = null;
+                }
+                List<DbColumn> columns;
+                if (org.apache.commons.lang3.StringUtils.isBlank(dbName)) {
+                    columns = dbQuery.getTableColumns(dbQueryProperty, tableName);
+                } else {
+                    columns = dbQuery.getTableColumns(dbName, tableName);
+                }
+                Map<String, DbColumn> columnMap = columns.stream()
+                        .collect(Collectors.toMap(k -> org.apache.commons.lang3.StringUtils
+                                .replace(k.getColName(), "_", "").toUpperCase(Locale.ROOT), e -> e));
+                entryValue.stream().forEach(m -> {
+                    String columnName = m.get("columnName");
+                    String columnAliasName = m.get("columnAliasName");
+                    DbColumn dbColumn = columnMap.get(
+                            org.apache.commons.lang3.StringUtils.replace(columnName, "_", "").toUpperCase(Locale.ROOT));
+                    if (dbColumn != null) {
+                        ResParam resParam = new ResParam();
+                        resParam.setFieldName(
+                                StrUtil.isNotBlank(columnAliasName) ? columnAliasName : dbColumn.getColName());
+                        resParam.setFieldComment(
+                                StrUtil.isNotBlank(dbColumn.getColComment()) ? dbColumn.getColComment() : "");
+                        resParam.setDataType(StrUtil.isNotBlank(dbColumn.getDataType()) ? dbColumn.getDataType() : "");
+                        resParam.setFieldAliasName(StrUtil.isNotBlank(columnAliasName) ? columnAliasName : "");
+                        resParams.add(resParam);
+                    }
+                });
+            }
+        }
+        sqlParseVo.setResParams(resParams);
+        dbQuery.close();
+        return sqlParseVo;
+    }
+
+    /**
+     * Consolidates update handling.
+     *
+     * @param dataApi
+     */
+    private void dataApiDaoUpdateById(DsApiDO dataApi) {
+        var before = lockedApi(dataApi.getId());
+        if ("1".equals(before.getStatus()) &&
+                ((dataApi.getApiUrl()!=null && !java.util.Objects.equals(dataApi.getApiUrl(),before.getApiUrl())) ||
+                 (dataApi.getApiVersion()!=null && !java.util.Objects.equals(dataApi.getApiVersion(),before.getApiVersion())) ||
+                 (dataApi.getReqMethod()!=null && !java.util.Objects.equals(dataApi.getReqMethod(),before.getReqMethod()))))
+            throw new IllegalArgumentException("修改服务路径、方法或版本前，请先下线原服务");
+        if (dataApi.getStatus()==null) dataApi.setStatus(before.getStatus());
+        dataApi.setApiId(StringUtils.trimToNull(dataApi.getApiId()));
+        DsApiLogDO apiLogEntity = null;
+        try {
+            if (baseMapper.updateById(dataApi) != 1) throw new IllegalStateException("服务配置保存失败");
+            // Build the information.
+            apiLogEntity = packApiLogEntity(
+                    dataApi, dataApi.getUpdatorId(), dataApi.getUpdateBy(), dataApi.toString(), 1, "", "1", 3);
+            if (StringUtils.equals("1",dataApi.getStatus())) {
+                invokeReleaseOrCancelApi(String.valueOf(dataApi.getId()), "1");
+            } else {
+                invokeReleaseOrCancelApi(String.valueOf(dataApi.getId()), "2");
+            }
+        } catch (Exception e) {
+            // Build the information.
+            apiLogEntity = packApiLogEntity(
+                    dataApi, dataApi.getUpdatorId(), dataApi.getUpdateBy(), dataApi.toString(), 0,
+                    e.getMessage().toString(), "0", 3);
+            throw new ServiceException("ds.error.update.fail", "Update failed!");
+        } finally {
+            // Build the information and persist the log asynchronously.
+            // asyncTask.doTask(apiLogEntity);
+        }
+    }
+
+    /**
+     * Consolidates creation handling.
+     */
+    private void dataApiDaoInsert(DsApiDO dataApi) {
+        dataApi.setApiId(StringUtils.trimToNull(dataApi.getApiId()));
+        DsApiLogDO apiLogEntity = null;
+        try {
+            baseMapper.insert(dataApi);
+            // Build the information.
+            apiLogEntity = packApiLogEntity(
+                    dataApi, dataApi.getCreatorId(), dataApi.getCreateBy(), dataApi.toString(), 1, "", "1", 2);
+            if (StringUtils.equals("1",dataApi.getStatus())) {
+                invokeReleaseOrCancelApi(String.valueOf(dataApi.getId()), "1");
+            }
+        } catch (Exception e) {
+            dataApi.setId(0L);
+            // Build the information.
+            apiLogEntity = packApiLogEntity(
+                    dataApi, dataApi.getCreatorId(), dataApi.getCreateBy(), dataApi.toString(), 0,
+                    e.getMessage().toString(), "0", 2);
+            throw new ServiceException("ds.error.create.fail", "Create failed!");
+        } finally {
+            // Build the information and persist the log asynchronously.
+            // asyncTask.doTask(apiLogEntity);
+        }
+    }
+
+    /**
+     * Builds an ApiLogEntity.
+     *
+     * @return
+     */
+    private static DsApiLogDO packApiLogEntity(DsApiDO dataApiEntity, Long callerId, String callerBy,
+                                               String callerParams,
+                                               Integer callerSize, String msg, String status, Integer serviceType) {
+        DsApiLogDO apiLogEntity = new DsApiLogDO();
+        // id
+        apiLogEntity.setApiId(dataApiEntity.getId());
+        // Name.
+        apiLogEntity.setApiName(dataApiEntity.getName());
+        // Username.
+        apiLogEntity.setCallerId(String.valueOf(callerId));
+        // User ID.
+        apiLogEntity.setCallerBy(callerBy);
+        // Called URL.
+        apiLogEntity.setCallerUrl(dataApiEntity.getApiUrl());
+        // Call parameters
+        apiLogEntity.setCallerParams(callerParams);
+        // Called record count
+        apiLogEntity.setCallerSize(callerSize);
+        // Information.
+        apiLogEntity.setMsg(msg);
+        // Status (0: failed, 1: successful)
+        apiLogEntity.setStatus(Integer.valueOf(status));
+        // Trigger time.
+        apiLogEntity.setCallerStartDate(LocalDateTime.now());
+        apiLogEntity.setCallerIp("");
+        // Service type (1: request, 2: create, 3: update, 4: delete, 5: publish, 6: unpublish, 7: view)
+        return apiLogEntity;
+    }
+
+    /**
+     * Desensitizes data.
+     *
+     * @param data
+     * @param apiId
+     * @return
+     */
+    private List<Map<String, Object>> encryptQueryResultList(List<Map<String, Object>> data, String apiId) {
+        if (CollectionUtils.isEmpty(data)) {
+            return data;
+        }
+        List<DaSensitiveLevelRespDTO> metadataDsnRuleLinkList = new ArrayList<>();
+        try {
+            // metadataDsnRuleLinkList =
+            // metadataSourceServiceFeign.getMetadataDsnRuleLinkList(apiId);
+        } catch (Exception e) {
+            throw new ServiceException("ds.error.api.desensitize", "API call: failed to query desensitization rules");
+        }
+
+        if (CollectionUtils.isEmpty(metadataDsnRuleLinkList)) {
+            return data;
+        }
+        // Desensitize the data.
+        // for (Map<String, Object> datum : data) {
+        // metadataDsnRuleLinkList.stream()
+        // .filter(columnEntity -> datum.containsKey(columnEntity.getColumnName()))
+        // .forEach(columnEntity -> {
+        //
+        // String columnName = columnEntity.getColumnName();
+        // Object value = datum.get(columnName);
+        //
+        // if (value != null) {
+        // MaskRuleUtil.MaskRule maskRule = MaskRuleUtil.mapToMaskRule(columnEntity);
+        // Object object = MaskRuleUtil.processRule(value, maskRule);
+        // datum.put(columnName, object);
+        // }
+        // });
+        // }
+        return data;
+    }
+
+    private Map<String, Object> encryptQueryResultMap(Map<String, Object> mapResult, String apiId) {
+        if (MapUtils.isEmpty(mapResult)) {
+            return mapResult;
+        }
+
+        List<DaSensitiveLevelRespDTO> metadataDsnRuleLinkList = new ArrayList<>();
+        try {
+            // metadataDsnRuleLinkList =
+            // metadataSourceServiceFeign.getMetadataDsnRuleLinkList(apiId);
+        } catch (Exception e) {
+            throw new ServiceException("ds.error.api.desensitize", "API call: failed to query desensitization rules");
+        }
+
+        if (CollectionUtils.isEmpty(metadataDsnRuleLinkList)) {
+            return mapResult;
+        }
+
+        // metadataDsnRuleLinkList.stream()
+        // .filter(columnEntity -> mapResult.containsKey(columnEntity.getColumnName()))
+        // .forEach(columnEntity -> {
+        // String columnName = columnEntity.getColumnName();
+        // Object value = mapResult.get(columnName);
+        //
+        // if (value != null) {
+        // MaskRuleUtil.MaskRule maskRule = MaskRuleUtil.mapToMaskRule(columnEntity);
+        // Object object = MaskRuleUtil.processRule(value, maskRule);
+        // mapResult.put(columnName, object);
+        // }
+        // });
+
+        return mapResult;
+    }
+
+    private DsApiDO shareCode(DsApiDO dataApiDto) {
+        if(dataApiDto.getExecuteConfig()==null && StringUtils.isNotBlank(dataApiDto.getConfigJson()))dataApiDto.setExecuteConfig(com.alibaba.fastjson2.JSON.parseObject(dataApiDto.getConfigJson(),ExecuteConfig.class));
+        dataApiDto.setResParamsList();
+        if (dataApiDto.getExecuteConfig() == null
+                || org.apache.commons.lang3.StringUtils.isBlank(dataApiDto.getExecuteConfig().getApiServiceType())) {
+            throw new IllegalArgumentException("服务执行配置缺少类型");
+        }
+        String configType = dataApiDto.getExecuteConfig().getApiServiceType();
+        if (ConfigType.FORM.getKey().equals(configType)) {
+            try {
+                dataApiDto.getExecuteConfig().setSqlText(sqlJdbcNamedParameterBuild(dataApiDto));
+            } catch (JSQLParserException e) {
+                throw new ServiceException("ds.error.sql.parse", "SQL syntax error, parsing failed");
+            }
+        } else if (ConfigType.SCRIPT.getKey().equals(configType)) {
+        }
+        dataApiDto.setConfigJson(com.alibaba.fastjson2.JSON.toJSONString(dataApiDto.getExecuteConfig()));
+        return dataApiDto;
+    }
+
+    private String sqlJdbcNamedParameterBuild(DsApiDO dataApi) throws JSQLParserException {
+        String tableName = dataApi.getExecuteConfig().getTableName();
+        ExecuteConfig executeConfig = dataApi.getExecuteConfig();
+        if (StringUtils.isEmpty(executeConfig.getDbType())) {
+            //Get by data source ID.
+            DaDatasourceRespDTO dataSource = iDaDatasourceApiService.getDatasourceById(Long.valueOf(executeConfig.getSourceId()));
+            if (dataSource == null) {
+                throw new ServiceException("ds.error.datasource.notfound", "Data source does not exist");
+            }
+            executeConfig.setDbType(dataSource.getDatasourceType());
+            JSONObject dataSourceConfig = JSONObject.parseObject(dataSource.getDatasourceConfig());
+            executeConfig.setDbName(dataSourceConfig.getString("dbname"));
+            executeConfig.setSid(dataSourceConfig.getString("sid"));
+        }
+        if ("Hive".equalsIgnoreCase(executeConfig.getDbType())) {
+            tableName=tech.qiantong.qdata.common.database.core.HiveTableIdentity.resolve(tableName,executeConfig.getDbName()).canonical();
+        } else if (org.apache.commons.lang3.StringUtils.equals(DbType.KINGBASE8.getDb(), executeConfig.getDbType())
+                || org.apache.commons.lang3.StringUtils.equals(DbType.POSTGRE_SQL.getDb(), executeConfig.getDbType())
+                || org.apache.commons.lang3.StringUtils.equals(DbType.SQL_SERVER.getDb(), executeConfig.getDbType())) {
+            tableName = org.apache.commons.lang3.StringUtils.isNotBlank(executeConfig.getDbName()) ? executeConfig.getDbName() + "." + executeConfig.getSid() + "." + tableName : tableName;
+        }  else {
+            tableName = org.apache.commons.lang3.StringUtils.isNotBlank(executeConfig.getDbName()) ? executeConfig.getDbName() + "." + tableName : tableName;
+        }
+        Table table = new Table(tableName);
+        String[] resParams = dataApi.getResParamsList().stream().map(s -> s.getFieldName()).toArray(String[]::new);
+        Select select = SelectUtils.buildSelectFromTableAndExpressions(table, resParams);
+        return SqlBuilderUtil.getInstance().buildHql(select.toString(), dataApi.getReqParamsList());
+    }
+
+    private void singleSqlParse(Statement stmt, List<Map<String, String>> cols, List<String> vars, String tableName,
+                                DbQuery dbQuery) {
+        stmt.accept(new StatementVisitorAdapter<Void>() {
+            @Override
+            public <S> Void visit(Select select, S context) {
+                SelectVisitor<Void> selectVisitor = new SelectVisitorAdapter<Void>() {
+                    @Override
+                    public <S> Void visit(PlainSelect plainSelect, S context) {
+                        plainSelect.getSelectItems().forEach(item -> {
+                            Expression itemExpr = item.getExpression();
+                            if (itemExpr instanceof AllColumns && !(itemExpr instanceof AllTableColumns)) {
+                                // plain "select *": expand all columns of the table
+                                List<DbColumn> columns = dbQuery.getTableColumns("", tableName);
+                                for (DbColumn column : columns) {
+                                    Map<String, String> map = new HashMap<>();
+                                    map.put("tableName", tableName);
+                                    map.put("columnName", column.getColName());
+                                    cols.add(map);
+                                }
+                                return;
+                            }
+                            if (itemExpr instanceof AllTableColumns) {
+                                // "t.*" items were ignored by the previous visitor implementation
+                                return;
+                            }
+                            Map<String, String> map = new HashMap<>();
+                            String columnName;
+                            SimpleNode node = itemExpr.getASTNode();
+                            Object value = null;
+                            if (node != null) {
+                                value = node.jjtGetValue();
+                            }
+                            if (value == null) {
+                                Alias alias = item.getAlias();
+                                if (alias != null) {
+                                    columnName = alias.getName();
+                                } else {
+                                    columnName = String.valueOf(value);
+                                    columnName = columnName.replace("'", "");
+                                    columnName = columnName.replace("\"", "");
+                                    columnName = columnName.replace("`", "");
+                                }
+                            } else if (value instanceof Column) {
+                                Column column = (Column) value;
+                                columnName = column.getColumnName();
+                                if (item.getAlias() != null) {
+                                    map.put("columnAliasName", item.getAlias().getName());
+                                }
+                            } else if (value instanceof Function) {
+                                columnName = value.toString();
+                            } else if (itemExpr instanceof Select) {
+                                // subquery select item
+                                columnName = item.getAlias() != null ? item.getAlias().getName() : "subSelect";
+                            } else {
+                                // Add support for select 'aaa' from table.
+                                columnName = String.valueOf(value);
+                                columnName = columnName.replace("'", "");
+                                columnName = columnName.replace("\"", "");
+                                columnName = columnName.replace("`", "");
+                            }
+                            columnName = columnName.replace("'", "");
+                            columnName = columnName.replace("\"", "");
+                            columnName = columnName.replace("`", "");
+                            map.put("tableName", tableName);
+                            map.put("columnName", columnName);
+                            cols.add(map);
+                        });
+                        Expression where = plainSelect.getWhere();
+                        if (where != null) {
+                            where.accept(new ExpressionVisitorAdapter<Void>() {
+                                @Override
+                                public <S> Void visit(JdbcNamedParameter jdbcNamedParameter, S context) {
+                                    vars.add(jdbcNamedParameter.getName());
+                                    return null;
+                                }
+                            });
+                        }
+                        return null;
+                    }
+                };
+                select.accept(selectVisitor, null);
+                return null;
+            }
+        });
+    }
+
+    private void multipleSqlParse(Statement stmt, List<Map<String, String>> cols, List<String> vars, DbQuery dbQuery) {
+        stmt.accept(new StatementVisitorAdapter<Void>() {
+            @Override
+            public <S> Void visit(Select select, S context) {
+                SelectVisitor<Void> selectVisitor = new SelectVisitorAdapter<Void>() {
+                    @Override
+                    public <S> Void visit(PlainSelect plainSelect, S context) {
+                        Map<String, String> aliasToTableMap = new HashMap<>();
+                        FromItem fromItem = plainSelect.getFromItem();
+                        if (fromItem instanceof Table) {
+                            Table table = (Table) fromItem;
+                            String tableName = table.getFullyQualifiedName();
+                            if (table.getAlias() != null) {
+                                aliasToTableMap.put(table.getAlias().getName(), tableName);
+                            } else {
+                                aliasToTableMap.put(table.getName(), tableName);
+                            }
+                        }
+
+                        List<Join> joinList = plainSelect.getJoins();
+                        if (joinList != null) {
+                            for (Join join : joinList) {
+                                FromItem joinItem = join.getRightItem();
+                                if (joinItem instanceof Table) {
+                                    Table table = (Table) joinItem;
+                                    String tableName = table.getFullyQualifiedName();
+                                    if (table.getAlias() != null) {
+                                        aliasToTableMap.put(table.getAlias().getName(), tableName);
+                                    } else {
+                                        aliasToTableMap.put(table.getName(), tableName);
+                                    }
+                                }
+                                if (join.getOnExpression() != null) {
+                                    join.getOnExpression().accept(new ExpressionVisitorAdapter<Void>() {
+                                        @Override
+                                        public <S> Void visit(JdbcNamedParameter jdbcNamedParameter, S context) {
+                                            vars.add(jdbcNamedParameter.getName());
+                                            return null;
+                                        }
+                                    });
+                                }
+                            }
+                        }
+
+                        plainSelect.getSelectItems().forEach(item -> {
+                            Expression expr = item.getExpression();
+
+                            if (expr instanceof AllTableColumns) {
+                                // "t.*": expand all columns of the aliased table
+                                AllTableColumns allTableColumns = (AllTableColumns) expr;
+                                String alias = allTableColumns.getTable().getName();
+                                if (!aliasToTableMap.containsKey(alias))
+                                    return;
+
+                                String fullTableName = aliasToTableMap.get(alias);
+                                String[] parts = fullTableName.split("\\.");
+                                String dbName = parts.length > 1 ? parts[0] : null;
+                                String tableName = parts.length > 1 ? parts[1] : parts[0];
+
+                                List<DbColumn> columns = dbQuery.getTableColumns(dbName, tableName);
+                                for (DbColumn column : columns) {
+                                    Map<String, String> map = new HashMap<>();
+                                    map.put("tableName", fullTableName);
+                                    map.put("columnName", column.getColName());
+                                    cols.add(map);
+                                }
+                                return;
+                            }
+
+                            if (expr instanceof AllColumns) {
+                                // plain "select *": expand all columns of every table
+                                for (Map.Entry<String, String> entry : aliasToTableMap.entrySet()) {
+                                    String fullTableName = entry.getValue();
+                                    String[] parts = fullTableName.split("\\.");
+                                    String dbName = parts.length > 1 ? parts[0] : null;
+                                    String tableName = parts.length > 1 ? parts[1] : parts[0];
+
+                                    List<DbColumn> columns = dbQuery.getTableColumns(dbName, tableName);
+                                    for (DbColumn column : columns) {
+                                        Map<String, String> map = new HashMap<>();
+                                        map.put("tableName", fullTableName);
+                                        map.put("columnName", column.getColName());
+                                        cols.add(map);
+                                    }
+                                }
+                                return;
+                            }
+
+                            Map<String, String> m = new HashMap<>();
+                            String columnName;
+                            String tableName = "";
+
+                            if (expr instanceof Column) {
+                                Column column = (Column) expr;
+                                columnName = column.getColumnName();
+                                Table table = column.getTable();
+
+                                if (table != null && table.getName() != null) {
+                                    // Resolve the alias to the actual table name when a table prefix is present.
+                                    String tName = table.getName();
+                                    tableName = aliasToTableMap.getOrDefault(tName, tName);
+                                } else if (aliasToTableMap.size() == 1) {
+                                    // Use the only table for a single-table query without a table prefix.
+                                    tableName = aliasToTableMap.values().iterator().next();
+                                } else {
+                                    // Use unknown when the owning table cannot be determined for multi-table or no-FROM queries.
+                                    tableName = "unknown";
+                                }
+
+                                if (item.getAlias() != null) {
+                                    m.put("columnAliasName", item.getAlias().getName());
+                                }
+                            } else if (expr instanceof Function) {
+                                columnName = expr.toString();
+                                tableName = columnName;
+                            } else if (expr instanceof Select) {
+                                // subquery select item
+                                columnName = item.getAlias() != null ? item.getAlias().getName() : "subSelect";
+                                tableName = columnName;
+                                m.put("sub", "1");
+                            } else {
+                                columnName = expr.toString().replaceAll("[\"'`]", "");
+                            }
+
+                            columnName = columnName.replaceAll("[\"'`]", "");
+                            m.put("tableName", tableName);
+                            m.put("columnName", columnName);
+                            cols.add(m);
+                        });
+
+                        Expression where = plainSelect.getWhere();
+                        if (where != null) {
+                            where.accept(new ExpressionVisitorAdapter<Void>() {
+                                @Override
+                                public <S> Void visit(JdbcNamedParameter jdbcNamedParameter, S context) {
+                                    vars.add(jdbcNamedParameter.getName());
+                                    return null;
+                                }
+                            });
+                        }
+                        return null;
+                    }
+                };
+                select.accept(selectVisitor, null);
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Parses subqueries.
+     *
+     * @param select
+     * @param cols
+     * @param vars
+     */
+    void subSelectWhere(ParenthesedSelect select, List<Map<String, String>> cols, List<String> vars) {
+        SelectVisitor<Void> selectVisitor = new SelectVisitorAdapter<Void>() {
+            @Override
+            public <S> Void visit(PlainSelect plainSelect, S context) {
+                // Store the table name.
+                Map<String, String> map = new HashMap<>();
+                Table table = (Table) plainSelect.getFromItem();
+                if (org.apache.commons.lang3.StringUtils.equals(table.getName().toUpperCase(Locale.ROOT), "DUAL")) {
+                    return null;
+                }
+                if (table.getAlias() != null) {
+                    String tableName = table.getName();
+                    if (org.apache.commons.lang3.StringUtils.isNotBlank(table.getSchemaName())) {
+                        tableName = table.getSchemaName() + "." + tableName;
+                    }
+                    map.put(tableName, table.getAlias().getName());
+                }
+                if (plainSelect.getJoins() != null && plainSelect.getJoins().size() > 0) {
+                    for (Join join : plainSelect.getJoins()) {
+                        FromItem fromItem = join.getRightItem();
+                        if (fromItem instanceof ParenthesedSelect) {
+                            ParenthesedSelect subSelect = (ParenthesedSelect) fromItem;
+                            subSelectWhere(subSelect, cols, vars);
+                            continue;
+                        }
+                        join.getOnExpression().accept(new ExpressionVisitorAdapter<Void>() {
+                            @Override
+                            public <S> Void visit(JdbcNamedParameter jdbcNamedParameter, S context) {
+                                vars.add(jdbcNamedParameter.getName());
+                                return null;
+                            }
+                        });
+                        Table table1 = (Table) join.getRightItem();
+                        if (table1.getAlias() != null) {
+                            String tableName = table1.getName();
+                            if (org.apache.commons.lang3.StringUtils.isNotBlank(table.getSchemaName())) {
+                                tableName = table1.getSchemaName() + "." + tableName;
+                            }
+                            map.put(tableName, table1.getAlias().getName());
+                        }
+                    }
+                }
+                Expression where = plainSelect.getWhere();
+                if (where != null) {
+                    where.accept(new ExpressionVisitorAdapter<Void>() {
+                        @Override
+                        public <S> Void visit(JdbcNamedParameter jdbcNamedParameter, S context) {
+                            vars.add(jdbcNamedParameter.getName());
+                            return null;
+                        }
+                    });
+                }
+                return null;
+            }
+        };
+        select.getSelect().accept(selectVisitor, null);
+    }
+
+    @Override
+    public PageResult<DsApiDO> getDsApiPage(DsApiPageReqVO pageReqVO) {
+        return dsApiMapper.selectPage(pageReqVO);
+    }
+
+    @Override
+    public Long createDsApi(DsApiSaveReqVO createReqVO) {
+        DsApiDO dictType = BeanUtils.toBean(createReqVO, DsApiDO.class);
+        dictType.setApiId(StringUtils.trimToNull(dictType.getApiId()));
+        dsApiMapper.insert(dictType);
+        return dictType.getId();
+    }
+
+    @Override
+    public int updateDsApi(DsApiSaveReqVO updateReqVO) {
+        requireEditable(updateReqVO.getId());
+        // Perform related validation.
+
+        // Updates an API service.
+        DsApiDO updateObj = BeanUtils.toBean(updateReqVO, DsApiDO.class);
+        updateObj.setApiId(StringUtils.trimToNull(updateObj.getApiId()));
+        return dsApiMapper.updateById(updateObj);
+    }
+
+    @Override
+    public int removeDsApi(Collection<Long> idList) {
+        for (Long id : new java.util.TreeSet<>(idList)) {
+            requireEditable(id);
+            if ("1".equals(lockedApi(id).getStatus())) throw new IllegalArgumentException("请先下线服务，再归档其配置");
+        }
+        // Deletes API services in batches.
+        return dsApiMapper.deleteBatchIds(idList);
+    }
+
+    @Override
+    public DsApiDO getDsApiById(Long id) {
+        return dsApiMapper.selectById(id);
+    }
+
+    @Override
+    public List<DsApiDO> getDsApiList() {
+        return dsApiMapper.selectList();
+    }
+
+    @Override
+    public Map<Long, DsApiDO> getDsApiMap() {
+        List<DsApiDO> dsApiList = dsApiMapper.selectList();
+        return dsApiList.stream()
+                .collect(Collectors.toMap(
+                        DsApiDO::getId,
+                        dsApiDO -> dsApiDO,
+                        // Preserve the existing value.
+                        (existing, replacement) -> existing));
+    }
+
+    /**
+     * Imports API service data.
+     *
+     * @param importExcelList API service data list
+     * @param isUpdateSupport whether existing records should be updated
+     * @param operName        Operator
+     * @return the result
+     */
+    @Override
+    public String importDsApi(List<DsApiRespVO> importExcelList, boolean isUpdateSupport, String operName) {
+        if (StringUtils.isNull(importExcelList) || importExcelList.size() == 0) {
+            throw new ServiceException("ds.error.import.empty", "Import data cannot be empty!");
+        }
+
+        int successNum = 0;
+        int failureNum = 0;
+        List<String> successMessages = new ArrayList<>();
+        List<String> failureMessages = new ArrayList<>();
+
+        for (DsApiRespVO respVO : importExcelList) {
+            try {
+                DsApiDO dsApiDO = BeanUtils.toBean(respVO, DsApiDO.class);
+                Long dsApiId = respVO.getId();
+                if (isUpdateSupport) {
+                    if (dsApiId != null) {
+                        DsApiDO existingDsApi = dsApiMapper.selectById(dsApiId);
+                        if (existingDsApi != null) {
+                            requireEditable(dsApiId);
+                            dsApiMapper.updateById(dsApiDO);
+                            successNum++;
+                            successMessages.add(MessageUtils.messageWithFallback("ds.import.update.success",
+                                    "Data update successful, ID {0} {1} record.", dsApiId, MessageUtils.messageWithFallback("ds.entity.api.service", "API service")));
+                        } else {
+                            failureNum++;
+                            failureMessages.add(MessageUtils.messageWithFallback("ds.import.update.fail",
+                                    "Data update failed, ID {0} {1} record does not exist.", dsApiId, MessageUtils.messageWithFallback("ds.entity.api.service", "API service")));
+                        }
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("ds.import.update.id.missing",
+                                "Data update failed, record ID does not exist."));
+                    }
+                } else {
+                    QueryWrapper<DsApiDO> queryWrapper = new QueryWrapper<>();
+                    queryWrapper.eq("id", dsApiId);
+                    DsApiDO existingDsApi = dsApiMapper.selectOne(queryWrapper);
+                    if (existingDsApi == null) {
+                        dsApiMapper.insert(dsApiDO);
+                        successNum++;
+                        successMessages.add(MessageUtils.messageWithFallback("ds.import.insert.success",
+                                "Data insert successful, ID {0} {1} record.", dsApiId, MessageUtils.messageWithFallback("ds.entity.api.service", "API service")));
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("ds.import.insert.fail",
+                                "Data insert failed, ID {0} {1} record already exists.", dsApiId, MessageUtils.messageWithFallback("ds.entity.api.service", "API service")));
+                    }
+                }
+            } catch (Exception e) {
+                failureNum++;
+                String errorMsg = MessageUtils.messageWithFallback("ds.import.error.detail",
+                "Data import failed, error: {0}", e.getMessage());
+                failureMessages.add(errorMsg);
+                log.error(errorMsg, e);
+            }
+        }
+        StringBuilder resultMsg = new StringBuilder();
+        if (failureNum > 0) {
+            String failureDetails = String.join("<br/>", failureMessages);
+            resultMsg.append(MessageUtils.messageWithFallback("ds.import.result.fail",
+                    "Import failed! {0} records have incorrect format, errors:<br/>{1}",
+                    failureNum, failureDetails));
+            throw new ServiceException("ds.error.import.fail", resultMsg.toString(), resultMsg.toString());
+        } else {
+            resultMsg.append(MessageUtils.messageWithFallback("ds.import.result.success",
+                    "Congratulations! All data imported! Total: {0} records.", successNum));
+        }
+        return resultMsg.toString();
+    }
+
+    @Override
+    public Long getCountByCatCode(String catCode) {
+        return baseMapper.selectCount(Wrappers.lambdaQuery(DsApiDO.class)
+                .likeRight(DsApiDO::getCatCode, catCode));
+    }
+}

@@ -1,0 +1,407 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.ds.service.api.impl;
+
+
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.util.SelectUtils;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import tech.qiantong.qdata.common.database.DataSourceFactory;
+import tech.qiantong.qdata.common.database.DbQuery;
+import tech.qiantong.qdata.common.database.constants.DbQueryProperty;
+import tech.qiantong.qdata.common.database.constants.DbType;
+import tech.qiantong.qdata.common.database.core.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.JSONUtils;
+import tech.qiantong.qdata.common.utils.PageUtil;
+import tech.qiantong.qdata.module.da.api.datasource.dto.DaDatasourceRespDTO;
+import tech.qiantong.qdata.module.da.api.service.asset.IDaDatasourceApiService;
+import tech.qiantong.qdata.module.da.api.service.assetchild.api.IDaApiOutService;
+import tech.qiantong.qdata.module.da.api.service.assetchild.gis.IDaAssetGisOutService;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.DsApiDO;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.ExecuteConfig;
+import tech.qiantong.qdata.module.ds.dal.dataobject.dto.ReqParam;
+import tech.qiantong.qdata.module.ds.dal.dataobject.dto.ResParam;
+import tech.qiantong.qdata.module.ds.utils.JsonUtil;
+import tech.qiantong.qdata.module.ds.utils.SqlBuilderUtil;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
+import java.util.Map;
+
+@Slf4j
+@Service
+public class ApiMappingEngine {
+    @Autowired
+    private ServiceSqlExecutor serviceSql;
+    @Autowired
+    private org.springframework.beans.factory.ObjectProvider<tech.qiantong.qdata.module.dp.api.warehouse.WarehouseServingGateway> warehouseServing;
+
+    @Autowired
+    private DataSourceFactory dataSourceFactory;
+
+    @Resource
+    private IDaDatasourceApiService iDaDatasourceApiService;
+
+    @Resource
+    private IDaApiOutService iDaApiOutService;
+    @Resource
+    private IDaAssetGisOutService iDaAssetGisOutService;
+
+
+    public Object execute(DsApiDO dataApi, Map<String, Object> params) {
+        var serving=warehouseServing.getIfAvailable();
+        if(serving!=null && serving.handles(dataApi.getId())) {
+            var request=tech.qiantong.qdata.common.utils.ServletUtils.getRequest();
+            return serving.query(dataApi.getId(),String.valueOf(request.getAttribute("qdata.clientId")),params);
+        }
+        DaDatasourceRespDTO dataSource;
+
+        //Result type (1: paginated, 2: list, 3: detail)
+        String resDataType = dataApi.getResDataType();
+        //Query data source information by ID.
+        String configJson = dataApi.getConfigJson();
+        ExecuteConfig executeConfig = JSONObject.parseObject(configJson, ExecuteConfig.class);
+        dataApi.setExecuteConfig(executeConfig);
+        dataSource = iDaDatasourceApiService.getDatasourceById(Long.valueOf(executeConfig.getSourceId()));
+
+        tech.qiantong.qdata.common.database.constants.DbQueryProperty dbQueryProperty = new DbQueryProperty(
+                dataSource.getDatasourceType(),
+                dataSource.getIp(),
+                dataSource.getPort(),
+                dataSource.getDatasourceConfig()
+        );
+
+        // Parameter
+        //Integer pageNum = Integer.parseInt((String) params.getOrDefault("pageNum", 1));
+        //Integer pageSize = Integer.parseInt((String) params.getOrDefault("pageSize", 20));
+        Integer pageNum = Integer.parseInt(MapUtils.getString(params, "pageNum", "1"));
+        Integer pageSize = Integer.parseInt(MapUtils.getString(params, "pageSize", "20"));
+        PageUtil pageUtil = new PageUtil(pageNum, pageSize);
+        Integer offset = pageUtil.getOffset();
+
+        if(tech.qiantong.qdata.common.utils.StringUtils.isEmpty(executeConfig.getSqlText())){
+            try {
+                String s = sqlJdbcNamedParameterBuild(dataApi);
+                executeConfig.setSqlText(s);
+            } catch (JSQLParserException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        SqlBuilderUtil.SqlFilterResult sqlFilterResult;
+        try {
+
+            sqlFilterResult = SqlBuilderUtil.getInstance().applyFilters(dataApi.getExecuteConfig().getSqlText(), params);
+        } catch (Exception e) {
+            throw new ServiceException("ds.error.api.sql.build", "API call: failed to build dynamic SQL");
+        }
+        Map<String, Object> acceptedFilters = sqlFilterResult.getAcceptedFilters();
+
+
+        Object result = null;
+        try {
+            Object bounded = serviceSql.query(Long.parseLong(executeConfig.getSourceId()), dbQueryProperty,
+                    sqlFilterResult.getSql(), acceptedFilters, resDataType, pageNum, pageSize);
+            switch (resDataType) {
+                case "3":
+                    PageResult<Map<String, Object>> pageResult = (PageResult<Map<String, Object>>) bounded;
+                    List<Map<String, Object>> data = pageResult.getData();
+                    List<Map<String, Object>> list = this.encryptQueryResultList(data, String.valueOf(dataApi.getId()));
+
+                    pageResult.setPageNum(pageNum).setPageSize(pageSize).setData(list);
+                    result = pageResult;
+                    break;
+                case "2":
+                    List<Map<String, Object>> listResult = (List<Map<String, Object>>) bounded;
+                    result = this.encryptQueryResultList(listResult, String.valueOf(dataApi.getId()));
+//                    result = listResult;
+                    break;
+                case "1":
+                    Map<String, Object> mapResult = (Map<String, Object>) bounded;
+                    result = encryptQueryResultMap(mapResult, String.valueOf(dataApi.getId()));
+//                    result = mapResult;
+                    break;
+            }
+        } catch (tech.qiantong.qdata.common.exception.DependencyUnavailableException | tech.qiantong.qdata.module.dp.api.warehouse.ServingRequestException rejected) {
+            throw rejected;
+        } catch (Exception e) {
+            throw new ServiceException("ds.error.api.query.rs", "API call: failed to query result set");
+        }
+        return result;
+    }
+
+    private String sqlJdbcNamedParameterBuild(DsApiDO dataApi) throws JSQLParserException {
+        String tableName = dataApi.getExecuteConfig().getTableName();
+        String resParams1 = dataApi.getResParams();
+        String reqParams = dataApi.getReqParams();
+        //Convert the result.
+        List<ReqParam> reqParams1 = JSONArray.parseArray(reqParams, ReqParam.class);
+        dataApi.setReqParamsList(reqParams1);
+        dataApi.setResParamsList(JSONArray.parseArray(resParams1, ResParam.class));
+        ExecuteConfig executeConfig = dataApi.getExecuteConfig();
+        if (tech.qiantong.qdata.common.utils.StringUtils.isEmpty(executeConfig.getDbType())) {
+            //Get by data source ID.
+            DaDatasourceRespDTO dataSource = iDaDatasourceApiService.getDatasourceById(Long.valueOf(executeConfig.getSourceId()));
+            if (dataSource == null) {
+                throw new ServiceException("ds.error.datasource.notfound", "Data source does not exist");
+            }
+            executeConfig.setDbType(dataSource.getDatasourceType());
+            JSONObject dataSourceConfig = JSONObject.parseObject(dataSource.getDatasourceConfig());
+            executeConfig.setDbName(dataSourceConfig.getString("dbname"));
+            executeConfig.setSid(dataSourceConfig.getString("sid"));
+        }
+        if (org.apache.commons.lang3.StringUtils.equals(DbType.KINGBASE8.getDb(), executeConfig.getDbType())
+                || org.apache.commons.lang3.StringUtils.equals(DbType.POSTGRE_SQL.getDb(), executeConfig.getDbType())
+                || org.apache.commons.lang3.StringUtils.equals(DbType.SQL_SERVER.getDb(), executeConfig.getDbType())) {
+            tableName = org.apache.commons.lang3.StringUtils.isNotBlank(executeConfig.getDbName()) ? executeConfig.getDbName() + "." + executeConfig.getSid() + "." + tableName : tableName;
+        }  else {
+            tableName = org.apache.commons.lang3.StringUtils.isNotBlank(executeConfig.getDbName()) ? executeConfig.getDbName() + "." + tableName : tableName;
+        }
+        Table table = new Table(tableName);
+        String[] resParams = dataApi.getResParamsList().stream().map(s -> s.getFieldName()).toArray(String[]::new);
+        Select select = SelectUtils.buildSelectFromTableAndExpressions(table, resParams);
+        return SqlBuilderUtil.getInstance().buildHql(select.toString(), dataApi.getReqParamsList());
+    }
+
+    private Map<String, Object> encryptQueryResultMap(Map<String, Object> mapResult, String apiId) {
+        if (MapUtils.isEmpty(mapResult)) {
+            return mapResult;
+        }
+
+//        List<MetadataDsnRuleLinkEntity> metadataDsnRuleLinkList = new ArrayList<>();
+//        try {
+//            metadataDsnRuleLinkList = metadataSourceServiceFeign.getMetadataDsnRuleLinkList(apiId);
+//        } catch (Exception e) {
+//            throw new ServiceException("ds.error.api.desensitize", "API call: failed to query desensitization rules");
+//        }
+//
+//        if (CollectionUtils.isEmpty(metadataDsnRuleLinkList)) {
+//            return mapResult;
+//        }
+//
+//        metadataDsnRuleLinkList.stream()
+//                .filter(columnEntity -> mapResult.containsKey(columnEntity.getColumnName()))
+//                .forEach(columnEntity -> {
+//                    String columnName = columnEntity.getColumnName();
+//                    Map.Entry<String, Object> item = getIgnoreCaseData(mapResult, columnName);
+//
+//                    if (item != null) {
+//                        MaskRuleUtil.MaskRule maskRule = MaskRuleUtil.mapToMaskRule(columnEntity);
+//                        Object object = MaskRuleUtil.processRule(item.getValue(), maskRule);
+//                        mapResult.put(item.getKey(), object);
+//                    }
+//                });
+
+        return mapResult;
+    }
+
+    /**
+     * Desensitizes data.
+     *
+     * @param data
+     * @param apiId
+     * @return
+     */
+    private List<Map<String, Object>> encryptQueryResultList(List<Map<String, Object>> data, String apiId) {
+//        if (CollectionUtils.isEmpty(data)) {
+//            return data;
+//        }
+//        List<MetadataDsnRuleLinkEntity> metadataDsnRuleLinkList = new ArrayList<>();
+//        try {
+//            metadataDsnRuleLinkList = metadataSourceServiceFeign.getMetadataDsnRuleLinkList(apiId);
+//        } catch (Exception e) {
+//            throw new ServiceException("ds.error.api.desensitize", "API call: failed to query desensitization rules");
+//        }
+//
+//        if (CollectionUtils.isEmpty(metadataDsnRuleLinkList)) {
+//            return data;
+//        }
+//
+//        for (Map<String, Object> datum : data) {
+//            metadataDsnRuleLinkList.stream()
+//                    .filter(columnEntity -> datum.containsKey(columnEntity.getColumnName()))
+//                    .forEach(columnEntity -> {
+//                        String columnName = columnEntity.getColumnName();
+//                        Map.Entry<String, Object> item = getIgnoreCaseData(datum, columnName);
+//
+//                        if (item != null) {
+//                            MaskRuleUtil.MaskRule maskRule = MaskRuleUtil.mapToMaskRule(columnEntity);
+//                            Object object = MaskRuleUtil.processRule(item.getValue(), maskRule);
+//                            datum.put(item.getKey(), object);
+//                        }
+//                    });
+//        }
+        return data;
+    }
+
+
+    public static <K, V> Map.Entry<K, V> getIgnoreCaseData(Map<K, V> map, K key) {
+        if (map == null || key == null) {
+            return null;
+        }
+
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().toString().equalsIgnoreCase(key.toString())) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Accesses files, including uploads and files in configured directories.
+     *
+     * @param api
+     * @return
+     */
+    @SneakyThrows
+    public void executeFileService(DsApiDO api, HttpServletResponse response) {
+        //File name.
+//        String fileName = api.getFileName();
+//        //File or directory path; directories must be compressed before being returned.
+//        String filePath = api.getFilePath();
+//        // Set the response content type.
+//        response.setContentType("application/octet-stream;charset=UTF-8");
+//        File file = new File(filePath);
+//        if (!file.exists()) {
+//            throw new DataException("File does not exist.");
+//        }
+//        boolean delFlag = false;
+//        if (file.isFile()) {
+//            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+//        } else if (file.isDirectory()) {
+//            String zipFileName = UUID.fastUUID().toString() + ".zip";
+//            response.setHeader("Content-Disposition", "attachment; filename=\"" + zipFileName + "\"");
+//            String zipPath = file.getParentFile().getPath() + File.separator + zipFileName;
+//            file = ZipUtil.zip(filePath, zipPath, true);
+//            delFlag = true;
+//        }
+//        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+//        byte[] fileBytes = FileUtil.readBytes(file);
+//        response.addHeader("Content-Length", "" + fileBytes.length);
+//        IoUtil.write(response.getOutputStream(), true, fileBytes);
+//        //Delete the file.
+//        if (delFlag) {
+//            FileUtil.del(file);
+//        }
+    }
+
+
+    /**
+     * Forwards requests to a third-party service.
+     *
+     * @param api
+     * @param params
+     * @return
+     */
+    public void executeServiceForwarding(DsApiDO api, Map<String, Object> params, HttpServletResponse response) {
+        Map<String, Object> result = JsonUtil.buildRequestObject(api, params);
+        String transmitType = api.getTransmitType();
+        if(StringUtils.equals("1",transmitType)){
+            iDaApiOutService.executeServiceForwarding(response, JSONUtils.convertToLong(api.getApiId()),result);
+        }else if(StringUtils.equals("2",transmitType)){
+            iDaAssetGisOutService.executeServiceForwarding(response, JSONUtils.convertToLong(api.getApiId()),result);
+        }else {
+            throw new IllegalArgumentException("不支持的服务转发类型");
+        }
+    }
+//
+//    public static Map<String, Object> buildRequestObject(DsApiDO api,Map<String, Object> params) {
+//        String headerJson = api.getHeaderJson();
+//        Map<String, Object> result = new HashMap<>();
+//        if(StringUtils.isNotEmpty(headerJson)){
+//            List<Map<String, Object>> maps = JSONUtils.convertTaskDefinitionJson(headerJson);
+//            List<Map<String, String>> fieldHerderList = maps.stream()
+//                    .map(m -> {
+//                        Map<String, String> header = new HashMap<>(2);
+//                        header.put("name",       Objects.toString(m.get("name"), ""));
+//                        header.put("defaultValue", Objects.toString(m.get("defaultValue"), ""));
+//                        return header;
+//                    })
+//                    .collect(Collectors.toList());
+//            result.put("fieldHerderList", fieldHerderList);
+//        }
+//        result.put("params", params);
+//        return result;
+//    }
+
+        /**
+         * Validates and packages parameters.
+         *
+         * @param mapData
+         * @param resType response type: JSON, Map, List, or no processing
+         * @param api
+         * @return
+         */
+    private static Object chackPackHttpData(String mapData, String resType, DsApiDO api) {
+        //Build the response according to its type.
+        if (StringUtils.equals("不处理", resType)) {
+            return mapData;
+        }
+        if (StringUtils.equals("JSON", resType)) {
+            return mapData;
+        }
+
+        try {
+            if (StringUtils.equals("Map", resType) && !StringUtils.isBlank(mapData)) {
+                Map<String, Object> stringObjectMap = JsonUtil.parseJsonToMap(mapData);
+                //Check whether the API has a response limit.
+                return JsonUtil.packFilterParameterOrMap(stringObjectMap, api);
+            }
+
+            if (StringUtils.equals("List", resType) && !StringUtils.isBlank(mapData)) {
+                List<Object> maps = JsonUtil.parseJsonToListMap(mapData);
+                return maps;
+            }
+        } catch (Exception e) {
+            return mapData;
+        }
+        return mapData;
+
+    }
+
+    /**
+     * Validates whether the API exists and is enabled.
+     *
+     * @param yApiConfigEntity
+     */
+//    private static void chackYapiConfig(YApiConfigEntity yApiConfigEntity) {
+//        //Check whether the value is null.
+//        if (yApiConfigEntity == null) {
+//            throw new ServiceException("API configuration was not found");
+//        }
+//        //Status (0: disabled, 1: enabled)
+//        if (!StringUtils.equals("1", yApiConfigEntity.getStatus())) {
+//            throw new ServiceException("The requested API is not enabled");
+//        }
+//    }
+
+}

@@ -1,0 +1,31 @@
+-- Additive registry for private managed-object attachments. It does not replace
+-- /profile files or write OSS URLs into existing asset file fields.
+CREATE TABLE IF NOT EXISTS sys_managed_object (
+    file_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    project_id BIGINT NOT NULL,
+    uploader_user_id BIGINT NOT NULL,
+    purpose VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    backend VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    storage_target_alias VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    object_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    media_type VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    byte_length BIGINT NOT NULL,
+    sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    state VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    bound_asset_id BIGINT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (file_id),
+    UNIQUE KEY uq_mobj_object_key (object_key),
+    KEY ix_mobj_project_state (project_id, state),
+    KEY ix_mobj_bound_asset (bound_asset_id),
+    CONSTRAINT ck_mobj_project_positive CHECK (project_id > 0),
+    CONSTRAINT ck_mobj_uploader_positive CHECK (uploader_user_id > 0),
+    CONSTRAINT ck_mobj_length CHECK (byte_length BETWEEN 1 AND 20971520),
+    CONSTRAINT ck_mobj_bound_positive CHECK (bound_asset_id IS NULL OR bound_asset_id > 0),
+    CONSTRAINT ck_mobj_purpose CHECK (purpose IN ('ASSET_FILE', 'ASSET_GEO')),
+    CONSTRAINT ck_mobj_state CHECK (state IN ('PENDING', 'READY', 'FAILED')),
+    CONSTRAINT ck_mobj_alias CHECK (storage_target_alias <> ''),
+    CONSTRAINT ck_mobj_backend CHECK (backend <> ''),
+    CONSTRAINT ck_mobj_key CHECK (object_key LIKE 'managed/%')
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

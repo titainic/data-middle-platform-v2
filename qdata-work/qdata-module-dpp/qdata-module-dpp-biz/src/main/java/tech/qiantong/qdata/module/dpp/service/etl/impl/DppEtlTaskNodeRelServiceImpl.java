@@ -1,0 +1,231 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.service.etl.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlTaskNodeRelPageReqVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlTaskNodeRelRespVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlTaskNodeRelSaveReqVO;
+import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.DppEtlTaskNodeRelDO;
+import tech.qiantong.qdata.module.dpp.dal.mapper.etl.DppEtlTaskNodeRelMapper;
+import tech.qiantong.qdata.module.dpp.service.etl.IDppEtlTaskNodeRelService;
+
+import jakarta.annotation.Resource;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * Data Integration Task-Node Relation Service business layer processing
+ *
+ * @author qdata
+ * @date 2025-02-13
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class DppEtlTaskNodeRelServiceImpl  extends ServiceImpl<DppEtlTaskNodeRelMapper,DppEtlTaskNodeRelDO> implements IDppEtlTaskNodeRelService {
+    @Resource
+    private DppEtlTaskNodeRelMapper dppEtlTaskNodeRelMapper;
+
+    @Override
+    public PageResult<DppEtlTaskNodeRelDO> getDppEtlTaskNodeRelPage(DppEtlTaskNodeRelPageReqVO pageReqVO) {
+        return dppEtlTaskNodeRelMapper.selectPage(pageReqVO);
+    }
+
+    @Override
+    public List<DppEtlTaskNodeRelRespVO> getDppEtlTaskNodeRelRespVOList(DppEtlTaskNodeRelPageReqVO reqVO) {
+        MPJLambdaWrapper<DppEtlTaskNodeRelDO> wrapper = new MPJLambdaWrapper<>();
+        wrapper.selectAll(DppEtlTaskNodeRelDO.class)
+                .eq(reqVO.getTaskId() != null, DppEtlTaskNodeRelDO::getTaskId, reqVO.getTaskId())
+                .eq(reqVO.getTaskVersion() != null, DppEtlTaskNodeRelDO::getTaskVersion, reqVO.getTaskVersion())
+                .eq(StringUtils.isNotBlank(reqVO.getTaskCode()), DppEtlTaskNodeRelDO::getTaskCode, reqVO.getTaskCode());
+        List<DppEtlTaskNodeRelDO> dppEtlTaskNodeRelDOS = dppEtlTaskNodeRelMapper.selectList(wrapper);
+        return BeanUtils.toBean(dppEtlTaskNodeRelDOS, DppEtlTaskNodeRelRespVO.class);
+    }
+
+    @Override
+    public List<DppEtlTaskNodeRelRespVO> removeOldDppEtlTaskNodeRel(String code) {
+        MPJLambdaWrapper<DppEtlTaskNodeRelDO> wrapper = new MPJLambdaWrapper<>();
+        wrapper.selectAll(DppEtlTaskNodeRelDO.class)
+                .eq(StringUtils.isNotBlank(code), DppEtlTaskNodeRelDO::getTaskCode, code);
+        List<DppEtlTaskNodeRelDO> dppEtlTaskNodeRelDOS = dppEtlTaskNodeRelMapper.selectList(wrapper);
+        this.removeDppEtlTaskNodeRel(getIdListFromTaskNodeRel(dppEtlTaskNodeRelDOS));
+        return BeanUtils.toBean(dppEtlTaskNodeRelDOS, DppEtlTaskNodeRelRespVO.class);
+    }
+    /**
+     * Extract IDs from List<DppEtlTaskNodeRelDO> and wrap as Collection<Long>
+     *
+     * @param dppEtlTaskNodeRelDOS List of DppEtlTaskNodeRelDO objects
+     * @return Collection<Long> list of IDs
+     */
+    public static Collection<Long> getIdListFromTaskNodeRel(List<DppEtlTaskNodeRelDO> dppEtlTaskNodeRelDOS) {
+        if (dppEtlTaskNodeRelDOS == null || dppEtlTaskNodeRelDOS.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return dppEtlTaskNodeRelDOS.stream()
+                .map(DppEtlTaskNodeRelDO::getId) // Extract ID
+                .collect(Collectors.toList());   // Collect into List
+    }
+
+    @Override
+    public Long createDppEtlTaskNodeRel(DppEtlTaskNodeRelSaveReqVO createReqVO) {
+        DppEtlTaskNodeRelDO dictType = BeanUtils.toBean(createReqVO, DppEtlTaskNodeRelDO.class);
+        dppEtlTaskNodeRelMapper.insert(dictType);
+        return dictType.getId();
+    }
+
+    @Override
+    public void createDppEtlTaskNodeRelBatch(List<DppEtlTaskNodeRelSaveReqVO> dppEtlTaskNodeRelSaveReqVOS) {
+        for (DppEtlTaskNodeRelSaveReqVO dppEtlTaskNodeRelSaveReqVO : dppEtlTaskNodeRelSaveReqVOS) {
+            this.createDppEtlTaskNodeRel(dppEtlTaskNodeRelSaveReqVO);
+        }
+    }
+
+    @Override
+    public int updateDppEtlTaskNodeRel(DppEtlTaskNodeRelSaveReqVO updateReqVO) {
+        // Validate
+
+        // Update Data Integration Task-Node Relation
+        DppEtlTaskNodeRelDO updateObj = BeanUtils.toBean(updateReqVO, DppEtlTaskNodeRelDO.class);
+        return dppEtlTaskNodeRelMapper.updateById(updateObj);
+    }
+    @Override
+    public int removeDppEtlTaskNodeRel(Collection<Long> idList) {
+        if (idList == null || idList.isEmpty()) {
+            return 0;
+        }
+        // Batch delete Data Integration Task-Node Relation
+        return dppEtlTaskNodeRelMapper.deleteBatchIds(idList);
+    }
+
+    @Override
+    public DppEtlTaskNodeRelDO getDppEtlTaskNodeRelById(Long id) {
+        return dppEtlTaskNodeRelMapper.selectById(id);
+    }
+
+    @Override
+    public List<DppEtlTaskNodeRelDO> getDppEtlTaskNodeRelList() {
+        return dppEtlTaskNodeRelMapper.selectList();
+    }
+
+    @Override
+    public Map<Long, DppEtlTaskNodeRelDO> getDppEtlTaskNodeRelMap() {
+        List<DppEtlTaskNodeRelDO> dppEtlTaskNodeRelList = dppEtlTaskNodeRelMapper.selectList();
+        return dppEtlTaskNodeRelList.stream()
+                .collect(Collectors.toMap(
+                        DppEtlTaskNodeRelDO::getId,
+                        dppEtlTaskNodeRelDO -> dppEtlTaskNodeRelDO,
+                        // Keep existing value
+                        (existing, replacement) -> existing
+                ));
+    }
+
+
+        /**
+         * Import Data Integration Task-Node Relation data
+         *
+         * @param importExcelList Data Integration Task-Node Relation data list
+         * @param isUpdateSupport whether to support update; if already exists, update the data
+         * @param operName operator user
+         * @return result
+         */
+        @Override
+        public String importDppEtlTaskNodeRel(List<DppEtlTaskNodeRelRespVO> importExcelList, boolean isUpdateSupport, String operName) {
+            if (StringUtils.isNull(importExcelList) || importExcelList.size() == 0) {
+                throw new ServiceException("dpp.error.import.empty", "Import data cannot be empty!");
+            }
+
+            int successNum = 0;
+            int failureNum = 0;
+            List<String> successMessages = new ArrayList<>();
+            List<String> failureMessages = new ArrayList<>();
+
+            for (DppEtlTaskNodeRelRespVO respVO : importExcelList) {
+                try {
+                    DppEtlTaskNodeRelDO dppEtlTaskNodeRelDO = BeanUtils.toBean(respVO, DppEtlTaskNodeRelDO.class);
+                    Long dppEtlTaskNodeRelId = respVO.getId();
+                    if (isUpdateSupport) {
+                        if (dppEtlTaskNodeRelId != null) {
+                            DppEtlTaskNodeRelDO existingDppEtlTaskNodeRel = dppEtlTaskNodeRelMapper.selectById(dppEtlTaskNodeRelId);
+                            if (existingDppEtlTaskNodeRel != null) {
+                                dppEtlTaskNodeRelMapper.updateById(dppEtlTaskNodeRelDO);
+                                successNum++;
+                                successMessages.add(MessageUtils.messageWithFallback("dpp.import.update.success",
+                                        "Data update successful, ID {0} {1} record.", dppEtlTaskNodeRelId, MessageUtils.messageWithFallback("dpp.entity.etl.task.node.relation", "Data integration task-node relation")));
+                            } else {
+                                failureNum++;
+                                failureMessages.add(MessageUtils.messageWithFallback("dpp.import.update.fail",
+                                        "Data update failed, ID {0} {1} record does not exist.", dppEtlTaskNodeRelId, MessageUtils.messageWithFallback("dpp.entity.etl.task.node.relation", "Data integration task-node relation")));
+                            }
+                        } else {
+                            failureNum++;
+                            failureMessages.add(MessageUtils.messageWithFallback("dpp.import.update.id.missing",
+                                    "Data update failed, record ID does not exist."));
+                        }
+                    } else {
+                        QueryWrapper<DppEtlTaskNodeRelDO> queryWrapper = new QueryWrapper<>();
+                        queryWrapper.eq("id", dppEtlTaskNodeRelId);
+                        DppEtlTaskNodeRelDO existingDppEtlTaskNodeRel = dppEtlTaskNodeRelMapper.selectOne(queryWrapper);
+                        if (existingDppEtlTaskNodeRel == null) {
+                            dppEtlTaskNodeRelMapper.insert(dppEtlTaskNodeRelDO);
+                            successNum++;
+                            successMessages.add(MessageUtils.messageWithFallback("dpp.import.insert.success",
+                                    "Data insert successful, ID {0} {1} record.", dppEtlTaskNodeRelId, MessageUtils.messageWithFallback("dpp.entity.etl.task.node.relation", "Data integration task-node relation")));
+                        } else {
+                            failureNum++;
+                            failureMessages.add(MessageUtils.messageWithFallback("dpp.import.insert.fail",
+                                    "Data insert failed, ID {0} {1} record already exists.", dppEtlTaskNodeRelId, MessageUtils.messageWithFallback("dpp.entity.etl.task.node.relation", "Data integration task-node relation")));
+                        }
+                    }
+                } catch (Exception e) {
+                    failureNum++;
+                    String errorMsg = MessageUtils.messageWithFallback("dpp.import.error.detail",
+                "Data import failed, error: {0}", e.getMessage());
+                    failureMessages.add(errorMsg);
+                    log.error(errorMsg, e);
+                }
+            }
+            StringBuilder resultMsg = new StringBuilder();
+            if (failureNum > 0) {
+                String failureDetails = String.join("<br/>", failureMessages);
+                resultMsg.append(MessageUtils.messageWithFallback("dpp.import.result.fail",
+                        "Import failed! {0} records have incorrect format, errors:<br/>{1}",
+                        failureNum, failureDetails));
+                throw new ServiceException("dpp.error.import.fail", resultMsg.toString(), resultMsg.toString());
+            } else {
+                resultMsg.append(MessageUtils.messageWithFallback("dpp.import.result.success",
+                        "Congratulations! All data imported! Total: {0} records.", successNum));
+            }
+            return resultMsg.toString();
+        }
+
+}

@@ -1,0 +1,230 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.da.service.assetColumn.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.da.controller.admin.assetColumn.vo.DaAssetColumnPageReqVO;
+import tech.qiantong.qdata.module.da.controller.admin.assetColumn.vo.DaAssetColumnRespVO;
+import tech.qiantong.qdata.module.da.controller.admin.assetColumn.vo.DaAssetColumnSaveReqVO;
+import tech.qiantong.qdata.module.da.dal.dataobject.asset.DaAssetDO;
+import tech.qiantong.qdata.module.da.dal.dataobject.assetColumn.DaAssetColumnDO;
+import tech.qiantong.qdata.module.da.dal.mapper.assetColumn.DaAssetColumnMapper;
+import tech.qiantong.qdata.module.da.service.asset.IDaAssetService;
+import tech.qiantong.qdata.module.da.service.assetColumn.IDaAssetColumnService;
+import tech.qiantong.qdata.module.dp.api.dataElem.dto.DpDataElemAssetRelReqDTO;
+import tech.qiantong.qdata.module.dp.api.dataElem.dto.DpDataElemRespDTO;
+import tech.qiantong.qdata.module.dp.api.service.dataElem.IDataElemRuleRelService;
+import tech.qiantong.qdata.module.dp.api.service.model.IDpModelApiService;
+
+import jakarta.annotation.Resource;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Data Asset Column Service Business Layer Processing
+ *
+ * @author lhs
+ * @date 2025-01-21
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class DaAssetColumnServiceImpl extends ServiceImpl<DaAssetColumnMapper, DaAssetColumnDO> implements IDaAssetColumnService {
+    @Resource private tech.qiantong.qdata.module.da.service.asset.AssetIntakeAccess intake;
+    @Resource private tech.qiantong.qdata.module.da.service.assetColumn.AssetColumnStatistics statistics;
+    @Resource
+    private tech.qiantong.qdata.module.da.service.asset.AssetReferenceGuard referenceGuard;
+    @Resource
+    private DaAssetColumnMapper daAssetColumnMapper;
+    @Resource
+    private IDpModelApiService iDpModelApiService;
+    @Resource
+    private IDataElemRuleRelService dataElemRuleRelService;
+    @Resource
+    private IDaAssetService daAssetService;
+
+
+    @Override
+    public AjaxResult getColumnByAssetId(DaAssetColumnPageReqVO pageReqVO) {
+        if (StringUtils.isEmpty(pageReqVO.getAssetId())) {//Asset ID cannot be empty
+            return AjaxResult.error(MessageUtils.messageWithFallback("da.error.asset.id.empty", "Asset ID cannot be empty"));
+        }
+        List<DaAssetColumnDO> list = this.lambdaQuery()
+                .eq(DaAssetColumnDO::getAssetId, pageReqVO.getAssetId())
+                .eq(DaAssetColumnDO::getDelFlag, 0)
+                .orderByAsc(DaAssetColumnDO::getId)
+                .list();
+
+        for (DaAssetColumnDO daAssetColumnDO : list) {
+            Set<Long> dpDataElemListByAssetIdApi = iDpModelApiService.getDpDataElemListByAssetIdAndColumnId(daAssetColumnDO.getAssetId(), daAssetColumnDO.getId());
+            daAssetColumnDO.setElementId(dpDataElemListByAssetIdApi);
+            if (dpDataElemListByAssetIdApi.size() > 0) {
+                daAssetColumnDO.setCleanRuleList(dataElemRuleRelService.listByDataElemIdList(new ArrayList<>(dpDataElemListByAssetIdApi), "2"));
+            }
+        }
+        return AjaxResult.success(list);
+    }
+
+    @Override
+    public List<DaAssetColumnDO> getDaAssetColumnList(DaAssetColumnPageReqVO pageReqVO) {
+        MPJLambdaWrapper<DaAssetColumnDO> lambdaWrapper = new MPJLambdaWrapper();
+        lambdaWrapper.eq(StringUtils.isNotEmpty(pageReqVO.getAssetId()), DaAssetColumnDO::getAssetId, pageReqVO.getAssetId())
+                .eq(StringUtils.isNotEmpty(pageReqVO.getSensitiveLevelId()), DaAssetColumnDO::getSensitiveLevelId, pageReqVO.getSensitiveLevelId());
+        return daAssetColumnMapper.selectList(lambdaWrapper);
+    }
+
+    @Override
+    public PageResult<DaAssetColumnDO> getDaAssetColumnPage(DaAssetColumnPageReqVO pageReqVO) {
+        if (StringUtils.isEmpty(pageReqVO.getAssetId())) {
+            return PageResult.empty();
+        }
+        PageResult<DaAssetColumnDO> daAssetColumnDOPageResult = daAssetColumnMapper.selectPage(pageReqVO);
+        Set<Long> ids = new HashSet<>();
+        List<?> rows = daAssetColumnDOPageResult.getRows();
+        for (Object row : rows) {
+            DaAssetColumnDO daAssetColumnDO = (DaAssetColumnDO) row;
+            ids.add(daAssetColumnDO.getDataElemCodeId());
+        }
+        List<DpDataElemRespDTO> dpDataElemListByAssetId = iDpModelApiService.getDpDataElemListByAssetId(Long.valueOf(pageReqVO.getAssetId()), ids);
+        for (Object row : rows) {
+            DaAssetColumnDO daAssetColumnDO = (DaAssetColumnDO) row;
+            String elementName = "";
+            for (DpDataElemRespDTO dpDataElemRespDTO : dpDataElemListByAssetId) {
+                if (dpDataElemRespDTO.getId().equals(daAssetColumnDO.getDataElemCodeId())) {
+                    daAssetColumnDO.setDataElemCodeName(dpDataElemRespDTO.getName());
+                }
+                if (dpDataElemRespDTO.getColumnId() != null && dpDataElemRespDTO.getColumnId().contains(daAssetColumnDO.getId())) {
+            elementName = MessageUtils.messageWithFallback(
+                    "da.label.multiple.items", "{0} and others", dpDataElemRespDTO.getName());
+                }
+            }
+            daAssetColumnDO.setRelDataElmeName(elementName);
+        }
+        return daAssetColumnDOPageResult;
+    }
+
+    @Override
+    public Long createDaAssetColumn(DaAssetColumnSaveReqVO createReqVO) {
+        var assets = List.of(Long.valueOf(createReqVO.getAssetId()));
+        statistics.lock(assets);
+        DaAssetColumnDO dictType = BeanUtils.toBean(createReqVO, DaAssetColumnDO.class);
+        daAssetColumnMapper.insert(dictType);
+        statistics.refresh(assets);
+        return dictType.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int updateDaAssetColumn(DaAssetColumnSaveReqVO updateReqVO) {
+        var assets = List.of(referenceGuard.columnAsset(updateReqVO.getId()));
+        statistics.lock(assets);
+        referenceGuard.requireStableColumn(updateReqVO);
+        DaAssetDO daAssetDO = daAssetService.getById(updateReqVO.getAssetId());
+        if (daAssetDO == null) {
+            throw new ServiceException("da.error.asset.notfound", "Data asset does not exist");
+        }
+        // Maintain data element asset relation info table
+        DpDataElemAssetRelReqDTO dpDataElemAssetRelReqDTO = new DpDataElemAssetRelReqDTO();
+        dpDataElemAssetRelReqDTO.setTableName(daAssetDO.getTableName());
+        dpDataElemAssetRelReqDTO.setColumnName(updateReqVO.getColumnName());
+        dpDataElemAssetRelReqDTO.setColumnId(updateReqVO.getId());
+        dpDataElemAssetRelReqDTO.setAssetId(daAssetDO.getId());
+        dpDataElemAssetRelReqDTO.setElementIds(updateReqVO.getElementId());
+        if(updateReqVO.getElementId()!=null)iDpModelApiService.updateElementAssetRelation(dpDataElemAssetRelReqDTO);
+//        if(!b){
+//            throw new ServiceException("Data element and asset relation data update failed");
+//        }
+        // Not a code table, set the code table relation ID to null
+        DaAssetColumnDO updateObj = BeanUtils.toBean(updateReqVO, DaAssetColumnDO.class);
+        if (StringUtils.isEmpty(updateObj.getDataElemCodeFlag()) || "0".equals(updateObj.getDataElemCodeFlag())) {
+            updateObj.setDataElemCodeId(null);
+        }
+        // Update data asset column
+        int changed = daAssetColumnMapper.updateDaAssetColumn(updateObj);
+        statistics.refresh(assets);
+        return changed;
+    }
+
+    @Override
+    public int removeDaAssetColumn(Collection<Long> idList) {
+        referenceGuard.requireColumnsRemovable(idList);
+        var assets = idList.stream().map(referenceGuard::columnAsset).distinct().sorted().toList();
+        statistics.lock(assets);
+        int changed = daAssetColumnMapper.deleteBatchIds(idList);
+        statistics.refresh(assets);
+        return changed;
+    }
+
+    @Override
+    public DaAssetColumnDO getDaAssetColumnById(Long id) {
+        DaAssetColumnDO daAssetColumnDO = daAssetColumnMapper.selectById(id);
+        // Query data element id
+        Set<Long> dpDataElemListByAssetIdApi = iDpModelApiService.getDpDataElemListByAssetIdAndColumnId(daAssetColumnDO.getAssetId(), daAssetColumnDO.getId());
+        daAssetColumnDO.setElementId(dpDataElemListByAssetIdApi);
+        return daAssetColumnDO;
+    }
+
+    @Override
+    public List<DaAssetColumnDO> getDaAssetColumnList() {
+        return daAssetColumnMapper.selectList();
+    }
+
+    @Override
+    public Map<Long, DaAssetColumnDO> getDaAssetColumnMap() {
+        List<DaAssetColumnDO> daAssetColumnList = daAssetColumnMapper.selectList();
+        return daAssetColumnList.stream()
+                .collect(Collectors.toMap(
+                        DaAssetColumnDO::getId,
+                        daAssetColumnDO -> daAssetColumnDO,
+                        // Keep existing value
+                        (existing, replacement) -> existing
+                ));
+    }
+
+
+    /**
+     * Import data asset column data
+     *
+     * @param importExcelList Data asset column data list
+     * @param isUpdateSupport Whether to update if already exists
+     * @param operName        Operator user
+     * @return Result
+     */
+    @Override
+    public String importDaAssetColumn(List<DaAssetColumnRespVO> importExcelList, boolean isUpdateSupport, String operName) {
+        var requests = intake.columns(importExcelList, isUpdateSupport);
+        statistics.lock(requests.stream().map(request -> Long.valueOf(request.getAssetId())).distinct().sorted().toList());
+        for (var request : requests) {
+            if (isUpdateSupport) updateDaAssetColumn(request);
+            else createDaAssetColumn(request);
+        }
+        return "成功导入 " + requests.size() + " 条字段记录";
+    }
+}

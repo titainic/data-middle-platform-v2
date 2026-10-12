@@ -1,0 +1,86 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.ds.config.auth.dataLoader;
+
+import cn.dev33.satoken.oauth2.consts.GrantType;
+import cn.dev33.satoken.oauth2.data.loader.SaOAuth2DataLoader;
+import cn.dev33.satoken.oauth2.data.model.loader.SaClientModel;
+import cn.hutool.core.convert.Convert;
+import cn.hutool.core.util.IdUtil;
+import org.springframework.stereotype.Component;
+import tech.qiantong.qdata.module.att.api.client.ClientApi;
+import tech.qiantong.qdata.module.att.api.client.dto.AttClientRespDTO;
+
+import jakarta.annotation.Resource;
+
+/**
+ * Sa-Token OAuth2 custom data loader.
+ * @author Ming
+ */
+@Component
+public class DsDataLoaderImpl implements SaOAuth2DataLoader {
+
+    @Resource
+    private ClientApi clientApi;
+
+    /**
+     * Gets client information by clientId.
+     * @param clientId application ID
+     * @return the client application model
+     */
+    @Override
+    public SaClientModel getClientModel(String clientId) {
+        AttClientRespDTO client = clientApi.getClient(Convert.toLong(clientId));
+
+        if (client != null && Boolean.TRUE.equals(client.getValidFlag()) && !Boolean.TRUE.equals(client.getDelFlag())) {
+            return new SaClientModel()
+                    // client id
+                    .setClientId(client.getId().toString())
+                    // Client secret.
+                    .setClientSecret(client.getSecret())
+                    // All authorized URLs.
+                    .addAllowRedirectUris("*")
+                    // All granted permissions.
+                    .addContractScopes("openid", "userid", "userinfo")
+                    // All allowed grant types.
+                    .addAllowGrantTypes(
+                            GrantType.authorization_code,
+                            GrantType.implicit,
+                            GrantType.refresh_token,
+                            GrantType.password,
+                            GrantType.client_credentials
+                    );
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Gets the openid by clientId and loginId.
+     * @param clientId application ID
+     * @param loginId account ID
+     * @return openid
+     */
+    @Override
+    public String getOpenid(String clientId, Object loginId) {
+        // TODO: currently generated randomly.
+        return IdUtil.fastSimpleUUID();
+    }
+
+}

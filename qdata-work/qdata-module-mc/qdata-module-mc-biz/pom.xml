@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>qdata-module-mc</artifactId>
+        <groupId>tech.qiantong</groupId>
+        <version>${qdata.version}</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>qdata-module-mc-biz</artifactId>
+
+    <description>
+        System module
+    </description>
+
+    <dependencies>
+        <!-- Core module config-->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-config</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <!-- Scheduled task config-->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-quartz</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <!-- System module websocket-->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-websocket</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <!-- System module qdata-security -->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-security</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <!-- System module mybatis -->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-mybatis</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <!-- System module redis -->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-redis</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <!-- Common utilities-->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-common</artifactId>
+        </dependency>
+
+        <!-- File upload -->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-file</artifactId>
+            <version>${qdata.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-module-mc-api</artifactId>
+            <version>${qdata.version}</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-module-da-api</artifactId>
+            <version>${qdata.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-module-att-api</artifactId>
+            <version>${qdata.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-api-ds-api</artifactId>
+            <version>${qdata.version}</version>
+            <scope>compile</scope>
+        </dependency>
+    </dependencies>
+</project>

@@ -1,0 +1,277 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.generator.controller;
+
+import com.alibaba.druid.DbType;
+import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.druid.sql.ast.SQLStatement;
+import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlCreateTableStatement;
+import org.apache.commons.io.IOUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.TableDataInfo;
+import tech.qiantong.qdata.common.core.text.Convert;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.SecurityUtils;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.sql.SqlUtil;
+import tech.qiantong.qdata.generator.domain.GenTable;
+import tech.qiantong.qdata.generator.domain.GenTableColumn;
+import tech.qiantong.qdata.generator.service.IGenTableColumnService;
+import tech.qiantong.qdata.generator.service.IGenTableService;
+
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Code generation operation processing
+ *
+ * @author qdata
+ */
+@RestController
+@RequestMapping("/tool/gen")
+public class GenController extends BaseController
+{
+    @Autowired
+    private IGenTableService genTableService;
+
+    @Autowired
+    private IGenTableColumnService genTableColumnService;
+
+    /**
+     * Query code generation list
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:list')")
+    @GetMapping("/list")
+    public TableDataInfo genList(GenTable genTable)
+    {
+        startPage();
+        List<GenTable> list = genTableService.selectGenTableList(genTable);
+        return getDataTable(list);
+    }
+
+    /**
+     * Modify code generation business
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:query')")
+    @GetMapping(value = "/{tableId}")
+    public AjaxResult getInfo(@PathVariable Long tableId)
+    {
+        GenTable table = genTableService.selectGenTableById(tableId);
+        List<GenTable> tables = genTableService.selectGenTableAll();
+        List<GenTableColumn> list = genTableColumnService.selectGenTableColumnListByTableId(tableId);
+        for (GenTableColumn column : list) {
+            if ("del_flag".equalsIgnoreCase(column.getColumnName()) || "valid_flag".equalsIgnoreCase(column.getColumnName())) {
+                column.setJavaType("Boolean");
+            }
+        }
+        Map<String, Object> map = new HashMap<String, Object>();
+        map.put("info", table);
+        map.put("rows", list);
+        map.put("tables", tables);
+        return success(map);
+    }
+
+    /**
+     * Query database list
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:list')")
+    @GetMapping("/db/list")
+    public TableDataInfo dataList(GenTable genTable)
+    {
+        startPage();
+        List<GenTable> list = genTableService.selectDbTableList(genTable);
+        return getDataTable(list);
+    }
+
+    /**
+     * Query data table field list
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:list')")
+    @GetMapping(value = "/column/{tableId}")
+    public TableDataInfo columnList(Long tableId)
+    {
+        TableDataInfo dataInfo = new TableDataInfo();
+        List<GenTableColumn> list = genTableColumnService.selectGenTableColumnListByTableId(tableId);
+        dataInfo.setRows(list);
+        dataInfo.setTotal(list.size());
+        return dataInfo;
+    }
+
+    /**
+     * Import table structure (save)
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:import')")
+    @Log(title = "log.op.title.gen.import", businessType = BusinessType.IMPORT)
+    @PostMapping("/importTable")
+    public AjaxResult importTableSave(String tables)
+    {
+        String[] tableNames = Convert.toStrArray(tables);
+        // Query table information
+        List<GenTable> tableList = genTableService.selectDbTableListByNames(tableNames);
+        genTableService.importGenTable(tableList, SecurityUtils.getUsername());
+        return success();
+    }
+
+    /**
+     * Create table structure (save)
+     */
+    @PreAuthorize("@ss.hasRole('admin')")
+    @Log(title = "log.op.title.gen.create.table", businessType = BusinessType.OTHER)
+    @PostMapping("/createTable")
+    public AjaxResult createTableSave(String sql)
+    {
+        try
+        {
+            SqlUtil.filterKeyword(sql);
+            List<SQLStatement> sqlStatements = SQLUtils.parseStatements(sql, DbType.mysql);
+            List<String> tableNames = new ArrayList<>();
+            for (SQLStatement sqlStatement : sqlStatements)
+            {
+                if (sqlStatement instanceof MySqlCreateTableStatement)
+                {
+                    MySqlCreateTableStatement createTableStatement = (MySqlCreateTableStatement) sqlStatement;
+                    if (genTableService.createTable(createTableStatement.toString()))
+                    {
+                        String tableName = createTableStatement.getTableName().replaceAll("`", "");
+                        tableNames.add(tableName);
+                    }
+                }
+            }
+            List<GenTable> tableList = genTableService.selectDbTableListByNames(tableNames.toArray(new String[tableNames.size()]));
+            String operName = SecurityUtils.getUsername();
+            genTableService.importGenTable(tableList, operName);
+            return AjaxResult.success();
+        }
+        catch (Exception e)
+        {
+            logger.error(e.getMessage(), e);
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "sys.error.generator.table.create.fail", "Failed to create table structure"));
+        }
+    }
+
+    /**
+     * Modify and save code generation business
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:edit')")
+    @Log(title = "log.op.title.gen.code", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public AjaxResult editSave(@Validated @RequestBody GenTable genTable)
+    {
+        genTableService.validateEdit(genTable);
+        genTableService.updateGenTable(genTable);
+        return success();
+    }
+
+    /**
+     * Remove code generation
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:remove')")
+    @Log(title = "log.op.title.gen.code", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{tableIds}")
+    public AjaxResult remove(@PathVariable Long[] tableIds)
+    {
+        genTableService.deleteGenTableByIds(tableIds);
+        return success();
+    }
+
+    /**
+     * Preview code
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:preview')")
+    @GetMapping("/preview/{tableId}")
+    public AjaxResult preview(@PathVariable("tableId") Long tableId) throws IOException
+    {
+        Map<String, String> dataMap = genTableService.previewCode(tableId);
+        return success(dataMap);
+    }
+
+    /**
+     * Generate code (download method)
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:code')")
+    @Log(title = "log.op.title.gen.code", businessType = BusinessType.GENCODE)
+    @GetMapping("/download/{tableName}")
+    public void download(HttpServletResponse response, @PathVariable("tableName") String tableName) throws IOException
+    {
+        byte[] data = genTableService.downloadCode(tableName);
+        genCode(response, data);
+    }
+
+    /**
+     * Generate code (custom path)
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:code')")
+    @Log(title = "log.op.title.gen.code", businessType = BusinessType.GENCODE)
+    @GetMapping("/genCode/{tableName}")
+    public AjaxResult genCode(@PathVariable("tableName") String tableName)
+    {
+        genTableService.generatorCode(tableName);
+        return success();
+    }
+
+    /**
+     * Sync database
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:edit')")
+    @Log(title = "log.op.title.gen.code", businessType = BusinessType.UPDATE)
+    @GetMapping("/synchDb/{tableName}")
+    public AjaxResult synchDb(@PathVariable("tableName") String tableName)
+    {
+        genTableService.synchDb(tableName);
+        return success();
+    }
+
+    /**
+     * Generate code in batches
+     */
+    @PreAuthorize("@ss.hasPermi('tool:gen:code')")
+    @Log(title = "log.op.title.gen.code", businessType = BusinessType.GENCODE)
+    @GetMapping("/batchGenCode")
+    public void batchGenCode(HttpServletResponse response, String tables) throws IOException
+    {
+        String[] tableNames = Convert.toStrArray(tables);
+        byte[] data = genTableService.downloadCode(tableNames);
+        genCode(response, data);
+    }
+
+    /**
+     * Generate zip file
+     */
+    private void genCode(HttpServletResponse response, byte[] data) throws IOException
+    {
+        response.reset();
+        response.addHeader("Access-Control-Allow-Origin", "*");
+        response.addHeader("Access-Control-Expose-Headers", "Content-Disposition");
+        response.setHeader("Content-Disposition", "attachment; filename=\"qdata.zip\"");
+        response.addHeader("Content-Length", "" + data.length);
+        response.setContentType("application/octet-stream; charset=UTF-8");
+        IOUtils.write(data, response.getOutputStream());
+    }
+}

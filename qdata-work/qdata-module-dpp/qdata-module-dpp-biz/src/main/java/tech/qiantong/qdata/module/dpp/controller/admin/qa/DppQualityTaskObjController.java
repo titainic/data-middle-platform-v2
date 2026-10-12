@@ -1,0 +1,141 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.controller.admin.qa;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.Arrays;
+import cn.hutool.core.date.DateUtil;
+import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.common.exception.enums.GlobalErrorCodeConstants;
+import tech.qiantong.qdata.module.dpp.controller.admin.qa.vo.DppQualityTaskObjPageReqVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.qa.vo.DppQualityTaskObjRespVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.qa.vo.DppQualityTaskObjSaveReqVO;
+import tech.qiantong.qdata.module.dpp.convert.qa.DppQualityTaskObjConvert;
+import tech.qiantong.qdata.module.dpp.dal.dataobject.qa.DppQualityTaskObjDO;
+import tech.qiantong.qdata.module.dpp.service.qa.IDppQualityTaskObjService;
+
+/**
+ * Data Quality Task - Audit Object Controller
+ *
+ * @author Chaos
+ * @date 2025-07-21
+ */
+@Tag(name = "Data Quality Task - Audit Object")
+@RestController
+@RequestMapping("/dpp/qualityTaskObj")
+@Validated
+@PreAuthorize("@ss.hasPermi('da:qualityTask:info')")
+public class DppQualityTaskObjController extends BaseController {
+    @Resource
+    private tech.qiantong.qdata.module.dpp.service.qa.QualityResourceAccess qualityAccess;
+    @Resource
+    private IDppQualityTaskObjService dppQualityTaskObjService;
+
+    @Operation(summary = "查询数据质量任务-稽查对象列表")
+    @GetMapping("/list")
+    public CommonResult<PageResult<DppQualityTaskObjRespVO>> list(DppQualityTaskObjPageReqVO dppQualityTaskObj) {
+        dppQualityTaskObj.setAccessibleTaskIds(qualityAccess.visibleTasks());
+        PageResult<DppQualityTaskObjDO> page = dppQualityTaskObjService.getDppQualityTaskObjPage(dppQualityTaskObj);
+        return CommonResult.success(BeanUtils.toBean(page, DppQualityTaskObjRespVO.class));
+    }
+
+    @Operation(summary = "导出数据质量任务-稽查对象列表")
+    @Log(title = "log.op.title.dpp.quality.obj", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, DppQualityTaskObjPageReqVO exportReqVO) {
+        exportReqVO.setAccessibleTaskIds(qualityAccess.visibleTasks());
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<DppQualityTaskObjDO> list = (List<DppQualityTaskObjDO>) dppQualityTaskObjService.getDppQualityTaskObjPage(exportReqVO).getRows();
+        ExcelUtil<DppQualityTaskObjRespVO> util = new ExcelUtil<>(DppQualityTaskObjRespVO.class);
+        util.exportExcel(response, DppQualityTaskObjConvert.INSTANCE.convertToRespVOList(list), "Application Management Data");
+    }
+
+    @Operation(summary = "导入数据质量任务-稽查对象列表")
+    @Log(title = "log.op.title.dpp.quality.obj", businessType = BusinessType.IMPORT)
+    @PreAuthorize("@ss.hasPermi('da:qualityTask:edit')")
+    @org.springframework.transaction.annotation.Transactional
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        ExcelUtil<DppQualityTaskObjRespVO> util = new ExcelUtil<>(DppQualityTaskObjRespVO.class);
+        List<DppQualityTaskObjRespVO> importExcelList = util.importExcel(file.getInputStream());
+        for(var row:importExcelList){if(!updateSupport)row.setId(null);var request=BeanUtils.toBean(row,DppQualityTaskObjSaveReqVO.class);qualityAccess.validateObject(request);row.setTaskId(request.getTaskId());row.setCreatorId(updateSupport?null:getUserId());row.setCreateBy(updateSupport?null:getUsername());row.setCreateTime(updateSupport?null:DateUtil.date());}
+        String operName = getUsername();
+        String message = dppQualityTaskObjService.importDppQualityTaskObj(importExcelList, updateSupport, operName);
+        return success(message);
+    }
+
+    @Operation(summary = "获取数据质量任务-稽查对象详细信息")
+    @GetMapping(value = "/{id:\\d+}")
+    public CommonResult<DppQualityTaskObjRespVO> getInfo(@PathVariable("id") Long id) {
+        qualityAccess.object(id);
+        DppQualityTaskObjDO dppQualityTaskObjDO = dppQualityTaskObjService.getDppQualityTaskObjById(id);
+        return CommonResult.success(BeanUtils.toBean(dppQualityTaskObjDO, DppQualityTaskObjRespVO.class));
+    }
+
+    @Operation(summary = "新增数据质量任务-稽查对象")
+    @Log(title = "log.op.title.dpp.quality.obj", businessType = BusinessType.INSERT)
+    @PreAuthorize("@ss.hasPermi('da:qualityTask:edit')")
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody DppQualityTaskObjSaveReqVO dppQualityTaskObj) {
+        qualityAccess.validateObject(dppQualityTaskObj);
+        dppQualityTaskObj.setCreatorId(getUserId());
+        dppQualityTaskObj.setCreateBy(getNickName());
+        dppQualityTaskObj.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(dppQualityTaskObjService.createDppQualityTaskObj(dppQualityTaskObj));
+    }
+
+    @Operation(summary = "修改数据质量任务-稽查对象")
+    @Log(title = "log.op.title.dpp.quality.obj", businessType = BusinessType.UPDATE)
+    @PreAuthorize("@ss.hasPermi('da:qualityTask:edit')")
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody DppQualityTaskObjSaveReqVO dppQualityTaskObj) {
+        qualityAccess.validateObject(dppQualityTaskObj);
+        dppQualityTaskObj.setUpdatorId(getUserId());
+        dppQualityTaskObj.setUpdateBy(getNickName());
+        dppQualityTaskObj.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(dppQualityTaskObjService.updateDppQualityTaskObj(dppQualityTaskObj));
+    }
+
+    @Operation(summary = "删除数据质量任务-稽查对象")
+    @Log(title = "log.op.title.dpp.quality.obj", businessType = BusinessType.DELETE)
+    @PreAuthorize("@ss.hasPermi('da:qualityTask:edit')")
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+        for(Long id:ids)qualityAccess.object(id,"edit");
+        return CommonResult.toAjax(dppQualityTaskObjService.removeDppQualityTaskObj(Arrays.asList(ids)));
+    }
+
+}

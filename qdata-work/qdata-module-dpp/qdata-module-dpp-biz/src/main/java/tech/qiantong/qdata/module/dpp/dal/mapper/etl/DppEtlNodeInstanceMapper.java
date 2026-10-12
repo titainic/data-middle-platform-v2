@@ -1,0 +1,85 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.dal.mapper.etl;
+
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import org.apache.commons.lang3.StringUtils;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.Flag;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodeInstancePageReqVO;
+import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.DppEtlNodeInstanceDO;
+import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.DppEtlTaskInstanceDO;
+import tech.qiantong.qdata.mybatis.core.mapper.BaseMapperX;
+
+/**
+ * Data Integration Node Instance Mapper
+ *
+ * @author qdata
+ * @date 2025-02-13
+ */
+public interface DppEtlNodeInstanceMapper extends BaseMapperX<DppEtlNodeInstanceDO> {
+
+    @org.apache.ibatis.annotations.Select("SELECT status FROM DPP_ETL_NODE_INSTANCE WHERE id=#{id} AND del_flag=0")
+    @org.apache.ibatis.annotations.Options(useCache=false, flushCache=org.apache.ibatis.annotations.Options.FlushCachePolicy.TRUE)
+    String selectStatusForExecution(@org.apache.ibatis.annotations.Param("id") Long id);
+
+    default PageResult<DppEtlNodeInstanceDO> selectPage(DppEtlNodeInstancePageReqVO reqVO) {
+
+        MPJLambdaWrapper<DppEtlNodeInstanceDO> lambdaWrapper = new MPJLambdaWrapper();
+
+        lambdaWrapper.selectAll(DppEtlNodeInstanceDO.class)
+                .select(DppEtlTaskInstanceDO::getCommandType)
+                .select("t3.NICK_NAME AS personChargeName")
+//                .leftJoin("DPP_ETL_TASK_INSTANCE t2 ON t.TASK_INSTANCE_ID = t2.id AND t2.DEL_FLAG = '0'")
+                .innerJoin(DppEtlTaskInstanceDO.class, DppEtlTaskInstanceDO::getId, DppEtlNodeInstanceDO::getTaskInstanceId)
+                .leftJoin("SYSTEM_USER t3 ON t1.PERSON_CHARGE = t3.USER_ID AND t3.DEL_FLAG = '0'")
+                .eq(DppEtlTaskInstanceDO::getSubTaskFlag, Flag.NO.getCode())
+                .eq(DppEtlNodeInstanceDO::getTaskType, reqVO.getTaskType())
+                .likeRight(StringUtils.isNotBlank(reqVO.getCatCode()), DppEtlTaskInstanceDO::getCatCode, reqVO.getCatCode())
+                .like(StringUtils.isNotBlank(reqVO.getName()), DppEtlNodeInstanceDO::getName, reqVO.getName())
+                .eq(StringUtils.isNotBlank(reqVO.getNodeType()), DppEtlNodeInstanceDO::getNodeType, reqVO.getNodeType())
+                .eq(reqVO.getNodeId() != null, DppEtlNodeInstanceDO::getNodeId, reqVO.getNodeId())
+                .eq(StringUtils.isNotBlank(reqVO.getNodeCode()), DppEtlNodeInstanceDO::getNodeCode, reqVO.getNodeCode())
+                .eq(reqVO.getTaskInstanceId() != null, DppEtlNodeInstanceDO::getTaskInstanceId, reqVO.getTaskInstanceId())
+                .like(StringUtils.isNotBlank(reqVO.getTaskInstanceName()), DppEtlNodeInstanceDO::getTaskInstanceName, reqVO.getTaskInstanceName())
+                .like(StringUtils.isNotBlank(reqVO.getJobName()), DppEtlNodeInstanceDO::getTaskInstanceName, reqVO.getJobName())
+                .eq(reqVO.getProjectId() != null, DppEtlNodeInstanceDO::getProjectId, reqVO.getProjectId())
+                .eq(StringUtils.isNotBlank(reqVO.getProjectCode()), DppEtlNodeInstanceDO::getProjectCode, reqVO.getProjectCode())
+                .ge(reqVO.getStartTime() != null, DppEtlNodeInstanceDO::getStartTime, reqVO.getStartTime())
+                .le(reqVO.getEndTime() != null, DppEtlNodeInstanceDO::getStartTime, reqVO.getEndTime())
+                .eq(StringUtils.isNotBlank(reqVO.getPriority()), DppEtlNodeInstanceDO::getPriority, reqVO.getPriority())
+                .in(StringUtils.equals(reqVO.getStatus(), "running"), DppEtlNodeInstanceDO::getStatus, "0", "1", "12")
+                .eq(StringUtils.equals(reqVO.getStatus(), "success"), DppEtlNodeInstanceDO::getStatus, "7")
+                .eq(StringUtils.equals(reqVO.getStatus(), "failed"), DppEtlNodeInstanceDO::getStatus, "6")
+                .eq(StringUtils.isNotBlank(reqVO.getStatus())
+                                && !StringUtils.equals(reqVO.getStatus(), "running")
+                                && !StringUtils.equals(reqVO.getStatus(), "success")
+                                && !StringUtils.equals(reqVO.getStatus(), "failed"),
+                        DppEtlNodeInstanceDO::getStatus, reqVO.getStatus())
+                .eq(reqVO.getDsId() != null, DppEtlNodeInstanceDO::getDsId, reqVO.getDsId())
+                .eq(reqVO.getDsTaskInstanceId() != null, DppEtlNodeInstanceDO::getDsTaskInstanceId, reqVO.getDsTaskInstanceId())
+                .eq(reqVO.getCreateTime() != null, DppEtlNodeInstanceDO::getCreateTime, reqVO.getCreateTime())
+                .in(DppEtlNodeInstanceDO::getStatus, "0", "1", "5", "6", "7", "12")
+                .orderByDesc(DppEtlNodeInstanceDO::getStartTime);
+
+        // Build dynamic query conditions
+        if(reqVO.getAccessibleIds()!=null){if(reqVO.getAccessibleIds().isEmpty())lambdaWrapper.apply("1=0");else lambdaWrapper.in(DppEtlNodeInstanceDO::getId,reqVO.getAccessibleIds());}
+        return selectJoinPage(reqVO, DppEtlNodeInstanceDO.class, lambdaWrapper);
+    }
+}

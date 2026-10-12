@@ -1,0 +1,215 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+    <div class="node-component">
+        <!-- upper part -->
+        <div class="node-top">
+            <img :src="iconWhite" class="node-icon" alt="icon" />
+            <div class="node-status-wrapper">
+                <img :src="statusIcon" class="node-status" v-if="nodeData.styletype != 2" />
+                <div class="status-info">{{ statusTip }}</div>
+            </div>
+        </div>
+        <!-- lower part -->
+        <div class="node-bottom" @click.stop="emitClick">{{ nodeData.name }}</div>
+    </div>
+</template>
+
+<script setup>
+import { inject, ref, onBeforeUnmount, computed } from "vue"
+import useDefaultLang from "@/composables/useDefaultLang"
+
+const { td } = useDefaultLang();
+const emits = defineEmits(["nodeClick"])
+const getNode = inject("getNode")
+const node = getNode ? getNode() : null
+let props = defineProps({
+    styletype: Number,
+});
+if (!node) {
+    console.warn("NodeView: node instance not found")
+}
+
+// Responsive node data
+const nodeData = ref(node ? node.getData() : {})
+
+// Monitor data changes
+const handleChangeData = ({ current }) => {
+    nodeData.value = { ...current }
+    console.log("Node data updated:", nodeData.value)
+}
+
+if (node) {
+    node.on("change:data", handleChangeData)
+}
+
+onBeforeUnmount(() => {
+    if (node) node.off("change:data", handleChangeData)
+})
+
+// Icon handling
+const icon = computed(() => nodeData.value.taskParams?.icon || nodeData.value.icon || "/img/icon-default.png")
+
+const iconWhite = computed(() => {
+    const newIcon = icon.value
+    if (newIcon.startsWith("data:image/svg+xml;base64,")) {
+        try {
+            const svgText = atob(newIcon.split(",")[1])
+            const whiteSvgText = svgText.replace(/fill=".*?"/g, 'fill="#ffffff"')
+            return "data:image/svg+xml;base64," + btoa(whiteSvgText)
+        } catch {
+            return newIcon
+        }
+    }
+    return newIcon
+})
+
+// Status configuration
+const toolbar = [
+    { id: "1", icon: "icon-zzzx", tip: td('dpp.node.statusExecuting', 'Executing') },
+    { id: "5", icon: "icon-tz", tip: td('dpp.node.statusStopped', 'Stopped') },
+    { id: "6", icon: "icon-status-sb", tip: td('dpp.node.statusFailed', 'Failed') },
+    { id: "7", icon: "icon-status-cg", tip: td('dpp.node.statusSuccess', 'Succeeded') },
+    { id: "14", icon: "icon-dd", tip: td('dpp.node.statusWaiting', 'Waiting') },
+]
+
+const statusItem = computed(() => {
+    return toolbar.find(item => String(item.id) == String(nodeData.value.status)) || toolbar[4]
+})
+
+const statusIcon = computed(() => {
+    const iconFile = statusItem.value ? statusItem.value.icon : "default"
+    return new URL(`/src/assets/images/dpp/etl/${iconFile}.svg`, import.meta.url).href
+})
+
+const statusTip = computed(() => statusItem.value?.tip || td('dpp.node.unknownStatus', 'Unknown Status'))
+
+const emitClick = () => {
+    emits("nodeClick", nodeData.value)
+}
+</script>
+
+<style lang="less" scoped>
+.node-component {
+    position: relative;
+    height: 40px;
+    width: 36px;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    background: url("@/assets/images/dpp/etl/icon-bg-background.svg");
+    background-size: 100% 100%;
+}
+
+.node-top {
+    position: relative;
+    height: 36px;
+    width: 36px;
+
+    .node-icon {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        transform: translate(-50%, -50%);
+        filter: brightness(0) invert(1) opacity(0.8);
+    }
+
+    .node-status-wrapper {
+        position: absolute;
+        top: -10px;
+        right: -16px;
+
+        .node-status {
+            padding: 2px 6px;
+            border-radius: 50%;
+            font-size: 12px;
+            display: inline-block;
+            position: relative;
+        }
+
+        .status-info {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 6px;
+            padding: 2px 5px;
+            background: #ffffff;
+            border-radius: 5px;
+            border: 1px solid #add8e6;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 14px;
+            color: #5D6F80;
+
+            &::before {
+                content: "";
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 0;
+                height: 0;
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-top: 6px solid #add8e6;
+            }
+
+            &::after {
+                content: "";
+                position: absolute;
+                top: 100%;
+                left: 50%;
+                transform: translateX(-50%) translateY(-1px);
+                width: 0;
+                height: 0;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #ffffff;
+            }
+        }
+
+        &:hover .status-info {
+            display: block;
+            opacity: 1;
+        }
+    }
+}
+
+.node-bottom {
+    max-width: 150px;
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 400;
+    font-size: 12px;
+    color: #333333;
+
+}
+</style>

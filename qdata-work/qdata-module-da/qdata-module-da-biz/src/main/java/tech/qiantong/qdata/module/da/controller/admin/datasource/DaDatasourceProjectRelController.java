@@ -1,0 +1,143 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.da.controller.admin.datasource;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.Arrays;
+import cn.hutool.core.date.DateUtil;
+import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.common.exception.enums.GlobalErrorCodeConstants;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceProjectRelPageReqVO;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceProjectRelRespVO;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceProjectRelSaveReqVO;
+import tech.qiantong.qdata.module.da.convert.datasource.DaDatasourceProjectRelConvert;
+import tech.qiantong.qdata.module.da.dal.dataobject.datasource.DaDatasourceProjectRelDO;
+import tech.qiantong.qdata.module.da.service.datasource.IDaDatasourceProjectRelService;
+
+/**
+ * Datasource-Project Relation Controller
+ *
+ * @author qdata
+ * @date 2025-03-13
+ */
+@Tag(name = "数据源与项目关联关系")
+@RestController
+@RequestMapping("/da/dataSourceProjectRel")
+@Validated
+public class DaDatasourceProjectRelController extends BaseController {
+    @Resource private tech.qiantong.qdata.module.da.service.datasource.DatasourceProjectAccess access;
+    private void scope(DaDatasourceProjectRelPageReqVO request){request.setAccessibleDatasourceIds(access.visible("query",false,null));request.setAccessibleProjectIds(access.projects("query"));}
+    @Resource
+    private IDaDatasourceProjectRelService daDatasourceProjectRelService;
+
+    @Operation(summary = "查询数据源与项目关联关系列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @GetMapping("/list")
+    public CommonResult<PageResult<DaDatasourceProjectRelRespVO>> list(DaDatasourceProjectRelPageReqVO daDatasourceProjectRel) {
+        scope(daDatasourceProjectRel);
+        PageResult<DaDatasourceProjectRelDO> page = daDatasourceProjectRelService.getDaDatasourceProjectRelPage(daDatasourceProjectRel);
+        return CommonResult.success(BeanUtils.toBean(page, DaDatasourceProjectRelRespVO.class));
+    }
+
+    @Operation(summary = "导出数据源与项目关联关系列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:export')")
+    @Log(title = "log.op.title.da.datasource.project.rel", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, DaDatasourceProjectRelPageReqVO exportReqVO) {
+        exportReqVO.setAccessibleDatasourceIds(access.visible("export",false,null));exportReqVO.setAccessibleProjectIds(access.projects("export"));
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<DaDatasourceProjectRelDO> list = (List<DaDatasourceProjectRelDO>) daDatasourceProjectRelService.getDaDatasourceProjectRelPage(exportReqVO).getRows();
+        ExcelUtil<DaDatasourceProjectRelRespVO> util = new ExcelUtil<>(DaDatasourceProjectRelRespVO.class);
+        util.exportExcel(response, DaDatasourceProjectRelConvert.INSTANCE.convertToRespVOList(list), "Application Management Data");
+    }
+
+    @Operation(summary = "导入数据源与项目关联关系列表")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:import')")
+    @Log(title = "log.op.title.da.datasource.project.rel", businessType = BusinessType.IMPORT)
+    @PostMapping("/importData")
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        ExcelUtil<DaDatasourceProjectRelRespVO> util = new ExcelUtil<>(DaDatasourceProjectRelRespVO.class);
+        List<DaDatasourceProjectRelRespVO> importExcelList = util.importExcel(file.getInputStream());
+        List<DaDatasourceProjectRelSaveReqVO> requests=new java.util.ArrayList<>();
+        for(var row:importExcelList){var request=BeanUtils.toBean(row,DaDatasourceProjectRelSaveReqVO.class);if(updateSupport && request.getId()==null || !updateSupport && request.getId()!=null)throw new IllegalArgumentException("导入编号与新增/更新模式不符");access.validateRelation(request,!updateSupport);if(!updateSupport){request.setCreatorId(getUserId());request.setCreateBy(getNickName());request.setCreateTime(DateUtil.date());}request.setUpdatorId(getUserId());request.setUpdateBy(getNickName());request.setUpdateTime(DateUtil.date());requests.add(request);}
+        for(var request:requests)if(updateSupport)daDatasourceProjectRelService.updateDaDatasourceProjectRel(request);else daDatasourceProjectRelService.createDaDatasourceProjectRel(request);
+        return success("成功导入 "+requests.size()+" 条项目关联");
+    }
+
+    @Operation(summary = "获取数据源与项目关联关系详细信息")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:query')")
+    @GetMapping(value = "/{id:\\d+}")
+    public CommonResult<DaDatasourceProjectRelRespVO> getInfo(@PathVariable("id") Long id) {
+        access.relation(id,false);
+        DaDatasourceProjectRelDO daDatasourceProjectRelDO = daDatasourceProjectRelService.getDaDatasourceProjectRelById(id);
+        return CommonResult.success(BeanUtils.toBean(daDatasourceProjectRelDO, DaDatasourceProjectRelRespVO.class));
+    }
+
+    @Operation(summary = "新增数据源与项目关联关系")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:edit')")
+    @Log(title = "log.op.title.da.datasource.project.rel", businessType = BusinessType.INSERT)
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody DaDatasourceProjectRelSaveReqVO daDatasourceProjectRel) {
+        access.validateRelation(daDatasourceProjectRel,true);
+        daDatasourceProjectRel.setCreatorId(getUserId());
+        daDatasourceProjectRel.setCreateBy(getNickName());
+        daDatasourceProjectRel.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(daDatasourceProjectRelService.createDaDatasourceProjectRel(daDatasourceProjectRel));
+    }
+
+    @Operation(summary = "修改数据源与项目关联关系")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:edit')")
+    @Log(title = "log.op.title.da.datasource.project.rel", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody DaDatasourceProjectRelSaveReqVO daDatasourceProjectRel) {
+        access.validateRelation(daDatasourceProjectRel,false);
+        daDatasourceProjectRel.setUpdatorId(getUserId());
+        daDatasourceProjectRel.setUpdateBy(getNickName());
+        daDatasourceProjectRel.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(daDatasourceProjectRelService.updateDaDatasourceProjectRel(daDatasourceProjectRel));
+    }
+
+    @Operation(summary = "删除数据源与项目关联关系")
+    @PreAuthorize("@ss.hasPermi('da:dataSource:edit')")
+    @Log(title = "log.op.title.da.datasource.project.rel", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+        for(Long id:ids)access.relation(id,true);
+        return CommonResult.toAjax(daDatasourceProjectRelService.removeDaDatasourceProjectRel(Arrays.asList(ids)));
+    }
+
+}

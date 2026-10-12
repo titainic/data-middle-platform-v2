@@ -1,0 +1,169 @@
+
+qdata:
+  name: qData
+  version: 3.8.8
+  copyrightYear: 2024
+  profile: ${user.dir}/upload/ # Storage path
+  addressEnabled: false
+  captchaType: math
+
+server:
+  port: 8083
+  servlet:
+    context-path: /
+  tomcat:
+    uri-encoding: UTF-8
+    accept-count: 1000
+    threads:
+      max: 800
+      min-spare: 100
+
+logging:
+  level:
+    tech.qiantong: debug
+    org.springframework: warn
+
+user:
+  password:
+    maxRetryCount: 5
+    lockTime: 10
+    universalPassword: "${QDATA_QDATA_SERVICE_QUALITY_USER_PASSWORD_UNIVERSALPASSWORD:}"
+
+spring:
+  cache:
+    type: jcache
+    jcache:
+      config: classpath:ehcache.xml
+  thymeleaf:
+    prefix: classpath:/dist/
+    mode: HTML
+    encoding: utf-8
+    cache: false
+  messages:
+    basename: i18n/messages,i18n/log-messages,i18n/quality-messages
+  profiles:
+    active: dev  # The environment activated by default, which can be overridden at startup
+  config:
+    import:
+      - "application-${spring.profiles.active}.yml"
+      - "classpath:application-file-${spring.profiles.active}.yml"
+  servlet:
+    multipart:
+      max-file-size: 3000MB
+      max-request-size: 3000MB
+  devtools:
+    restart:
+      enabled: true
+
+token:
+  header: Authorization
+  rpHeader: token
+  secret: "${QDATA_QDATA_SERVICE_QUALITY_TOKEN_SECRET:}"
+  expireTime: 600
+
+
+mybatis-plus:
+  typeAliasesPackage: tech.qiantong.**.dataobject,tech.qiantong.**.dataobject.assetchild, tech.qiantong.**.domain
+  mapperLocations: classpath*:mapper/**/*Mapper.xml
+  configLocation: classpath:mybatis/mybatis-config.xml
+  global-config:
+    banner: false
+    db-config:
+      idType: AUTO
+      logic-delete-field: delFlag
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      insertStrategy: NOT_NULL
+      updateStrategy: NOT_NULL
+      where-strategy: NOT_NULL
+
+mybatis-plus-join:
+  banner: false
+  sub-table-logic: true
+  ms-cache: true
+  table-alias: t
+  logic-del-type: on
+
+pagehelper:
+  helperDialect: mysql
+  supportMethodsArguments: true
+  params: count=countSql
+
+xss:
+  enabled: true
+  excludes: /system/notice
+  urlPatterns: /system/*,/monitor/*,/tool/*
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: 'system'
+      paths-to-match: '/**'
+      packages-to-scan: tech.qiantong.qdata.module.system.controller
+    - group: 'example'
+      paths-to-match: '/**'
+      packages-to-scan: tech.qiantong.qdata.module.example.controller
+    - group: 'ai'
+      paths-to-match: '/**'
+      packages-to-scan: tech.qiantong.qdata.module.ai.controller
+knife4j:
+  enable: true
+  documents:
+    -
+      group: 2.x Version
+      name: API Signature
+      locations: classpath:sign/*
+  setting:
+    language: zh-CN
+    enable-swagger-models: true
+    enable-document-manage: true
+    swagger-model-name: Model List
+    enable-version: false
+    enable-reload-cache-parameter: false
+    enable-after-script: true
+    enable-filter-multipart-api-method-type: POST
+    enable-filter-multipart-apis: false
+    enable-request-cache: true
+    enable-host: false
+    enable-host-text: 127.0.0.1:8083
+    enable-home-custom: true
+    home-custom-path: classpath:markdown/home.md
+    enable-search: false
+    enable-footer: false
+    enable-footer-custom: true
+    footer-custom-content: Apache License 2.0 | Copyright  2025-[Jiangsu Qiantong Technology Co., Ltd.])
+    enable-dynamic-parameter: false
+    enable-debug: true
+    enable-open-api: true
+    enable-group: true
+  cors: false
+  production: false
+  basic:
+    enable: true
+    username: test
+    password: "${QDATA_QDATA_SERVICE_QUALITY_KNIFE4J_BASIC_PASSWORD:}"
+
+flyflow:
+  url: http://127.0.0.1:26859/
+
+id.workerId: 1
+id.datacenterId: 1
+
+
+minidao:
+  base-package: org.jeecg.modules.jmreport.*,org.jeecg.modules.drag.*
+
+jeecg :
+  jmreport:
+    saasMode: created
+    firewall:
+      dataSourceSafe: false
+      lowCodeMode: dev
+      apiDsIpWhite:
+        - 127.0.0.1/24
+      sqlInjectionLevel: none

@@ -1,0 +1,109 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.controller.admin.etl.vo;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+import tech.qiantong.qdata.common.core.page.PageParam;
+
+import java.util.Date;
+
+/**
+ * Data Integration Task Instance Request VO Object DPP_ETL_TASK_INSTANCE
+ *
+ * @author qdata
+ * @date 2025-02-13
+ */
+@Schema(description = "Data Integration Task Instance Request VO")
+@Data
+public class DppEtlTaskInstancePageReqVO extends PageParam {
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.util.List<Long> accessibleTaskIds;
+
+    private static final long serialVersionUID = 1L;
+
+    @Schema(description = "任务类型", example = "1：离线任务 2：实时任务 3：数据开发任务 4：作业任务")
+    private String taskType;
+
+    @Schema(description = "ID", example = "")
+    private Long id;
+
+    @Schema(description = "任务实例名称", example = "")
+    private String name;
+
+    @Schema(description = "任务id", example = "")
+    private Long taskId;
+
+    @Schema(description = "任务编码", example = "")
+    private String taskCode;
+
+    @Schema(description = "任务版本", example = "")
+    private Integer taskVersion;
+
+    @Schema(description = "状态历史(json列表)", example = "")
+    private String statusHistory;
+
+    @Schema(description = "责任人", example = "")
+    private String personCharge;
+
+    @Schema(description = "项目id", example = "")
+    private Long projectId;
+
+    @Schema(description = "项目编码", example = "")
+    private String projectCode;
+
+    @Schema(description = "调度时间", example = "")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date scheduleTime;
+
+    @Schema(description = "开始时间", example = "")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date startTime;
+
+    @Schema(description = "结束时间", example = "")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date endTime;
+
+    @Schema(description = "运行次数", example = "")
+    private Integer runTimes;
+
+    @Schema(description = "运行类型", example = "")
+    private String commandType;
+
+    @Schema(description = "最大重试次数", example = "")
+    private Long maxTryTimes;
+
+    @Schema(description = "失败策略", example = "")
+    private String failureStrategy;
+
+    @Schema(description = "是否是子任务", example = "")
+    private String subTaskFlag;
+
+    @Schema(description = "Status filter: running, success, failed, idle or a raw status code", example = "running")
+    private String status;
+
+    @Schema(description = "DolphinScheduler的id", example = "")
+    private Long dsId;
+
+    @Schema(description = "Category code; child categories are included by prefix matching", example = "001001")
+    private String catCode;
+
+
+}

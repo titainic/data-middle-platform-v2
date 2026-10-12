@@ -1,0 +1,91 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dp.controller.admin.dataElem.vo;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+import tech.qiantong.qdata.common.core.domain.BaseEntity;
+
+import jakarta.validation.constraints.NotNull;
+
+/**
+ * Data Element Rule Relation Save Request VO - DP_DATA_ELEM_RULE_REL
+ *
+ * @author qdata
+ * @date 2025-01-21
+ */
+@Schema(description = "数据元数据规则关联信息 Response VO")
+@Data
+public class DpDataElemRuleRelSaveReqVO extends BaseEntity {
+
+    private static final long serialVersionUID = 1L;
+
+    @Schema(description = "ID")
+    private Long id;
+
+    @NotNull(message = "name null")
+    private String name;
+
+    /**
+     * Status; 0 Offline, 1 Online
+     */
+    private String status;
+
+    @Schema(description = "数据元id", example = "")
+    @NotNull(message = "dataElemId null")
+    private Long dataElemId;
+
+    @Schema(description = "规则类型", example = "1:稽核规则 2:清洗规则")
+    @NotNull(message = "type null")
+    private String type;
+
+    @Schema(description = "规则id", example = "")
+    @NotNull(message = "ruleId null")
+    private Long ruleId;
+
+    @NotNull(message = "ruleCode null")
+    private String ruleCode;
+
+    @NotNull(message = "ruleName null")
+    private String ruleName;
+
+    private String dimensionType;
+
+    @Schema(description = "规则描述")
+    private String ruleDescription;
+
+    @Schema(description = "错误描述")
+    private String errDescription;
+
+    @Schema(description = "修复建议")
+    private String suggestion;
+
+    @Schema(description = "where条件")
+    private String whereClause;
+
+    @Schema(description = "规则配置", example = "")
+    @NotNull(message = "rule null")
+    private String rule;
+
+    /**
+     * @see tech.qiantong.qdata.module.att.dal.dataobject.rule.AttAuditRuleDO#strategyKey
+     */
+    private String ruleType;
+
+}

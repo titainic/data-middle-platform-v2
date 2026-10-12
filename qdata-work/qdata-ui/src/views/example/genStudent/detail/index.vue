@@ -1,0 +1,205 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<!-- Complex detail route template
+    {
+        path: '/example/genStudent',
+        component: Layout,
+        redirect: 'genStudent',
+        hidden: true,
+        children: [
+            {
+                path: 'studentDetail',
+                component: () => import('@/views/example/genStudent/detail/index2.vue'),
+                name: 'tree',
+                meta: { title: 'Student Details', activeMenu: '/example/student'  }
+            }
+        ]
+    }
+ -->
+
+
+<template>
+  <div class="app-container" ref="app-container">
+    <div class="pagecont-top" v-show="showSearch" style="padding-bottom:15px">
+      <div class="infotop" >
+        <div class="infotop-title mb15">
+          {{ studentDetail.id }}
+        </div>
+        <el-row :gutter="20">
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">ID</div>
+              <div class="infotop-row-value">{{ studentDetail.id }}</div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">姓名</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.name || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">学生照</div>
+              <div class="infotop-row-value">
+                <image-preview :src="studentDetail.pictureUrl" :width="50" :height="50"/>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">教育经历</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.experience || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">性别</div>
+              <div class="infotop-row-value">
+                <dict-tag :options="sys_user_sex" :value="studentDetail.sex "/>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">年龄</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.age || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">学号</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.studentNumber || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">班级</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.grade || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">爱好</div>
+              <div class="infotop-row-value">
+                <dict-tag :options="message_level" :value="studentDetail.hobby "/>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ t('common.texts.createdBy') }}</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.createBy || '-' }}
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ t('common.texts.createdTime') }}</div>
+              <div class="infotop-row-value">{{ parseTime(studentDetail.createTime, '{y}-{m}-{d}') }}</div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ t('common.texts.remark') }}</div>
+              <div class="infotop-row-value">
+                {{ studentDetail.remark || '-' }}
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+
+      </div>
+    </div>
+
+    <div  class="pagecont-bottom">
+      <el-tabs v-model="activeName" class="demo-tabs" @tab-click="handleClick">
+        <el-tab-pane label="组件一" name="1">
+          <component-one ></component-one>
+        </el-tab-pane>
+        <el-tab-pane label="组件二" name="2">
+          <component-two ></component-two>
+        </el-tab-pane>
+      </el-tabs>
+    </div>
+
+  </div>
+</template>
+
+<script setup name="Student">
+import { useI18n } from 'vue-i18n'
+import {getStudent } from "@/api/example/genStudent/student";
+import { useRoute } from 'vue-router';
+import ComponentOne from "@/views/example/genStudent/detail/componentOne.vue";
+import ComponentTwo from "@/views/example/genStudent/detail/componentTwo.vue";
+
+const { t } = useI18n();
+const { proxy } = getCurrentInstance();
+const { sys_user_sex, message_level } = proxy.useDict('sys_user_sex', 'message_level');
+
+const activeName = ref('1')
+
+const handleClick = (tab, event) => {
+  console.log(tab, event)
+}
+
+const showSearch = ref(true);
+const route = useRoute();
+let id = route.query.id || 1;
+// Monitor id changes
+watch(
+    () => route.query.id,
+    (newId) => {
+      id = newId || 1;  // If id is empty, the default value 1 is used
+      getStudentDetailById();
+
+    },
+    { immediate: true }  // `immediate` is true, which means that a watch will be executed immediately when the page is loaded.
+);
+const data = reactive({
+  studentDetail: {
+  },
+  form: {},
+});
+
+const {  studentDetail, rules } = toRefs(data);
+
+/** Form query at the top of the complex details page */
+function getStudentDetailById() {
+  const _id = id ;
+  getStudent(_id).then(response => {
+    studentDetail.value = response.data;
+    studentDetail.value.hobby = studentDetail.value.hobby.split(",");
+  });
+}
+
+getStudentDetailById();
+
+</script>

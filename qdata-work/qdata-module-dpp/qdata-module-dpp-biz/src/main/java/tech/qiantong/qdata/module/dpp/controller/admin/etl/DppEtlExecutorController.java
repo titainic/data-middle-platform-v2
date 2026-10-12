@@ -1,0 +1,61 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.controller.admin.etl;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import tech.qiantong.qdata.api.ds.api.service.etl.IDsEtlExecutorService;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.ExecuteType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodePageReqVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodeRespVO;
+import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.DppEtlNodeDO;
+import tech.qiantong.qdata.module.dpp.service.etl.IDppEtlTaskInstanceService;
+
+import jakarta.annotation.Resource;
+
+/**
+ * <P>
+ * Purpose:
+ * </p>
+ *
+ * @author: FXB
+ * @create: 2025-03-27 14:39
+ **/
+@Tag(name = "Schedule Execution")
+@RestController
+@RequestMapping("/dpp/etlExecutors")
+public class DppEtlExecutorController {
+
+    @Resource
+    private IDppEtlTaskInstanceService dppEtlTaskInstanceService;
+
+    @Operation(summary = "执行命令")
+    @PostMapping("/execute/{taskInstanceId}/{executeType}")
+    public AjaxResult execute(@PathVariable("taskInstanceId") Long taskInstanceId, @PathVariable("executeType") ExecuteType executeType) {
+        return dppEtlTaskInstanceService.execute(taskInstanceId, executeType);
+    }
+
+}

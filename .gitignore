@@ -1,0 +1,57 @@
+# Local work records and deployment artifacts
+/.codex-staging/
+/.learnings/
+/analysis/
+/implementation/
+/deliverables/
+/qdata-work/docs/
+/qdata-work/redme.md
+**/.codex-backups/
+**/.offline/
+**/runtime/
+**/runtime-data/
+**/upload/
+
+# Build outputs and caches
+**/target/
+**/${project.build.directory}/
+**/node_modules/
+**/dist/
+**/build/
+**/__pycache__/
+**/.flattened-pom.xml
+**/dependency-reduced-pom.xml
+**/vite.config.*.timestamp-*.mjs
+**/.vite-temp/
+*.jar
+*.class
+*.tar
+*.tar.gz
+*.tgz
+*.log
+*.pyc
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Local configuration; publish reviewed examples only
+**/src/main/resources/application*.yml
+!**/src/main/resources/application*.example.yml
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+**/private_key.pem
+**/public_key.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Test reports
+**/coverage/
+**/test-results/
+**/playwright-report/

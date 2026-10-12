@@ -1,0 +1,61 @@
+
+datasource:
+  type: mysql
+
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 0
+      password:
+      timeout: 10s
+      lettuce:
+        pool:
+          min-idle: 0
+          max-idle: 8
+          max-active: 8
+          max-wait: -1ms
+  datasource:
+    druid:
+      stat-view-servlet:
+        enabled: false
+        loginUsername: qdata
+        loginPassword: 123456
+    dynamic:
+      druid:
+        initial-size: 5
+        min-idle: 5
+        maxActive: 20
+        maxWait: 60000
+        connectTimeout: 30000
+        socketTimeout: 60000
+        timeBetweenEvictionRunsMillis: 60000
+        minEvictableIdleTimeMillis: 300000
+        validationQuery: SELECT 1 FROM DUAL
+        testWhileIdle: true
+        testOnBorrow: false
+        testOnReturn: false
+        poolPreparedStatements: true
+        maxPoolPreparedStatementPerConnectionSize: 20
+        filters: stat,slf4j
+        connectionProperties: druid.stat.mergeSql\=true;druid.stat.slowSqlMillis\=5000
+      datasource:
+        master:
+          driver-class-name: ${${datasource.type}.driver-class-name}
+          url: ${${datasource.type}.url}
+          username: ${${datasource.type}.username}
+          password: "${QDATA_QDATA_SERVICE_AI_SPRING_DATASOURCE_DYNAMIC_DATASOURCE_MASTER_PASSWORD:}"
+
+mysql:
+  driver-class-name: com.mysql.cj.jdbc.Driver
+  url: jdbc:mysql://mysql:3306/qdata?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+  username: root
+  password: "${QDATA_QDATA_SERVICE_AI_MYSQL_PASSWORD:}"
+
+dm8:
+  driver-class-name: dm.jdbc.driver.DmDriver
+  url: jdbc:dm://127.0.0.1:5236/QDATA?STU&zeroDateTimeBehavior=convertToNull&useUnicode=true&characterEncoding=utf-8&schema=QDATA&serverTimezone=Asia/Shanghai
+  username: QDATA
+  password: "${QDATA_QDATA_SERVICE_AI_DM8_PASSWORD:}"
+

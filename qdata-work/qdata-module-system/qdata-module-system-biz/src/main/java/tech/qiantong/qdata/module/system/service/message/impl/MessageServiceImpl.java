@@ -1,0 +1,223 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.system.service.message.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.exception.base.BaseException;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.system.api.message.dto.MessageSaveReqDTO;
+import tech.qiantong.qdata.module.system.controller.admin.system.message.vo.MessagePageReqVO;
+import tech.qiantong.qdata.module.system.controller.admin.system.message.vo.MessageSaveReqVO;
+import tech.qiantong.qdata.module.system.controller.admin.system.message.websocket.WebSocketMessageServer;
+import tech.qiantong.qdata.module.system.convert.message.MessageConvert;
+import tech.qiantong.qdata.module.system.dal.dataobject.message.MessageDO;
+import tech.qiantong.qdata.module.system.dal.dataobject.message.MessageTemplateDO;
+import tech.qiantong.qdata.module.system.dal.dataobject.message.enums.MessageHasReadEnums;
+import tech.qiantong.qdata.module.system.dal.mapper.message.MessageMapper;
+import tech.qiantong.qdata.module.system.dal.mapper.message.MessageTemplateMapper;
+import tech.qiantong.qdata.module.system.service.ISysMessageService;
+import tech.qiantong.qdata.module.system.service.message.IMessageService;
+
+import jakarta.annotation.Resource;
+import java.util.Map;
+
+import static tech.qiantong.qdata.common.utils.SecurityUtils.getLoginUser;
+
+/**
+ * Message Service business layer handler
+ *
+ * @author qdata
+ * @date 2024-10-31
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class MessageServiceImpl  extends ServiceImpl<MessageMapper, MessageDO> implements IMessageService, ISysMessageService {
+    @Resource
+    private MessageMapper messageMapper;
+    @Resource
+    private MessageTemplateMapper messageTemplateMapper;
+
+    /**
+     * Send a message to a specific user via template
+     * @param templateId template id
+     * @param messageSaveReqVO message creation request
+     * @param entity entity object
+     * @return whether send succeeded
+     */
+    @Override
+    public Boolean send(Long templateId, MessageSaveReqVO messageSaveReqVO, Object entity) {
+        MessageTemplateDO messageTemplateDO = messageTemplateMapper.selectById(templateId); // get the corresponding template
+        if (messageTemplateDO == null) {
+            throw new BaseException("system-messages", "system.error.template.notfound", null, "Message template not found");
+        }
+        Map<?, ?> map = BeanUtils.toBean(entity, Map.class); // convert entity to key-value pairs
+        // update template values
+        String message = messageTemplateDO.getContent();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            message = message.replace("${" + entry.getKey().toString() + "}", entry.getValue().toString());
+        }
+        MessageDO messageDO = BeanUtils.toBean(messageSaveReqVO, MessageDO.class);
+        // set template basic data
+        messageDO.setCategory(messageTemplateDO.getCategory());
+        messageDO.setMsgLevel(messageTemplateDO.getMsgLevel());
+        messageDO.setTitle(messageTemplateDO.getTitle());
+        // actual message
+        messageDO.setContent(message);
+
+        // compatible with scheduled task triggers, default to super admin
+        if(messageSaveReqVO.getCreateBy() == null || messageSaveReqVO.getCreatorId() == null){
+            messageDO.setCreatorId(getLoginUser().getUserId());
+            messageDO.setCreateBy(getLoginUser().getUser().getNickName());
+        }else {
+            messageDO.setCreatorId(messageSaveReqVO.getCreatorId());
+            messageDO.setCreateBy(messageSaveReqVO.getCreateBy());
+        }
+        boolean save = this.save(messageDO);
+        // update message
+        this.getReceiverWDNum(messageSaveReqVO.getReceiverId());
+        return save;
+    }
+
+    @Override
+    public Boolean send(Long templateId, MessageSaveReqDTO messageSaveReqDTO, Object entity) {
+        MessageTemplateDO messageTemplateDO = messageTemplateMapper.selectById(templateId); // get the corresponding template
+        if (messageTemplateDO == null) {
+            throw new BaseException("system-messages", "system.error.template.notfound", null, "Message template not found");
+        }
+        Map<?, ?> map = BeanUtils.toBean(entity, Map.class); // convert entity to key-value pairs
+        // update template values
+        String message = messageTemplateDO.getContent();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            String key = entry.getKey().toString();
+            String value = entry.getValue() != null ? entry.getValue().toString() : "";
+            message = message.replace("${" + key + "}", value);
+        }
+        MessageDO messageDO = BeanUtils.toBean(messageSaveReqDTO, MessageDO.class);
+        // set template basic data
+        messageDO.setCategory(messageTemplateDO.getCategory());
+        messageDO.setMsgLevel(messageTemplateDO.getMsgLevel());
+        messageDO.setTitle(messageTemplateDO.getTitle());
+        // actual message
+        messageDO.setContent(message);
+
+        // compatible with scheduled task triggers, default to super admin
+        if(messageSaveReqDTO.getCreateBy() == null || messageSaveReqDTO.getCreatorId() == null){
+            messageDO.setCreatorId(getLoginUser().getUserId());
+            messageDO.setCreateBy(getLoginUser().getUser().getNickName());
+        }else {
+            messageDO.setCreatorId(messageSaveReqDTO.getCreatorId());
+            messageDO.setCreateBy(messageSaveReqDTO.getCreateBy());
+        }
+        boolean save = this.save(messageDO);
+        // update message
+        this.getReceiverWDNum(messageSaveReqDTO.getReceiverId());
+        return save;
+    }
+
+    @Override
+    public Boolean sendDbChangeMessage( Long receiverId, Object entity) {
+        MessageSaveReqDTO messageSaveReqDTO = new MessageSaveReqDTO();
+        messageSaveReqDTO.setSenderId(1L);
+        messageSaveReqDTO.setCreatorId(1L);
+        messageSaveReqDTO.setCreateBy("Super Admin");
+        messageSaveReqDTO.setReceiverId(receiverId);
+        try {
+            return this.send(3L,messageSaveReqDTO,entity);
+        }catch (Exception e){
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+            System.out.println(entity.toString());
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+            System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+            return false;
+        }
+//        return this.send(3L,messageSaveReqDTO,entity);
+
+    }
+
+    /**
+     * Query message count
+     * @param message query criteria
+     * @return count
+     */
+    @Override
+    public Long getNum(MessagePageReqVO message) {
+        message.setDelFlag(1);
+        QueryWrapper<MessageDO> queryWrapper = new QueryWrapper<>(MessageConvert.INSTANCE.convertToDO(message));
+        Long count = this.count(queryWrapper);
+        WebSocketMessageServer.sendMessage(message.getReceiverId().toString(), count.toString()); // message update
+        return count;
+    }
+
+    /**
+     * Mark as read
+     * @param id message id
+     * @return whether succeeded
+     */
+    public Boolean read(Long id) {
+        MessageDO messageDO = new MessageDO();
+        messageDO.setId(id);
+        messageDO.setHasRead(MessageHasReadEnums.YD.code);
+        boolean b = this.updateById(messageDO);
+        // update message
+        this.getReceiverWDNum(getLoginUser().getUserId());
+        return b;
+    }
+
+    /**
+     * Mark all as read
+     * @param receiverId receiver id
+     * @param category message type
+     * @param module message module
+     * @return whether succeeded
+     */
+    public Boolean readAll(Long receiverId, Integer category, Integer module) {
+        LambdaUpdateWrapper<MessageDO> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(MessageDO::getReceiverId, receiverId);
+        if (category != null) {
+            updateWrapper.eq(MessageDO::getCategory, category);
+        }
+        if (module != null) {
+            updateWrapper.eq(MessageDO::getModule, module);
+        }
+        updateWrapper.set(MessageDO::getHasRead, MessageHasReadEnums.YD.code);
+        this.update(updateWrapper);
+        // update message
+        this.getReceiverWDNum(getLoginUser().getUserId());
+        return true;
+    }
+
+    /**
+     * Update receiver's unread message count
+     *
+     * @param receiverId receiver id
+     */
+    public void getReceiverWDNum(Long receiverId) {
+        MessagePageReqVO messagePageReqVO = new MessagePageReqVO();
+        messagePageReqVO.setHasRead(MessageHasReadEnums.WD.code);
+        messagePageReqVO.setReceiverId(receiverId);
+        this.getNum(messagePageReqVO);
+    }
+}

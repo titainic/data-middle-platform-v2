@@ -1,0 +1,176 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.att.controller.admin.cat;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.Arrays;
+import cn.hutool.core.date.DateUtil;
+import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttDataDevCatPageReqVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttDataDevCatRespVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttDataDevCatSaveReqVO;
+import tech.qiantong.qdata.module.att.convert.cat.AttDataDevCatConvert;
+import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttDataDevCatDO;
+import tech.qiantong.qdata.module.att.service.cat.IAttDataDevCatService;
+
+/**
+ * Data Development Category Management Controller
+ *
+ * @author qdata
+ * @date 2025-03-11
+ */
+@Tag(name = "数据开发类目管理")
+@RestController
+@RequestMapping("/att/dataDevCat")
+@Validated
+public class AttDataDevCatController extends BaseController {
+    @Resource
+    private tech.qiantong.qdata.module.att.service.project.ProjectCatalogAccess catalogs;
+    private static final tech.qiantong.qdata.module.att.service.project.ProjectCatalogAccess.Kind KIND=tech.qiantong.qdata.module.att.service.project.ProjectCatalogAccess.Kind.DEVELOP;
+    @Resource
+    private IAttDataDevCatService attDataDevCatService;
+
+    @Operation(summary = "查询数据开发类目管理列表")
+    @GetMapping("/list")
+    public CommonResult<List<AttDataDevCatRespVO>> list(AttDataDevCatPageReqVO attDataDevCat) {
+        attDataDevCat.setAccessibleProjectIds(catalogs.projects(KIND,"read",attDataDevCat.getProjectId(),attDataDevCat.getProjectCode()));
+        List<AttDataDevCatDO> attDataDevCatDOList = attDataDevCatService.getAttDataDevCatList(attDataDevCat);
+        return CommonResult.success(BeanUtils.toBean(attDataDevCatDOList, AttDataDevCatRespVO.class));
+    }
+
+    @Operation(summary = "导出数据开发类目管理列表")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:export')")
+    @Log(title = "log.op.title.att.data.dev.cat", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, AttDataDevCatPageReqVO exportReqVO) {
+        exportReqVO.setAccessibleProjectIds(catalogs.projects(KIND,"export",exportReqVO.getProjectId(),exportReqVO.getProjectCode()));
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<AttDataDevCatDO> list = (List<AttDataDevCatDO>) attDataDevCatService.getAttDataDevCatPage(exportReqVO).getRows();
+        ExcelUtil<AttDataDevCatRespVO> util = new ExcelUtil<>(AttDataDevCatRespVO.class);
+        util.exportExcel(response, AttDataDevCatConvert.INSTANCE.convertToRespVOList(list), "Application Management Data");
+    }
+
+    @Operation(summary = "导入数据开发类目管理列表")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:import')")
+    @Log(title = "log.op.title.att.data.dev.cat", businessType = BusinessType.IMPORT)
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        ExcelUtil<AttDataDevCatRespVO> util = new ExcelUtil<>(AttDataDevCatRespVO.class);
+        List<AttDataDevCatRespVO> importExcelList = util.importExcel(file.getInputStream());
+        for(var row:importExcelList){
+            if(!updateSupport && row.getId()!=null)throw new IllegalArgumentException("新增类目不能指定历史标识");
+            var owner=catalogs.prepare(KIND,row.getId(),row.getProjectId(),row.getProjectCode(),row.getParentId(),row.getCode(),row.getName(),row.getId()==null?"add":"edit");
+            row.setName(row.getName().trim());row.setProjectId(owner.projectId());row.setProjectCode(owner.projectCode());row.setCode(owner.code());row.setParentId(owner.parentId());row.setDelFlag(null);row.setCreatorId(null);row.setCreateBy(null);row.setCreateTime(null);row.setUpdaterId(null);row.setUpdateBy(null);row.setUpdateTime(null);
+        }
+        String operName = getUsername();
+        String message = attDataDevCatService.importAttDataDevCat(importExcelList, updateSupport, operName);
+        return success(message);
+    }
+
+    @Operation(summary = "获取数据开发类目管理详细信息")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:query')")
+    @GetMapping(value = "/{id:\\d+}")
+    public CommonResult<AttDataDevCatRespVO> getInfo(@PathVariable("id") Long id) {
+        catalogs.category(KIND,id,"read");
+        AttDataDevCatDO attDataDevCatDO = attDataDevCatService.getAttDataDevCatById(id);
+        return CommonResult.success(BeanUtils.toBean(attDataDevCatDO, AttDataDevCatRespVO.class));
+    }
+
+    @Operation(summary = "检查类目及其子类目下是否存在数据开发任务")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:edit')")
+    @GetMapping("/hasDataDevelopmentTask/{id}")
+    public CommonResult<Boolean> hasDataDevelopmentTask(@PathVariable("id") Long id) {
+        catalogs.category(KIND,id,"edit");
+        return CommonResult.success(attDataDevCatService.hasDataDevelopmentTask(id));
+    }
+
+    @Operation(summary = "检查同一上级类目下名称是否已被使用")
+    @PreAuthorize("@ss.hasAnyPermi('att:dataDevCat:add,att:dataDevCat:edit')")
+    @GetMapping("/nameUsed")
+    public CommonResult<Boolean> isNameUsed(@RequestParam(required = false) Long id,
+                                            @RequestParam Long parentId,
+                                            @RequestParam String name, @RequestParam(required=false) Long projectId, @RequestParam(required=false) String projectCode) {
+        return CommonResult.success(catalogs.nameUsed(KIND,id,parentId,name,projectId,projectCode));
+    }
+
+    @Operation(summary = "查询类目关联的数据开发任务数量")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:edit')")
+    @GetMapping("/dataDevelopmentTaskCount/{id}")
+    public CommonResult<Long> getDataDevelopmentTaskCount(@PathVariable("id") Long id) {
+        catalogs.category(KIND,id,"edit");
+        return CommonResult.success(attDataDevCatService.getDataDevelopmentTaskCount(id));
+    }
+
+    @Operation(summary = "新增数据开发类目管理")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:add')")
+    @Log(title = "log.op.title.att.data.dev.cat", businessType = BusinessType.INSERT)
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody AttDataDevCatSaveReqVO attDataDevCat) {
+        if(attDataDevCat.getId()!=null)throw new IllegalArgumentException("新增类目不能指定历史标识");
+        var owner=catalogs.prepare(KIND,attDataDevCat.getId(),attDataDevCat.getProjectId(),attDataDevCat.getProjectCode(),attDataDevCat.getParentId(),attDataDevCat.getCode(),attDataDevCat.getName(),"add");
+        attDataDevCat.setName(attDataDevCat.getName().trim());attDataDevCat.setProjectId(owner.projectId());attDataDevCat.setProjectCode(owner.projectCode());attDataDevCat.setCode(owner.code());attDataDevCat.setParentId(owner.parentId());attDataDevCat.setCreatorId(null);attDataDevCat.setCreateBy(null);attDataDevCat.setCreateTime(null);
+        attDataDevCat.setCreatorId(getUserId());
+        attDataDevCat.setCreateBy(getNickName());
+        attDataDevCat.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(attDataDevCatService.createAttDataDevCat(attDataDevCat));
+    }
+
+    @Operation(summary = "修改数据开发类目管理")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:edit')")
+    @Log(title = "log.op.title.att.data.dev.cat", businessType = BusinessType.UPDATE)
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody AttDataDevCatSaveReqVO attDataDevCat) {
+        var owner=catalogs.prepare(KIND,attDataDevCat.getId(),attDataDevCat.getProjectId(),attDataDevCat.getProjectCode(),attDataDevCat.getParentId(),attDataDevCat.getCode(),attDataDevCat.getName(),"edit");
+        attDataDevCat.setName(attDataDevCat.getName().trim());attDataDevCat.setProjectId(owner.projectId());attDataDevCat.setProjectCode(owner.projectCode());attDataDevCat.setCode(owner.code());attDataDevCat.setParentId(owner.parentId());attDataDevCat.setCreatorId(null);attDataDevCat.setCreateBy(null);attDataDevCat.setCreateTime(null);
+        attDataDevCat.setUpdatorId(getUserId());
+        attDataDevCat.setUpdateBy(getNickName());
+        attDataDevCat.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(attDataDevCatService.updateAttDataDevCat(attDataDevCat));
+    }
+
+    @Operation(summary = "删除数据开发类目管理")
+    @PreAuthorize("@ss.hasPermi('att:dataDevCat:remove')")
+    @Log(title = "log.op.title.att.data.dev.cat", businessType = BusinessType.DELETE)
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+        for(Long id:ids)catalogs.category(KIND,id,"remove");
+        return CommonResult.toAjax(attDataDevCatService.removeAttDataDevCat(Arrays.asList(ids)));
+    }
+
+}

@@ -1,0 +1,109 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package ${packageName}.mapper;
+
+import java.util.List;
+import ${packageName}.domain.${ClassName};
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+#if($table.sub)
+import ${packageName}.domain.${subClassName};
+#end
+
+/**
+ * ${functionName}Mapper interface
+ *
+ * @author ${author}
+ * @date ${datetime}
+ */
+public interface ${ClassName}Mapper extends BaseMapper<${ClassName}> {
+    /**
+     * Query ${functionName}
+     *
+     * @param ${pkColumn.javaField} ${functionName} primary key
+     * @return ${functionName}
+     */
+    public ${ClassName} select${ClassName}By${pkColumn.capJavaField}(${pkColumn.javaType} ${pkColumn.javaField});
+
+    /**
+     * Query ${functionName} list
+     *
+     * @param ${className} ${functionName}
+     * @return ${functionName} collection
+     */
+    public List<${ClassName}> select${ClassName}List(${ClassName} ${className});
+
+    /**
+     * Add ${functionName}
+     *
+     * @param ${className} ${functionName}
+     * @return result
+     */
+    public int insert${ClassName}(${ClassName} ${className});
+
+    /**
+     * Modify ${functionName}
+     *
+     * @param ${className} ${functionName}
+     * @return result
+     */
+    public int update${ClassName}(${ClassName} ${className});
+
+    /**
+     * Delete ${functionName}
+     *
+     * @param ${pkColumn.javaField} ${functionName} primary key
+     * @return result
+     */
+    public int delete${ClassName}By${pkColumn.capJavaField}(${pkColumn.javaType} ${pkColumn.javaField});
+
+    /**
+     * Delete ${functionName} in batches
+     *
+     * @param ${pkColumn.javaField}s The primary key set of data that needs to be deleted
+     * @return result
+     */
+    public int delete${ClassName}By${pkColumn.capJavaField}s(${pkColumn.javaType}[] ${pkColumn.javaField}s);
+#if($table.sub)
+
+    /**
+     * Batch delete ${subTable.functionName}
+     *
+     * @param ${pkColumn.javaField}s The primary key set of data that needs to be deleted
+     * @return result
+     */
+    public int delete${subClassName}By${subTableFkClassName}s(${pkColumn.javaType}[] ${pkColumn.javaField}s);
+
+    /**
+     * Add ${subTable.functionName} in batches
+     *
+     * @param ${subclassName}List ${subTable.functionName} list
+     * @return result
+     */
+    public int batch${subClassName}(List<${subClassName}> ${subclassName}List);
+
+
+    /**
+     * Delete ${subTable.functionName} information through ${functionName} primary key
+     *
+     * @param ${pkColumn.javaField} ${functionName}ID
+     * @return result
+     */
+    public int delete${subClassName}By${subTableFkClassName}(${pkColumn.javaType} ${pkColumn.javaField});
+#end
+}

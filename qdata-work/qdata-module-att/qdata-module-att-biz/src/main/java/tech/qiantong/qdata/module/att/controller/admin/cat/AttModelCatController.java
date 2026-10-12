@@ -1,0 +1,139 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.att.controller.admin.cat;
+
+import cn.hutool.core.date.DateUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttModelCatPageReqVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttModelCatRespVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttModelCatSaveReqVO;
+import tech.qiantong.qdata.module.att.convert.cat.AttModelCatConvert;
+import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttModelCatDO;
+import tech.qiantong.qdata.module.att.service.cat.IAttModelCatService;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.List;
+
+/**
+ * Logical Model Category Management Controller
+ *
+ * @author qdata
+ * @date 2025-01-20
+ */
+@Tag(name = "逻辑模型类目管理")
+@RestController
+@RequestMapping("/att/modelCat")
+@Validated
+public class AttModelCatController extends BaseController {
+    @Resource
+    private IAttModelCatService attModelCatService;
+
+    @Operation(summary = "查询逻辑模型类目管理列表")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:list')")
+    @GetMapping("/list")
+    public CommonResult<List<AttModelCatRespVO>> list(AttModelCatPageReqVO attModelCat) {
+        List<AttModelCatDO> attModelCatDOList = attModelCatService.getAttModelCatList(attModelCat);
+        return CommonResult.success(BeanUtils.toBean(attModelCatDOList, AttModelCatRespVO.class));
+    }
+
+    @Operation(summary = "导出逻辑模型类目管理列表")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:export')")
+    @Log(title = "log.op.title.att.model.cat", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, AttModelCatPageReqVO exportReqVO) {
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<AttModelCatDO> list = (List<AttModelCatDO>) attModelCatService.getAttModelCatPage(exportReqVO).getRows();
+        ExcelUtil<AttModelCatRespVO> util = new ExcelUtil<>(AttModelCatRespVO.class);
+        util.exportExcel(response, AttModelCatConvert.INSTANCE.convertToRespVOList(list), "Application Management Data");
+    }
+
+    @Operation(summary = "导入逻辑模型类目管理列表")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:import')")
+    @Log(title = "log.op.title.att.model.cat", businessType = BusinessType.IMPORT)
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        ExcelUtil<AttModelCatRespVO> util = new ExcelUtil<>(AttModelCatRespVO.class);
+        List<AttModelCatRespVO> importExcelList = util.importExcel(file.getInputStream());
+        String operName = getUsername();
+        String message = attModelCatService.importAttModelCat(importExcelList, updateSupport, operName);
+        return success(message);
+    }
+
+    @Operation(summary = "获取逻辑模型类目管理详细信息")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:query')")
+    @GetMapping(value = "/{ID:\\d+}")
+    public CommonResult<AttModelCatRespVO> getInfo(@PathVariable("ID") Long ID) {
+        AttModelCatDO attModelCatDO = attModelCatService.getAttModelCatById(ID);
+        return CommonResult.success(BeanUtils.toBean(attModelCatDO, AttModelCatRespVO.class));
+    }
+
+    @Operation(summary = "新增逻辑模型类目管理")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:add')")
+    @Log(title = "log.op.title.att.model.cat", businessType = BusinessType.INSERT)
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody AttModelCatSaveReqVO attModelCat) {
+        attModelCat.setCreatorId(getUserId());
+        attModelCat.setCreateBy(getNickName());
+        attModelCat.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(attModelCatService.createAttModelCat(attModelCat));
+    }
+
+    @Operation(summary = "修改逻辑模型类目管理")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:edit')")
+    @Log(title = "log.op.title.att.model.cat", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody AttModelCatSaveReqVO attModelCat) {
+        attModelCat.setUpdatorId(getUserId());
+        attModelCat.setUpdateBy(getNickName());
+        attModelCat.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(attModelCatService.updateAttModelCat(attModelCat));
+    }
+
+    //    @Operation(summary = "Delete logical model category")
+//    @PreAuthorize("@ss.hasPermi('att:modelCat:remove')")
+//    @Log(title = "log.op.title.att.model.cat", businessType = BusinessType.DELETE)
+//    @DeleteMapping("/{IDs}")
+//    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+//        return CommonResult.toAjax(attModelCatService.removeAttModelCat(Arrays.asList(ids)));
+//    }
+    // Delete
+    @Operation(summary = "删除逻辑模型类目管理")
+    @PreAuthorize("@ss.hasPermi('att:modelCat:remove')")
+    @Log(title = "log.op.title.att.model.cat", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{ID}")
+    public CommonResult<Integer> remove(@PathVariable Long ID) {
+        return CommonResult.toAjax(attModelCatService.removeAttModelCat(ID));
+    }
+
+}

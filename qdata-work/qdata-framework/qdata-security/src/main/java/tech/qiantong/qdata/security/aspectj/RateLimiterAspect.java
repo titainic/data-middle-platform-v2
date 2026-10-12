@@ -1,0 +1,110 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.security.aspectj;
+
+import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Before;
+import org.aspectj.lang.reflect.MethodSignature;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.stereotype.Component;
+import tech.qiantong.qdata.common.annotation.RateLimiter;
+import tech.qiantong.qdata.common.enums.LimitType;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.ip.IpUtils;
+
+import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Current limiting processing
+ *
+ * @author qdata
+ */
+@Aspect
+@Component
+public class RateLimiterAspect
+{
+    private static final Logger log = LoggerFactory.getLogger(RateLimiterAspect.class);
+
+    private RedisTemplate<Object, Object> redisTemplate;
+
+    private RedisScript<Long> limitScript;
+
+    @Autowired
+    public void setRedisTemplate1(RedisTemplate<Object, Object> redisTemplate)
+    {
+        this.redisTemplate = redisTemplate;
+    }
+
+    @Autowired
+    public void setLimitScript(RedisScript<Long> limitScript)
+    {
+        this.limitScript = limitScript;
+    }
+
+    @Before("@annotation(rateLimiter)")
+    public void doBefore(JoinPoint point, RateLimiter rateLimiter) throws Throwable
+    {
+        int time = rateLimiter.time();
+        int count = rateLimiter.count();
+
+        String combineKey = getCombineKey(rateLimiter, point);
+        List<Object> keys = Collections.singletonList(combineKey);
+        try
+        {
+            Long number = redisTemplate.execute(limitScript, keys, count, time);
+            if (StringUtils.isNull(number) || number.intValue() > count)
+            {
+                throw new ServiceException("sys.error.access.too.frequent",
+                        "Access is too frequent; please try again later");
+            }
+            log.info(MessageUtils.messageEn("log.rate.limit"), count, number.intValue(), combineKey);
+        }
+        catch (ServiceException e)
+        {
+            throw e;
+        }
+        catch (Exception e)
+        {
+            throw new ServiceException("sys.error.rate.limit", "Server rate limit, please try again later");
+        }
+    }
+
+    public String getCombineKey(RateLimiter rateLimiter, JoinPoint point)
+    {
+        StringBuffer stringBuffer = new StringBuffer(rateLimiter.key());
+        if (rateLimiter.limitType() == LimitType.IP)
+        {
+            stringBuffer.append(IpUtils.getIpAddr()).append("-");
+        }
+        MethodSignature signature = (MethodSignature) point.getSignature();
+        Method method = signature.getMethod();
+        Class<?> targetClass = method.getDeclaringClass();
+        stringBuffer.append(targetClass.getName()).append("-").append(method.getName());
+        return stringBuffer.toString();
+    }
+}

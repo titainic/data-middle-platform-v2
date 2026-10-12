@@ -1,0 +1,170 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <div class="app-container" ref="app-container">
+    <div class="pagecont-top" v-show="showSearch" style="padding-bottom:15px">
+      <div class="infotop">
+        <div class="infotop-title mb15">
+          {{ clientDetail.name }}
+        </div>
+        <el-row :gutter="2">
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ td('common.texts.number') }}</div>
+              <div class="infotop-row-value">{{ clientDetail.id }}</div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ td('ds.client.details.appSecret') }}</div>
+              <div class="infotop-row-value">
+                {{ secretVisible ? revealedSecret : '••••••••••••••••' }}
+                <el-button v-if="clientDetail.canEdit" link type="primary" @click="toggleSecret">{{secretVisible?'隐藏':'显示'}}</el-button>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{td('ds.client.appIcon')}}</div>
+              <div class="infotop-row-value">
+                <image-preview :src="clientDetail.logo || noDataImg" :width="50" :height="50" />
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="24" style="margin: 2px 0;">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ td('common.texts.description') }}</div>
+              <div class="infotop-row-value">
+                <span class="ellipsis-2" :title="clientDetail.description">{{ clientDetail.description || '-' }}</span>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="24">
+            <div class="infotop-row border-top">
+              <div class="infotop-row-lable">{{ td('common.texts.remark') }}</div>
+              <div class="infotop-row-value">
+                <span class="ellipsis" :title="clientDetail.remark">{{ clientDetail.remark || '-' }}</span>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+
+      </div>
+    </div>
+
+    <div class="pagecont-bottom">
+      <el-tabs v-model="activeName" @tab-click="handleClick">
+        <el-tab-pane v-for="item in tabList" :key="item.name" :label="item.label" :name="item.name">
+          <component :is="item.component" :clientDetail="clientDetail"></component>
+        </el-tab-pane>
+      </el-tabs>
+    </div>
+
+  </div>
+</template>
+
+<script setup name="Client">
+import useDefaultLang from "@/composables/useDefaultLang";
+import { getClient, revealClientSecret } from "@/api/ds/client/client";
+import { useRoute } from 'vue-router';
+import info from "@/views/ds/client/detail/info.vue";
+import api from "@/views/ds/client/detail/api.vue";
+
+const { td } = useDefaultLang();
+const noDataImg = new URL('@/assets/images/system/D.png', import.meta.url).href
+
+const { proxy } = getCurrentInstance();
+const { auth_public, auth_app_type } = proxy.useDict('auth_public', 'auth_app_type');
+const tabList = ref([
+    {
+        label: td('ds.client.details.apiAuth'),
+        name: '1',
+        component: api
+    },
+    {
+        label: td('ds.client.details.detailInfo'),
+        name: '2',
+        component: info
+    }
+  ]);
+const activeName = ref('1')
+const secretVisible = ref(false);
+const revealedSecret = ref('');
+async function toggleSecret() {
+  if(secretVisible.value){secretVisible.value=false;revealedSecret.value='';return;}
+  const currentId=clientDetail.value.id;
+  const response=await revealClientSecret(currentId);
+  if(currentId!==clientDetail.value.id)return;
+  revealedSecret.value=response.data;secretVisible.value=true;
+}
+
+
+const handleClick = (tab, event) => {
+
+}
+
+const showSearch = ref(true);
+const route = useRoute();
+let id = route.query.id;
+const data = reactive({
+  clientDetail: {
+  },
+  form: {},
+});
+
+const { clientDetail, rules } = toRefs(data);
+
+/** Form query at the top of the complex details page */
+function getClientDetailById() {
+  const _id = id;
+  if(!_id)return;
+  getClient(_id).then(response => {
+    clientDetail.value = response.data;
+  });
+}
+// Save without code
+const closeDialog = () => {
+  if (!currentNode.value.data.code) {
+    graph.removeNode(currentNode.value.id); // Remove component based on component ID
+  }
+  drawer.value = false;
+};
+// Monitor id changes
+watch(
+  () => route.query.id,
+  (newId) => {
+    secretVisible.value=false;revealedSecret.value='';
+    id = newId;  // If id is empty, the default value 1 is used
+    getClientDetailById();
+
+  },
+  { immediate: true }  // `immediate` is true, which means that a watch will be executed immediately when the page is loaded.
+);
+
+</script>
+<style scoped lang="scss">
+.app-container {
+  margin: 15px 15px 0px 15px;
+
+  .pagecont-bottom {
+    min-height: calc(100vh - 343px) !important;
+
+  }
+}
+</style>

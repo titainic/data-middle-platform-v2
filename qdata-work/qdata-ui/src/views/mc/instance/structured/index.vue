@@ -1,0 +1,300 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <div class="app-container" v-loading="store.loading">
+    <el-container>
+      <!-- <SourceSystemTree
+        ref="sourceSystemTreeRef"
+        @node-click="handleNodeClick"
+        @data-loaded="handleTreeDataLoaded"
+      /> -->
+      <el-main class="main-content">
+        <qt-wrap :columns="tableStroe.columns" :tableRef="tableRef">
+          <template #search>
+            <qt-search-bar
+              v-bind="searchStore"
+              :params="tableStroe.params"
+              @query="handleQueryClick"
+              @reset="handleResetQueryClick"
+            />
+          </template>
+          <template #actions-data>
+            <span>{{ locale === 'en-US' ? 'Execution history is retained for audit.' : '执行历史保留，用于审计和追溯。' }}</span>
+          </template>
+          <qt-table v-bind="tableStroe" ref="tableRef">
+            <template #task-status="scope">
+              <el-switch
+                v-model="scope.row.taskStatus"
+                active-value="1"
+                inactive-value="0"
+              />
+            </template>
+
+            <template #date-range="{ row }">
+              {{ row.startTime }} ~ {{ row.endTime }}
+            </template>
+
+            <template #handle="{ row }">
+              <el-button
+                link
+                type="primary"
+                icon="View"
+                @click="handleViewClick(row)"
+              >
+                {{ td("mc.task.structured.viewLog") }}
+              </el-button>
+              <el-button
+                link
+                type="warning"
+                icon="Download"
+                @click="handleDownloadClick(row)"
+              >
+                {{ td("mc.task.structured.downloadLog") }}
+              </el-button>
+            </template>
+          </qt-table>
+        </qt-wrap>
+      </el-main>
+    </el-container>
+
+    <LogDialog v-model="dialog.open" v-bind="dialog" />
+  </div>
+</template>
+
+<script setup name="InstanceStructured">
+import { useI18n } from "vue-i18n";
+import { reactive, computed, getCurrentInstance, ref } from "vue";
+import { listTaskInstance } from "@/api/mc/task/taskInstance";
+import { getParentLabelPath } from "@/utils/anivia";
+import { getTaskInstanceLog } from "@/api/mc/task/taskInstanceLog";
+import LogDialog from "@/components/LogDialog/index.vue";
+import SourceSystemTree from "@/views/mc/task/structured/components/SourceSystemTree.vue";
+import useDefaultLang from "@/composables/useDefaultLang";
+
+const { td } = useDefaultLang();
+const { t, locale } = useI18n();
+const { proxy } = getCurrentInstance();
+
+const sourceSystemTreeRef = ref();
+const store = reactive({
+  treeDomains: [],
+  loading: false,
+  rows: [],
+});
+
+const tableRef = ref(null);
+const tableStroe = reactive({
+  config: {
+    sort: true,
+    table: {
+      stripe: true,
+      rowKey: "id",
+      defaultSort: { prop: "create_time", order: "descending" },
+      onSelectionChange: function (rows) {
+        store.rows = rows;
+      },
+    },
+  },
+  columns: [
+    {
+      type: "selection",
+      width: 55,
+    },
+    {
+      label: td("common.texts.number"),
+      prop: "id",
+      width: 60,
+    },
+    {
+      label: td("mc.task.structured.taskName"),
+      prop: "name",
+      minWidth: 240,
+      align: "left",
+      showOverflowTooltip: {
+        effect: "light",
+      },
+    },
+    {
+      label: td("mc.task.structured.sourceSystem"),
+      prop: "sourceSystemName",
+      minWidth: 240,
+      align: "left",
+      showOverflowTooltip: {
+        effect: "light",
+      },
+    },
+    {
+      label: td("mc.task.structured.collectTableCount"),
+      prop: "totalCount",
+      width: 160,
+    },
+    {
+      label: td("mc.task.structured.collectStatus"),
+      prop: "status",
+      width: 140,
+      dict: "mc_task_instance_status",
+    },
+    {
+      label: td("mc.task.structured.collectDuration"),
+      prop: "duration",
+      width: 140,
+    },
+    {
+      label: td("mc.task.structured.collectTimeRange"),
+      slot: "date-range",
+      width: 340,
+      showOverflowTooltip: {
+        effect: "light",
+      },
+    },
+    {
+      label: td("common.texts.createdBy"),
+      prop: "createBy",
+      width: 120,
+    },
+    {
+      label: td("common.texts.createdTime"),
+      prop: "createTime",
+      sortable: true,
+      sortableKey: "create_time",
+      width: 160,
+      date: true,
+    },
+    {
+      label: td("common.texts.operation"),
+      slot: "handle",
+      width: 260,
+      fixed: "right",
+    },
+  ],
+  func: listTaskInstance,
+  params: {},
+  events: {
+    formatParams(params) {
+      if (!params.time || !params.time.length) return params;
+      const { time, ...other } = { ...params };
+      other.createTimeStart = time[0];
+      other.createTimeEnd = time[1];
+      return other;
+    },
+  },
+});
+
+const searchStore = reactive({
+  items: [
+    {
+      label: td("mc.task.structured.taskName"),
+      prop: "name",
+      component: {
+        is: "input",
+      },
+    },
+
+    {
+      label: td("common.texts.createdTime"),
+      prop: "time",
+      style: { width: "320px" },
+      component: {
+        is: "date-picker",
+        type: "daterange",
+        startPlaceholder: computed(() =>
+          td("common.form.startDatePlaceholder")
+        ),
+        endPlaceholder: computed(() => td("common.form.endDatePlaceholder")),
+      },
+    },
+  ],
+});
+
+const dialog = reactive({
+  open: false,
+  content: "",
+});
+
+// Get the source system path
+const getDomainPath = computed(() => {
+  return function (id) {
+    let domainName = getParentLabelPath(store.treeDomains, id, {
+      idKey: "id",
+      labelKey: "name",
+      childrenKey: "children",
+    });
+    const idx = domainName.indexOf("/");
+    return idx == -1 ? domainName : domainName.slice(idx + 1);
+  };
+});
+
+function handleTreeDataLoaded({ treeData, flatData }) {
+  store.treeDomains = treeData;
+}
+
+// Node click event
+function handleNodeClick(data) {
+  // Clear previous filters
+  tableStroe.params.sourceSystemId = undefined;
+  tableStroe.params.datasourceId = undefined;
+  tableStroe.params.taskId = undefined;
+
+  if (data.type === "SOURCE") {
+    tableStroe.params.sourceSystemId = data.id;
+  } else if (data.type === "DATASOURCE") {
+    tableStroe.params.datasourceId = data.id;
+  } else if (data.type === "DATABASE") {
+    tableStroe.params.taskId = data.taskId;
+  }
+  tableRef.value.getList();
+}
+
+// Search button action
+function handleQueryClick() {
+  tableRef.value?.getList();
+}
+
+// reset button action
+function handleResetQueryClick() {
+  if (sourceSystemTreeRef.value?.resetTree) {
+    sourceSystemTreeRef.value.resetTree();
+  }
+  tableStroe.params.sourceSystemId = null;
+  tableStroe.params.datasourceId = null;
+  tableStroe.params.taskId = null;
+  tableRef.value?.resetQuery();
+}
+
+function handleViewClick(row) {
+  getTaskInstanceLog(row.id).then((res) => {
+    dialog.content = res.data?.logContent || td("common.noLog");
+    dialog.open = true;
+  });
+}
+
+// Download log
+function handleDownloadClick(row) {
+  getTaskInstanceLog(row.id).then((res) => {
+    const content = res.data?.logContent || td("common.noLog");
+    const taskName = row.name || 'task';
+    const instanceId = String(row.id).replace(/[^\w\-]/g, '_');
+    const fileName = td('mc.instance.structured.logFileName', "{name}_{id}_log.log", {name: taskName, id: instanceId});
+    proxy.downloadContent(content, fileName);
+  });
+}
+
+// Delete selected row
+
+</script>

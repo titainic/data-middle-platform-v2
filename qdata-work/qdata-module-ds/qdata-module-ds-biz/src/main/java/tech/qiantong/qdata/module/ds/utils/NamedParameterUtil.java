@@ -1,0 +1,167 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.ds.utils;
+
+
+import org.springframework.util.Assert;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+
+import java.util.*;
+
+/**
+ * Utility for SQL with named parameters.
+ */
+public class NamedParameterUtil {
+
+//    public static void main(String[] args) {
+//        String sql = "select * from user where 1 = 1 ${ and id = :id } ${and name = :name}";
+//        int start = sql.indexOf("${");
+//        int end = sql.indexOf("}", start);
+//        String key = sql.substring(start + 2, end);
+//        System.out.println(key);
+//        Map<String, Object> params = new HashMap<>();
+//        params.put("name", "yuwei");
+//        params.put("id", "123");
+//        params.put("age", 12);
+//        ParsedSql parsedSql = NamedParameterUtil.parseSqlStatement(key);
+//        System.out.println(parsedSql);
+//        String actualSql = NamedParameterUtil.substituteNamedParams(parsedSql, params);
+//        Map<String, Object> acceptedFilters = NamedParameterUtil.buildValueArray(parsedSql, params);
+//        System.out.println(actualSql);
+//        System.out.println(acceptedFilters);
+//        SqlBuilderUtil.SqlFilterResult sqlFilterResult = SqlBuilderUtil.getInstance().applyFilters(sql, params);
+//        System.out.println(sqlFilterResult.getSql());
+//        Object[] array = new Object[] {};
+//        array = sqlFilterResult.getAcceptedFilters().values().toArray();
+//        Arrays.stream(array).forEach(s -> System.out.println(s));
+//    }
+
+    private NamedParameterUtil() {}
+
+    /**
+     * Defines special characters, including the custom trailing '}'.
+     */
+    private static final char[] PARAMETER_SEPARATORS =
+            new char[] {'"', '\'', ':', '&', ',', ';', '(', ')', '|', '=', '+', '-', '*', '%', '/', '\\', '<', '>', '^', '}'};
+
+    /**
+     * Encapsulates SQL statistics with parameters for subsequent decomposition and assembly.
+     * @param originalSql
+     * @return
+     */
+    public static ParsedSql parseSqlStatement(String originalSql) {
+        Assert.notNull(originalSql, "SQL must not be null");
+        ParsedSql parsedSql = new ParsedSql(originalSql);
+        Set<String> namedParameters = new HashSet();
+        char[] sqlchars = originalSql.toCharArray();
+        int namedParamCount = 0;
+        int unNamedParamCount = 0;
+        int totalParamCount = 0;
+        int i = 0;
+        while (i < sqlchars.length) {
+            char statement = sqlchars[i];
+            if (statement == ':') {
+                int j = i + 1;
+                while (j < sqlchars.length && !isSeparatorsChar(sqlchars[j])) {
+                    j++;
+                }
+                if (j - i > 1) {
+                    String paramName = originalSql.substring(i + 1, j);
+                    if (!namedParameters.contains(paramName)) {
+                        namedParameters.add(paramName);
+                        namedParamCount++;
+                    }
+                    parsedSql.addParamNames(paramName, i, j);
+                    totalParamCount++;
+                }
+                i = j - 1;
+            } else if (statement == '?') {
+                unNamedParamCount++;
+                totalParamCount++;
+            }
+            i++;
+        }
+        parsedSql.setNamedParamCount(namedParamCount);
+        parsedSql.setUnnamedParamCount(unNamedParamCount);
+        parsedSql.setTotalParamCount(totalParamCount);
+        return parsedSql;
+    }
+
+    /**
+     * Returns SQL without named parameters by replacing them with question marks.
+     * @param parsedSql
+     * @param params
+     * @return
+     */
+    public static String substituteNamedParams(ParsedSql parsedSql, Map<String, Object> params){
+        String original = parsedSql.getOriginalSql();
+        StringBuffer actual = new StringBuffer("");
+        int lastIndex = 0;
+        List<String> paramNames = parsedSql.getParamNames();
+        for (int i = 0; i < paramNames.size(); i++) {
+            int[] indexs = parsedSql.getParamIndexs(i);
+            int startIndex = indexs[0];
+            int endIndex = indexs[1];
+            String paramName = paramNames.get(i);
+            actual.append(original.substring(lastIndex, startIndex));
+            if (params != null && params.containsKey(paramName)) {
+                actual.append("?");
+            } else{
+                actual.append("?");
+            }
+            lastIndex = endIndex;
+        }
+        actual.append(original.subSequence(lastIndex, original.length()));
+        return actual.toString();
+    }
+
+    /**
+     * Returns the parameter key-value pairs required by the SQL.
+     * @param parsedSql
+     * @param params
+     * @return
+     */
+    public static LinkedHashMap<String, Object> buildValueArray(ParsedSql parsedSql, Map<String, Object> params){
+        List<String> paramNames = parsedSql.getParamNames();
+        LinkedHashMap<String, Object> acceptedFilters = new LinkedHashMap<>(parsedSql.getTotalParamCount());
+        if (parsedSql.getNamedParamCount() > 0 && parsedSql.getUnnamedParamCount() > 0) {
+            throw new ServiceException("ds.error.param.mixed", "Named parameters and ? placeholders cannot be mixed!");
+        }
+        for (int i = 0; i < paramNames.size(); i++) {
+            String keyName = paramNames.get(i);
+            if (params.containsKey(keyName)) {
+                acceptedFilters.put(keyName, params.get(keyName));
+            }
+        }
+        return acceptedFilters;
+    }
+
+    private static boolean isSeparatorsChar(char statement){
+        if (Character.isWhitespace(statement)) {
+            return true;
+        }
+        for (int i = 0; i < PARAMETER_SEPARATORS.length; i++) {
+            if (statement == PARAMETER_SEPARATORS[i]) {
+                return true;
+            }
+        }
+        return false;
+    }
+}

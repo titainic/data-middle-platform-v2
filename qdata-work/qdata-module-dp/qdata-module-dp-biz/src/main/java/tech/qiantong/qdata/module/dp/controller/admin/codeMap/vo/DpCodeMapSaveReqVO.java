@@ -1,0 +1,63 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dp.controller.admin.codeMap.vo;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+import tech.qiantong.qdata.common.core.domain.BaseEntity;
+
+import jakarta.validation.constraints.Size;
+
+/**
+ * Data Element Code Map Save Request VO - DP_CODE_MAP
+ *
+ * @author qdata
+ * @date 2025-01-21
+ */
+@Schema(description = "数据元代码映射 Response VO")
+@Data
+public class DpCodeMapSaveReqVO extends BaseEntity {
+
+    private static final long serialVersionUID = 1L;
+
+    @Schema(description = "ID")
+    private Long id;
+
+    @Schema(description = "数据元id", example = "")
+    @Size(max = 256, message = "数据元id长度不能超过256个字符")
+    private String dataElemId;
+
+    @Schema(description = "原始值", example = "")
+    @Size(max = 256, message = "原始值长度不能超过256个字符")
+    private String originalValue;
+
+    @Schema(description = "代码名", example = "")
+    @Size(max = 256, message = "代码名长度不能超过256个字符")
+    private String codeName;
+
+    @Schema(description = "代码值", example = "")
+    @Size(max = 256, message = "代码值长度不能超过256个字符")
+    private String codeValue;
+
+    @Schema(description = "备注", example = "")
+    @Size(max = 256, message = "备注长度不能超过256个字符")
+    private String remark;
+
+
+}

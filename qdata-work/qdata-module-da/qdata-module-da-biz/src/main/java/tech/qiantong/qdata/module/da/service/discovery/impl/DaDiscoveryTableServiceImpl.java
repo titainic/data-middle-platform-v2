@@ -1,0 +1,285 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.da.service.discovery.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.da.controller.admin.asset.vo.DaAssetPageReqVO;
+import tech.qiantong.qdata.module.da.controller.admin.assetColumn.vo.DaAssetColumnSaveReqVO;
+import tech.qiantong.qdata.module.da.controller.admin.discovery.vo.*;
+import tech.qiantong.qdata.module.da.dal.dataobject.discovery.DaDiscoveryColumnDO;
+import tech.qiantong.qdata.module.da.dal.dataobject.discovery.DaDiscoveryTableDO;
+import tech.qiantong.qdata.module.da.dal.mapper.discovery.DaDiscoveryTableMapper;
+import tech.qiantong.qdata.module.da.service.asset.IDaAssetService;
+import tech.qiantong.qdata.module.da.service.discovery.IDaDiscoveryColumnService;
+import tech.qiantong.qdata.module.da.service.discovery.IDaDiscoveryTableService;
+import tech.qiantong.qdata.module.da.service.discovery.IDaDiscoveryTaskService;
+import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
+
+import jakarta.annotation.Resource;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * Data Discovery Table Info Service business layer processing
+ *
+ * @author qdata
+ * @date 2025-02-11
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class DaDiscoveryTableServiceImpl  extends ServiceImpl<DaDiscoveryTableMapper,DaDiscoveryTableDO> implements IDaDiscoveryTableService {
+    @Resource
+    private DaDiscoveryTableMapper daDiscoveryTableMapper;
+    @Resource
+    @Lazy
+    private IDaDiscoveryColumnService iDaDiscoveryColumnService;
+    @Resource
+    @Lazy
+    private IDaAssetService iDaAssetService;
+    @Resource
+    @Lazy
+    private IDaDiscoveryTaskService iDaDiscoveryTaskService;
+
+    @Override
+    public PageResult<DaDiscoveryTableDO> getDaDiscoveryTablePage(DaDiscoveryTablePageReqVO pageReqVO) {
+        return daDiscoveryTableMapper.selectPage(pageReqVO);
+    }
+
+    @Override
+    public List<DaDiscoveryTableDO> getDaDiscoveryTableList(DaDiscoveryTablePageReqVO reqVO) {
+
+        MPJLambdaWrapper<DaDiscoveryTableDO> wrapper = new MPJLambdaWrapper<>();
+        wrapper.selectAll(DaDiscoveryTableDO.class)
+                .eq(reqVO.getTaskId() != null, DaDiscoveryTableDO::getTaskId, reqVO.getTaskId())
+                .like(StringUtils.isNotBlank(reqVO.getTableName()), DaDiscoveryTableDO::getTableName, reqVO.getTableName())
+                .eq(StringUtils.isNotBlank(reqVO.getTableComment()), DaDiscoveryTableDO::getTableComment, reqVO.getTableComment())
+                .eq(StringUtils.isNotBlank(reqVO.getChangeFlag()), DaDiscoveryTableDO::getChangeFlag, reqVO.getChangeFlag())
+                .eq(StringUtils.isNotBlank(reqVO.getStatus()), DaDiscoveryTableDO::getStatus, reqVO.getStatus())
+                .eq(StringUtils.isNotBlank(reqVO.getIgnoreFlag()), DaDiscoveryTableDO::getIgnoreFlag, reqVO.getIgnoreFlag());
+        if(StringUtils.isNotBlank(reqVO.getKeyword())){
+            // Newly added keyword fuzzy matching
+            wrapper.and(q -> q.like(DaDiscoveryTableDO::getTableName, reqVO.getKeyword())
+                    .or()
+                    .like(DaDiscoveryTableDO::getTableComment, reqVO.getKeyword()));
+        }
+
+        return daDiscoveryTableMapper.selectList(wrapper);
+    }
+
+    @Override
+    public Long createDaDiscoveryTable(DaDiscoveryTableSaveReqVO createReqVO) {
+        DaDiscoveryTableDO dictType = BeanUtils.toBean(createReqVO, DaDiscoveryTableDO.class);
+        daDiscoveryTableMapper.insert(dictType);
+        return dictType.getId();
+    }
+
+    @Override
+    public Long createDaDiscoveryTable(DaDiscoveryTableDO createReqVO) {
+        daDiscoveryTableMapper.insert(createReqVO);
+        return createReqVO.getId();
+    }
+
+    @Override
+    public int updateDaDiscoveryTable(DaDiscoveryTableSaveReqVO updateReqVO) {
+        // Related validation
+
+        // Update data discovery table info
+        DaDiscoveryTableDO updateObj = BeanUtils.toBean(updateReqVO, DaDiscoveryTableDO.class);
+        return daDiscoveryTableMapper.updateById(updateObj);
+    }
+    @Override
+    public int updateDaDiscoveryTable(DaDiscoveryTableDO updateReqVO) {
+        // Update data discovery table info
+        return daDiscoveryTableMapper.updateById(updateReqVO);
+    }
+    @Override
+    public int removeDaDiscoveryTable(Collection<Long> idList) {
+        // Batch delete data discovery table info
+        return daDiscoveryTableMapper.deleteBatchIds(idList);
+    }
+
+    @Override
+    public DaDiscoveryTableDO getDaDiscoveryTableById(Long id) {
+        return daDiscoveryTableMapper.selectById(id);
+    }
+
+    @Override
+    public List<DaDiscoveryTableDO> getDaDiscoveryTableList() {
+        return daDiscoveryTableMapper.selectList();
+    }
+
+    @Override
+    public Map<Long, DaDiscoveryTableDO> getDaDiscoveryTableMap() {
+        List<DaDiscoveryTableDO> daDiscoveryTableList = daDiscoveryTableMapper.selectList();
+        return daDiscoveryTableList.stream()
+                .collect(Collectors.toMap(
+                        DaDiscoveryTableDO::getId,
+                        daDiscoveryTableDO -> daDiscoveryTableDO,
+                        // Keep existing value
+                        (existing, replacement) -> existing
+                ));
+    }
+
+
+    /**
+     * Import data discovery table info data
+     *
+     * @param importExcelList Data discovery table info data list
+     * @param isUpdateSupport Whether to support update, if already exists, update the data
+     * @param operName Operating user
+     * @return result
+     */
+    @Override
+    public String importDaDiscoveryTable(List<DaDiscoveryTableRespVO> importExcelList, boolean isUpdateSupport, String operName) {
+        if (StringUtils.isNull(importExcelList) || importExcelList.size() == 0) {
+            throw new ServiceException("da.error.import.empty", "Import data cannot be empty!");
+        }
+
+        int successNum = 0;
+        int failureNum = 0;
+        List<String> successMessages = new ArrayList<>();
+        List<String> failureMessages = new ArrayList<>();
+
+        for (DaDiscoveryTableRespVO respVO : importExcelList) {
+            try {
+                DaDiscoveryTableDO daDiscoveryTableDO = BeanUtils.toBean(respVO, DaDiscoveryTableDO.class);
+                Long daDiscoveryTableId = respVO.getId();
+                if (isUpdateSupport) {
+                    if (daDiscoveryTableId != null) {
+                        DaDiscoveryTableDO existingDaDiscoveryTable = daDiscoveryTableMapper.selectById(daDiscoveryTableId);
+                        if (existingDaDiscoveryTable != null) {
+                            daDiscoveryTableMapper.updateById(daDiscoveryTableDO);
+                            successNum++;
+                            successMessages.add(MessageUtils.messageWithFallback("da.import.update.success",
+                                    "Data update successful, ID {0} {1} record.", daDiscoveryTableId, MessageUtils.messageWithFallback("da.entity.discovery.database", "Data discovery database")));
+                        } else {
+                            failureNum++;
+                            failureMessages.add(MessageUtils.messageWithFallback("da.import.update.fail",
+                                    "Data update failed, ID {0} {1} record does not exist.", daDiscoveryTableId, MessageUtils.messageWithFallback("da.entity.discovery.database", "Data discovery database")));
+                        }
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("da.import.update.id.missing",
+                                "Data update failed, record ID does not exist."));
+                    }
+                } else {
+                    QueryWrapper<DaDiscoveryTableDO> queryWrapper = new QueryWrapper<>();
+                    queryWrapper.eq("id", daDiscoveryTableId);
+                    DaDiscoveryTableDO existingDaDiscoveryTable = daDiscoveryTableMapper.selectOne(queryWrapper);
+                    if (existingDaDiscoveryTable == null) {
+                        daDiscoveryTableMapper.insert(daDiscoveryTableDO);
+                        successNum++;
+                        successMessages.add(MessageUtils.messageWithFallback("da.import.insert.success",
+                                "Data insert successful, ID {0} {1} record.", daDiscoveryTableId, MessageUtils.messageWithFallback("da.entity.discovery.database", "Data discovery database")));
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("da.import.insert.fail",
+                                "Data insert failed, ID {0} {1} record already exists.", daDiscoveryTableId, MessageUtils.messageWithFallback("da.entity.discovery.database", "Data discovery database")));
+                    }
+                }
+            } catch (Exception e) {
+                failureNum++;
+                String errorMsg = MessageUtils.messageWithFallback("da.import.error.detail",
+                "Data import failed, error: {0}", e.getMessage());
+                failureMessages.add(errorMsg);
+                log.error(errorMsg, e);
+            }
+        }
+        StringBuilder resultMsg = new StringBuilder();
+        if (failureNum > 0) {
+            String failureDetails = String.join("<br/>", failureMessages);
+            resultMsg.append(MessageUtils.messageWithFallback("da.import.result.fail",
+                    "Import failed! {0} records have incorrect format, errors:<br/>{1}",
+                    failureNum, failureDetails));
+            throw new ServiceException("da.error.import.fail", resultMsg.toString(), resultMsg.toString());
+        } else {
+            resultMsg.append(MessageUtils.messageWithFallback("da.import.result.success",
+                    "Congratulations! All data imported! Total: {0} records.", successNum));
+        }
+        return resultMsg.toString();
+    }
+
+    @Override
+    public Integer commitOrRevokeDiscoveryInfo(DaDiscoveryTableSaveReqVO daDiscoveryTable) {
+        //Status: 1: Pending submit, 2: Submitted
+        String status = daDiscoveryTable.getStatus();
+        //Ignore flag: 0: No, 1: Yes
+        String ignoreFlag = daDiscoveryTable.getIgnoreFlag();
+        String themeId = daDiscoveryTable.getThemeId();
+
+        //Get info
+        DaDiscoveryTableDO daDiscoveryTableById = this.getDaDiscoveryTableById(daDiscoveryTable.getId());
+        if(daDiscoveryTableById == null){
+            throw new ServiceException("da.error.table.notfound", "Table info not found, please refresh and try again!");
+        }
+        DaDiscoveryTaskRespVO daDiscoveryTaskById = iDaDiscoveryTaskService.getDaDiscoveryTaskById(daDiscoveryTableById.getTaskId());
+        if(daDiscoveryTaskById == null){
+            throw new ServiceException("da.error.discovery.task.notfound", "Discovery task info not found, please refresh and try again!");
+        }
+
+        if(StringUtils.equals(daDiscoveryTableById.getStatus(),status) && StringUtils.equals(daDiscoveryTableById.getIgnoreFlag(),ignoreFlag)){
+            return 1;
+        }
+        DaDiscoveryColumnPageReqVO reqVO = new DaDiscoveryColumnPageReqVO();
+        reqVO.setTableId(daDiscoveryTableById.getId());
+        List<DaDiscoveryColumnDO> daDiscoveryColumnList = iDaDiscoveryColumnService.getDaDiscoveryColumnList(reqVO);
+
+        DaAssetPageReqVO daAssetPageReqVO = new DaAssetPageReqVO(daDiscoveryTableById);
+        //Supports empty table comments to avoid blank asset map
+        daAssetPageReqVO.setName(daDiscoveryTable.getAssetName());
+        daAssetPageReqVO.setDatasourceId(String.valueOf(daDiscoveryTaskById.getDatasourceId()));
+        daAssetPageReqVO.setCatCode(daDiscoveryTable.getCatCode());
+        List<String> themeIdList = new ArrayList<>();
+        themeIdList.add(StringUtils.isEmpty(themeId) ? "1":themeId);
+        daAssetPageReqVO.setThemeIdList(themeIdList);
+        daAssetPageReqVO.setSource("1");
+        if(StringUtils.equals("2",status)){
+            List<DaAssetColumnSaveReqVO> columnSaveReqVOList = daDiscoveryColumnList.stream().map(itam -> new DaAssetColumnSaveReqVO(itam)).collect(Collectors.toList());
+            iDaAssetService.insertAssetByDiscoveryInfo(daAssetPageReqVO,columnSaveReqVOList);
+        }else {
+            iDaAssetService.updateAssetByDiscoveryInfo(daAssetPageReqVO);
+        }
+
+        return this.updateDaDiscoveryTable(daDiscoveryTable);
+    }
+
+    @Override
+    public Integer updateByTaskIdListAndTableNameStatus(DaDiscoveryTableSaveReqVO daDiscoveryTable) {
+        LambdaQueryWrapperX<DaDiscoveryTableDO> queryWrapperX = new LambdaQueryWrapperX<>();
+        queryWrapperX.inIfPresent(DaDiscoveryTableDO::getTaskId,daDiscoveryTable.getTaskIdList())
+                .eqIfPresent(DaDiscoveryTableDO::getTableName,daDiscoveryTable.getTableName());
+        DaDiscoveryTableDO daDiscoveryTableDO = BeanUtils.toBean(daDiscoveryTable, DaDiscoveryTableDO.class);
+        return daDiscoveryTableMapper.update(daDiscoveryTableDO,queryWrapperX);
+    }
+}

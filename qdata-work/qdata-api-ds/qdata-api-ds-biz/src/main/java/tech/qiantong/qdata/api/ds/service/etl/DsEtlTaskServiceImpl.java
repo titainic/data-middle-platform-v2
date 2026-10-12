@@ -1,0 +1,128 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.api.ds.service.etl;
+
+import com.alibaba.fastjson2.JSONObject;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import tech.qiantong.qdata.api.ds.api.base.DsStatusRespDTO;
+import tech.qiantong.qdata.api.ds.api.etl.DsStartTaskReqDTO;
+import tech.qiantong.qdata.api.ds.api.etl.DsTaskSaveReqDTO;
+import tech.qiantong.qdata.api.ds.api.etl.DsTaskSaveRespDTO;
+import tech.qiantong.qdata.api.ds.api.service.etl.IDsEtlTaskService;
+import tech.qiantong.qdata.common.httpClient.DsRequestUtils;
+import tech.qiantong.qdata.common.httpClient.constants.QianTongDCApiType;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * <P>
+ * Description: DS data integration task related interface implementation
+ * </p>
+ *
+ * @author: FXB
+ * @create: 2025-02-20 09:51
+ **/
+@Slf4j
+@Service
+public class DsEtlTaskServiceImpl implements IDsEtlTaskService {
+    @Override
+    public DsTaskSaveRespDTO createTask(DsTaskSaveReqDTO dsTaskSaveReqDTO, Long projectCode) {
+        QianTongDCApiType apiType = QianTongDCApiType.CREATE_PROCESS_DEFINITION;
+        return DsRequestUtils.requestForm(DsRequestUtils.replaceProjectCode(apiType.getUrl(), String.valueOf(projectCode)),
+                apiType.getMethod(),
+                JSONObject.parseObject(JSONObject.toJSONString(dsTaskSaveReqDTO)),
+                DsTaskSaveRespDTO.class);
+    }
+
+    @Override
+    public DsTaskSaveRespDTO getTaskDetail(String projectCode, String code) {
+        QianTongDCApiType apiType = QianTongDCApiType.GET_WORKFLOW_DEFINITION_DETAIL;
+        return DsRequestUtils.request(DsRequestUtils.replaceProjectCodeAndCode(apiType.getUrl(), projectCode, code),
+                apiType.getMethod(),
+                null, null,
+                DsTaskSaveRespDTO.class);
+    }
+
+    @Override
+    public DsTaskSaveRespDTO updateTask(DsTaskSaveReqDTO dsTaskSaveReqDTO, String projectCode, String taskCode) {
+        QianTongDCApiType apiType = QianTongDCApiType.UPDATE_PROCESS_DEFINITION;
+        return DsRequestUtils.requestForm(DsRequestUtils.replaceProjectCodeAndCode(apiType.getUrl(), String.valueOf(projectCode), taskCode),
+                apiType.getMethod(),
+                JSONObject.parseObject(JSONObject.toJSONString(dsTaskSaveReqDTO)),
+                DsTaskSaveRespDTO.class);
+    }
+
+    @Override
+    public DsStatusRespDTO releaseTask(String releaseState, String projectCode, String code) {
+        QianTongDCApiType apiType = QianTongDCApiType.RELEASE_PROCESS_DEFINITION;
+        Map<String, Object> params = new HashMap<>();
+        params.put("releaseState", releaseState);
+        return DsRequestUtils.request(DsRequestUtils.replaceProjectCodeAndCode(apiType.getUrl(), projectCode, code),
+                apiType.getMethod(),
+                null, params,
+                DsStatusRespDTO.class);
+    }
+
+    @Override
+    public DsStatusRespDTO deleteTask(String projectCode, String code) {
+        QianTongDCApiType apiType = QianTongDCApiType.DELETE_PROCESS_DEFINITION;
+        return DsRequestUtils.request(DsRequestUtils.replaceProjectCodeAndCode(apiType.getUrl(), projectCode, code),
+                apiType.getMethod(),
+                null, null,
+                DsStatusRespDTO.class);
+    }
+
+    @Override
+    public DsStatusRespDTO startTask(DsStartTaskReqDTO dsStartTaskReqDTO, String projectCode) {
+        QianTongDCApiType apiType = QianTongDCApiType.POST_START_PROCESS;
+        return DsRequestUtils.requestForm(DsRequestUtils.replaceProjectCode(apiType.getUrl(), projectCode),
+                apiType.getMethod(), JSONObject.parseObject(JSONObject.toJSONString(dsStartTaskReqDTO)),
+                DsStatusRespDTO.class);
+    }
+
+    @Override
+    public String instanceState(String projectCode, long instanceId) {
+        QianTongDCApiType apiType = QianTongDCApiType.GET_PROCESS_INSTANCE_BY_ID;
+        String url = DsRequestUtils.replaceProjectCode(apiType.getUrl(), projectCode)
+                .replace("{id}", Long.toString(instanceId));
+        JSONObject result = DsRequestUtils.request(url, apiType.getMethod(), null, null, JSONObject.class);
+        if (result == null || !result.getBooleanValue("success") || result.getJSONObject("data") == null) {
+            throw new IllegalStateException("DolphinScheduler 实例状态不可用");
+        }
+        return result.getJSONObject("data").getString("state");
+    }
+
+    @Override
+    public DsTaskSaveRespDTO batchCopy(String code, String projectCode) {
+        QianTongDCApiType apiType = QianTongDCApiType.BATCH_COPY_PROCESS_DEFINITION;
+
+        // URL concatenation
+        String url = DsRequestUtils.replaceProjectCode(apiType.getUrl(), projectCode);
+
+        // Form parameters
+        Map<String, Object> params = new HashMap<>();
+        params.put("codes", code);
+        params.put("targetProjectCode", projectCode);
+
+        // Invoke
+        return DsRequestUtils.requestForm(url, apiType.getMethod(), params, DsTaskSaveRespDTO.class);
+    }
+}

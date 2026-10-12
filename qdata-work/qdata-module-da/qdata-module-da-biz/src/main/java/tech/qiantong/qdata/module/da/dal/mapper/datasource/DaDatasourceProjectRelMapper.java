@@ -1,0 +1,58 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.da.dal.mapper.datasource;
+
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.module.da.controller.admin.datasource.vo.DaDatasourceProjectRelPageReqVO;
+import tech.qiantong.qdata.module.da.dal.dataobject.datasource.DaDatasourceProjectRelDO;
+import tech.qiantong.qdata.mybatis.core.mapper.BaseMapperX;
+import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Datasource - Project Relationship Mapper Interface
+ *
+ * @author qdata
+ * @date 2025-03-13
+ */
+public interface DaDatasourceProjectRelMapper extends BaseMapperX<DaDatasourceProjectRelDO> {
+
+    default PageResult<DaDatasourceProjectRelDO> selectPage(DaDatasourceProjectRelPageReqVO reqVO) {
+        if(reqVO.getAccessibleDatasourceIds()!=null && reqVO.getAccessibleDatasourceIds().isEmpty() || reqVO.getAccessibleProjectIds()!=null && reqVO.getAccessibleProjectIds().isEmpty())return PageResult.empty();
+        // Define sortable fields (prevent SQL injection, must match database column names)
+        Set<String> allowedColumns = new HashSet<>(Arrays.asList("id", "create_time", "update_time"));
+
+        // Build dynamic query conditions
+        return selectPage(reqVO, new LambdaQueryWrapperX<DaDatasourceProjectRelDO>()
+                .eqIfPresent(DaDatasourceProjectRelDO::getProjectId, reqVO.getProjectId())
+                .eqIfPresent(DaDatasourceProjectRelDO::getProjectCode, reqVO.getProjectCode())
+                .eqIfPresent(DaDatasourceProjectRelDO::getDatasourceId, reqVO.getDatasourceId())
+                .eqIfPresent(DaDatasourceProjectRelDO::getDescription, reqVO.getDescription())
+                .eqIfPresent(DaDatasourceProjectRelDO::getCreateTime, reqVO.getCreateTime())
+                // If reqVO.getName() is not empty, add exact match condition for name (name = '<name>')
+                // .likeIfPresent(DaDatasourceProjectRelDO::getName, reqVO.getName())
+                // Sort by createTime in descending order
+                .orderBy(reqVO.getOrderByColumn(), reqVO.getIsAsc(), allowedColumns)
+                .in(reqVO.getAccessibleDatasourceIds()!=null,DaDatasourceProjectRelDO::getDatasourceId,reqVO.getAccessibleDatasourceIds())
+                .in(reqVO.getAccessibleProjectIds()!=null,DaDatasourceProjectRelDO::getProjectId,reqVO.getAccessibleProjectIds()));
+    }
+}

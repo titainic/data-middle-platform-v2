@@ -1,0 +1,320 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.quality.utils.qualityDB.dialect;
+
+
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.quality.dal.dataobject.quality.QualityRuleEntity;
+import tech.qiantong.qdata.quality.utils.SqlBuilderUtils;
+import tech.qiantong.qdata.quality.utils.qualityDB.ComponentItem;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class Oracle12cQuality implements ComponentItem {
+
+    @Override
+    public String generateCharacterValidationSql(QualityRuleEntity rule) {
+        String table = rule.getTableName();
+        String column = rule.getRuleColumn();
+        String whereClause = rule.getWhereClause();
+        String regex = (String) rule.getConfig().get("regex");
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(rule.getConfig().get("ignoreNullValue"));
+
+        String condition = String.format("NOT REGEXP_LIKE(%s, '%s')", column, regex);
+        if (ignoreNull) {
+            condition += String.format(" AND %s IS NOT NULL AND %s <> ''", column, column);
+        }
+
+        String tableCount = table ;
+        if(StringUtils.isNotEmpty(whereClause)){
+            condition = whereClause + " AND" + condition;
+            tableCount = tableCount + " WHERE  " + whereClause;
+        }
+
+        return String.format(
+                "SELECT COUNT(*) AS errorCount, (SELECT COUNT(*) FROM %s) AS totalCount FROM %s WHERE %s",
+                tableCount, table, condition
+        );
+    }
+
+
+    /**
+     * Oracle 12c: Generate string validation SQL for "Customer Input Data"
+     * Only used for customer input data, click detection
+     * Return 0 / 1
+     */
+    @Override
+    public String generateValidDataCheckSql(QualityRuleEntity rule, String inputValue) {
+
+        String regex = (String) rule.getConfig().get("regex");
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(
+                rule.getConfig().get("ignoreNullValue")
+        );
+
+        // Input value (escaped single quotes)
+        String valueExpr = "'" + inputValue.replace("'", "''") + "'";
+
+        // Regular check
+        String condition = String.format("REGEXP_LIKE(%s, '%s')", valueExpr, regex);
+
+        // Whether to ignore NULL / empty string
+        if (ignoreNull) {
+            condition = String.format(
+                    "%s IS NOT NULL AND %s <> '' AND %s",
+                    valueExpr, valueExpr, condition
+            );
+        }
+
+        // Return 0 / 1
+        return String.format(
+                "SELECT CASE WHEN %s THEN 1 ELSE 0 END AS valid_flag FROM dual",
+                condition
+        );
+    }
+
+
+    /**
+     * Generating error data SQL for string type verification
+     * Rule code: CHARACTER_VALIDATION
+     *
+     * Output: error details
+     */
+    @Override
+    public String generateCharacterValidationErrorSql(QualityRuleEntity rule) {
+        String table = rule.getTableName();
+        String column = rule.getRuleColumn();
+        String whereClause = rule.getWhereClause();
+        String regex = (String) rule.getConfig().get("regex");
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(rule.getConfig().get("ignoreNullValue"));
+
+        String condition = String.format("NOT REGEXP_LIKE(%s, '%s')", column, regex);
+        if (ignoreNull) {
+            condition += String.format(" AND %s IS NOT NULL AND %s <> ''", column, column);
+        }
+
+        if(StringUtils.isNotEmpty(whereClause)){
+            condition = whereClause + " AND" + condition;
+        }
+        return String.format("SELECT * FROM %s WHERE %s", table, condition);
+    }
+
+
+    /**
+     * Generate normal data query SQL for string type verification (supports paging)
+     * Rule code: CHARACTER_VALIDATION
+     *
+     * Used to query data details that comply with regular rules
+     *
+     * @param rule quality rule entity, including table name, field name, regular expression
+     * @param limit maximum number of rows
+     * @param offset offset (from which line to start)
+     * @return SQL string
+     */
+    @Override
+    public String generateCharacterValidationValidDataSql(QualityRuleEntity rule, int limit, int offset) {
+        String table = rule.getTableName();
+        String column = rule.getRuleColumn();
+        String whereClause = rule.getWhereClause();
+        String regex = (String) rule.getConfig().get("regex");
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(rule.getConfig().get("ignoreNullValue"));
+
+        String condition = String.format("REGEXP_LIKE(%s, '%s')", column, regex);
+        if (ignoreNull) {
+            condition += String.format(" AND %s IS NOT NULL AND %s <> ''", column, column);
+        }
+        if(StringUtils.isNotEmpty(whereClause)){
+            condition = whereClause + " AND" + condition;
+        }
+
+        return String.format(
+                "SELECT * FROM (" +
+                        "  SELECT a.*, ROWNUM rn FROM (" +
+                        "    SELECT * FROM %s WHERE %s" +
+                        "  ) a WHERE ROWNUM <= %d" +
+                        ") WHERE rn > %d",
+                table, condition, offset + limit, offset
+        );
+    }
+
+
+    @Override
+    public String generateCompositeUniquenessValidationSql(QualityRuleEntity rule) {
+        String table = rule.getTableName();
+        List<String> columns = rule.getRuleColumns();
+        String groupBy = String.join(", ", columns);
+        String whereClause = rule.getWhereClause();
+
+        String where = StringUtils.isNotEmpty(whereClause) ? " WHERE " + whereClause : "";
+
+        return String.format(
+                "SELECT COUNT(*) AS errorCount, " +
+                        "       (SELECT COUNT(*) FROM %s%s) AS totalCount " +
+                        "FROM (SELECT %s, COUNT(*) AS cnt FROM %s%s GROUP BY %s HAVING COUNT(*) > 1)",
+                table, where, groupBy, table, where, groupBy
+        );
+    }
+
+    @Override
+    public String generateCompositeUniquenessValidationErrorSql(QualityRuleEntity rule) {
+        String table = rule.getTableName();
+        List<String> columns = rule.getRuleColumns();
+        String groupBy = String.join(", ", columns);
+        String whereClause = rule.getWhereClause();
+
+        String where = StringUtils.isNotEmpty(whereClause) ? " WHERE " + whereClause : "";
+
+        return String.format(
+                "SELECT %s, COUNT(*) AS cnt FROM %s%s GROUP BY %s HAVING COUNT(*) > 1",
+                groupBy, table, where, groupBy
+        );
+    }
+
+    @Override
+    public String generateCompositeUniquenessValidationValidDataSql(QualityRuleEntity rule, int limit, int offset) {
+        String table = rule.getTableName();
+        List<String> columns = rule.getRuleColumns();
+        String colList = String.join(", ", columns);
+        String whereClause = rule.getWhereClause();
+
+        String where = StringUtils.isNotEmpty(whereClause) ? " WHERE " + whereClause : "";
+
+        return String.format(
+                "SELECT * FROM (" +
+                        "  SELECT a.*, ROWNUM rn FROM (" +
+                        "    SELECT * FROM %s t%s " +
+                        "    WHERE NOT EXISTS ( " +
+                        "      SELECT 1 FROM %s t2%s " +
+                        "      GROUP BY %s " +
+                        "      HAVING COUNT(*) > 1 AND %s" +
+                        "    )" +
+                        "  ) a WHERE ROWNUM <= %d" +
+                        ") WHERE rn > %d",
+                table, where,
+                table, where,
+                colList,
+                SqlBuilderUtils.buildAndEquals(columns, "t", "t2"),
+                offset + limit, offset
+        );
+    }
+
+
+    /**
+     * Numeric precision check - error statistics SQL
+     * Rule code: DECIMAL_PRECISION_VALIDATION
+     *
+     * Check the number after the decimal point that exceeds the specified precision, and count the total number of errors + the number of all records.
+     */
+    @Override
+    public String generateDecimalPrecisionValidationSql(QualityRuleEntity rule) {
+        String table = rule.getTableName();
+        String column = rule.getRuleColumn();
+        int scale = Integer.parseInt(rule.getConfig().get("scale").toString());
+
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(rule.getConfig().get("ignoreNullValue"));
+        boolean skipInteger = SqlBuilderUtils.parseBoolean(rule.getConfig().get("skipInteger"));
+
+        List<String> conditions = new ArrayList<>();
+        conditions.add(String.format("INSTR(%s, '.') > 0", column));
+        conditions.add(String.format("LENGTH(SUBSTR(%s, INSTR(%s, '.') + 1)) > %d", column, column, scale));
+        if (ignoreNull) {
+            conditions.add(String.format("%s IS NOT NULL AND %s <> ''", column, column));
+        }
+        if (skipInteger) {
+            conditions.add(String.format("INSTR(%s, '.') > 0", column));
+        }
+
+        return String.format(
+                "SELECT COUNT(*) AS errorCount, " +
+                        "       (SELECT COUNT(*) FROM %s) AS totalCount " +
+                        "FROM %s WHERE %s",
+                table, table, String.join(" AND ", conditions)
+        );
+    }
+
+    /**
+     * Numeric precision check - error details SQL
+     * Rule code: DECIMAL_PRECISION_VALIDATION
+     *
+     * Returns all records with more decimal places than the specified precision.
+     */
+    @Override
+    public String generateDecimalPrecisionValidationErrorSql(QualityRuleEntity rule) {
+        String table = rule.getTableName();
+        String column = rule.getRuleColumn();
+        int scale = Integer.parseInt(rule.getConfig().get("scale").toString());
+
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(rule.getConfig().get("ignoreNullValue"));
+        boolean skipInteger = SqlBuilderUtils.parseBoolean(rule.getConfig().get("skipInteger"));
+
+        List<String> conditions = new ArrayList<>();
+        conditions.add(String.format("INSTR(%s, '.') > 0", column));
+        conditions.add(String.format("LENGTH(SUBSTR(%s, INSTR(%s, '.') + 1)) > %d", column, column, scale));
+        if (ignoreNull) {
+            conditions.add(String.format("%s IS NOT NULL AND %s <> ''", column, column));
+        }
+        if (skipInteger) {
+            conditions.add(String.format("INSTR(%s, '.') > 0", column));
+        }
+
+        return String.format(
+                "SELECT * FROM %s WHERE %s",
+                table, String.join(" AND ", conditions)
+        );
+    }
+
+    /**
+     * Numeric precision check - normal data paging SQL
+     * Rule code: DECIMAL_PRECISION_VALIDATION
+     *
+     * Returns all records that meet the decimal precision requirement (no more than the specified number of decimal places).
+     */
+    @Override
+    public String generateDecimalPrecisionValidationValidDataSql(QualityRuleEntity rule, int limit, int offset) {
+        String table = rule.getTableName();
+        String column = rule.getRuleColumn();
+        int scale = Integer.parseInt(rule.getConfig().get("scale").toString());
+
+        boolean ignoreNull = SqlBuilderUtils.parseBoolean(rule.getConfig().get("ignoreNullValue"));
+        boolean skipInteger = SqlBuilderUtils.parseBoolean(rule.getConfig().get("skipInteger"));
+
+        List<String> conditions = new ArrayList<>();
+        conditions.add(String.format(
+                "INSTR(%s, '.') = 0 OR LENGTH(SUBSTR(%s, INSTR(%s, '.') + 1)) <= %d",
+                column, column, column, scale
+        ));
+        if (ignoreNull) {
+            conditions.add(String.format("%s IS NOT NULL AND %s <> ''", column, column));
+        }
+        if (skipInteger) {
+            conditions.add(String.format("INSTR(%s, '.') > 0", column));
+        }
+
+        return String.format(
+                "SELECT * FROM (" +
+                        "  SELECT a.*, ROWNUM rn FROM (" +
+                        "    SELECT * FROM %s WHERE %s" +
+                        "  ) a WHERE ROWNUM <= %d" +
+                        ") WHERE rn > %d",
+                table, String.join(" AND ", conditions), offset + limit, offset
+        );
+    }
+
+
+}

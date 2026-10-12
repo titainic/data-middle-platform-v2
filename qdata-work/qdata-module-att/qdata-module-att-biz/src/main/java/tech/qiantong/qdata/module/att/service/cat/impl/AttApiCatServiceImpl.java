@@ -1,0 +1,283 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.att.service.cat.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.StringUtils;
+import tech.qiantong.qdata.common.utils.YouBianCodeUtil;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.att.api.cat.dto.AttApiCatReqDTO;
+import tech.qiantong.qdata.module.att.api.cat.dto.AttApiCatRespDTO;
+import tech.qiantong.qdata.module.att.api.service.cat.IAttApiCatApiService;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttApiCatPageReqVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttApiCatRespVO;
+import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttApiCatSaveReqVO;
+import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttApiCatDO;
+import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttTaskCatDO;
+import tech.qiantong.qdata.module.att.dal.mapper.cat.AttApiCatMapper;
+import tech.qiantong.qdata.module.att.service.cat.IAttApiCatService;
+import tech.qiantong.qdata.module.ds.api.service.api.DsApiService;
+import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
+
+import jakarta.annotation.Resource;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Data Service Category Management - Service business layer processing
+ *
+ * @author qdata
+ * @date 2025-03-11
+ */
+@Slf4j
+@Service
+@Transactional(rollbackFor = Exception.class)
+public class AttApiCatServiceImpl extends ServiceImpl<AttApiCatMapper, AttApiCatDO> implements IAttApiCatService, IAttApiCatApiService {
+    @Resource
+    private AttApiCatMapper attApiCatMapper;
+    @Resource
+    private DsApiService dsApiService;
+
+    @Override
+    public PageResult<AttApiCatDO> getAttApiCatPage(AttApiCatPageReqVO pageReqVO) {
+        return attApiCatMapper.selectPage(pageReqVO);
+    }
+
+    @Override
+    public Long createAttApiCat(AttApiCatSaveReqVO createReqVO) {
+        AttApiCatDO dictType = BeanUtils.toBean(createReqVO, AttApiCatDO.class);
+        dictType.setCode(createCode(createReqVO.getParentId(), null));
+        attApiCatMapper.insert(dictType);
+        return dictType.getId();
+    }
+
+    @Override
+    public int updateAttApiCat(AttApiCatSaveReqVO updateReqVO) {
+        AttApiCatDO catDO = baseMapper.selectById(updateReqVO.getId());
+        if (catDO == null) {
+            return 0;
+        }
+        if (Boolean.FALSE.equals(updateReqVO.getValidFlag())) {
+            Long countData = dsApiService.getCountByCatCode(catDO.getCode());
+            if (countData > 0) {
+                throw new ServiceException("att.error.disable.api", "API service exists, disable not allowed");
+            }
+            baseMapper.updateValidFlag(catDO.getCode(), updateReqVO.getValidFlag());
+        } else if (Boolean.TRUE.equals(updateReqVO.getValidFlag())) {
+            AttApiCatDO parent = baseMapper.selectById(catDO.getParentId());
+            if (parent != null && Boolean.FALSE.equals(parent.getValidFlag())) {
+                throw new ServiceException("att.error.parent.disabled", "Please enable the parent category first");
+            }
+        }
+        // Update Data Service Category Management
+        AttApiCatDO updateObj = BeanUtils.toBean(updateReqVO, AttApiCatDO.class);
+        return attApiCatMapper.updateById(updateObj);
+    }
+
+    @Override
+    public int removeAttApiCat(Collection<Long> idList) {
+        List<AttApiCatDO> attApiCatDOS = baseMapper.selectBatchIds(idList);
+        for (AttApiCatDO catDO : attApiCatDOS) {
+            Long countData = dsApiService.getCountByCatCode(catDO.getCode());
+            if (countData > 0) {
+                throw new ServiceException("att.error.delete.api", "API service exists, deletion not allowed");
+            }
+        }
+        // Batch delete Data Service Category Management
+        return attApiCatMapper.deleteBatchIds(idList);
+    }
+
+    @Override
+    public AttApiCatDO getAttApiCatById(Long id) {
+        return attApiCatMapper.selectById(id);
+    }
+
+    @Override
+    public List<AttApiCatDO> getAttApiCatList() {
+        return attApiCatMapper.selectList();
+    }
+
+    @Override
+    public List<AttApiCatDO> getAttApiCatList(AttApiCatPageReqVO reqVO) {
+        LambdaQueryWrapperX<AttApiCatDO> queryWrapperX = new LambdaQueryWrapperX<>();
+        queryWrapperX.likeIfPresent(AttApiCatDO::getName, reqVO.getName())
+                .eqIfPresent(AttApiCatDO::getParentId, reqVO.getParentId())
+                .eqIfPresent(AttApiCatDO::getSortOrder, reqVO.getSortOrder())
+                .eqIfPresent(AttApiCatDO::getDescription, reqVO.getDescription())
+                .eqIfPresent(AttApiCatDO::getValidFlag, reqVO.getValidFlag())
+                .eqIfPresent(AttApiCatDO::getCode, reqVO.getCode())
+                .eqIfPresent(AttApiCatDO::getCreateTime, reqVO.getCreateTime())
+                .eqIfPresent(AttApiCatDO::getValidFlag, reqVO.getValidFlag())
+                .orderByAsc(AttApiCatDO::getSortOrder);
+        return attApiCatMapper.selectList(queryWrapperX);
+    }
+
+    @Override
+    public Map<Long, AttApiCatDO> getAttApiCatMap() {
+        List<AttApiCatDO> attApiCatList = attApiCatMapper.selectList();
+        return attApiCatList.stream()
+                .collect(Collectors.toMap(
+                        AttApiCatDO::getId,
+                        attApiCatDO -> attApiCatDO,
+                        // Keep existing value
+                        (existing, replacement) -> existing
+                ));
+    }
+
+    @Override
+    public String createCode(Long parentId, String parentCode) {
+        String categoryCode = null;
+        /*
+         * Three cases
+         * 1. No data in database, call YouBianCodeUtil.getNextYouBianCode(null);
+         * 2. Adding child node with no sibling elements: YouBianCodeUtil.getSubYouBianCode(parentCode, null);
+         * 3. Adding child node with sibling elements: YouBianCodeUtil.getNextYouBianCode(lastCode);
+         * */
+        // Find siblings to determine the last largest code value
+        LambdaQueryWrapper<AttApiCatDO> query = new LambdaQueryWrapper<AttApiCatDO>()
+                .eq(AttApiCatDO::getParentId, parentId)
+                .likeRight(StringUtils.isNotBlank(parentCode), AttApiCatDO::getCode, parentCode)
+                .isNotNull(AttApiCatDO::getCode)
+                .orderByDesc(AttApiCatDO::getCode);
+        List<AttApiCatDO> list = baseMapper.selectList(query);
+        if (list == null || list.size() == 0) {
+            if (parentId == 0) {
+                // Case 1
+                categoryCode = YouBianCodeUtil.getNextYouBianCode(null);
+            } else {
+                // Case 2
+                AttApiCatDO parent = baseMapper.selectById(parentId);
+                categoryCode = YouBianCodeUtil.getSubYouBianCode(parent.getCode(), null);
+            }
+        } else {
+            // Case 3
+            categoryCode = YouBianCodeUtil.getNextYouBianCode(list.get(0).getCode());
+        }
+        return categoryCode;
+    }
+
+    /**
+     * Import Data Service Category Management data
+     *
+     *  importExcelList Data Service Category Management data list
+     * @param isUpdateSupport Whether to support update; if already exists, update the data
+     *  operName Operator
+     *  Result
+     */
+    @Override
+    public String importAttApiCat(List<AttApiCatRespVO> importExcelList, boolean isUpdateSupport, String operName) {
+        if (StringUtils.isNull(importExcelList) || importExcelList.size() == 0) {
+            throw new ServiceException("att.error.import.empty", "Import data cannot be empty!");
+        }
+
+        int successNum = 0;
+        int failureNum = 0;
+        List<String> successMessages = new ArrayList<>();
+        List<String> failureMessages = new ArrayList<>();
+
+        for (AttApiCatRespVO respVO : importExcelList) {
+            try {
+                AttApiCatDO attApiCatDO = BeanUtils.toBean(respVO, AttApiCatDO.class);
+                Long attApiCatId = respVO.getId();
+                if (isUpdateSupport) {
+                    if (attApiCatId != null) {
+                        AttApiCatDO existingAttApiCat = attApiCatMapper.selectById(attApiCatId);
+                        if (existingAttApiCat != null) {
+                            attApiCatMapper.updateById(attApiCatDO);
+                            successNum++;
+                            successMessages.add(MessageUtils.messageWithFallback("att.import.update.success",
+                                    "Data update successful, ID {0} {1} record.", attApiCatId, MessageUtils.messageWithFallback("att.entity.data.service.category", "Data service category")));
+                        } else {
+                            failureNum++;
+                            failureMessages.add(MessageUtils.messageWithFallback("att.import.update.fail",
+                                    "Data update failed, ID {0} {1} record does not exist.", attApiCatId, MessageUtils.messageWithFallback("att.entity.data.service.category", "Data service category")));
+                        }
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("att.import.update.id.missing",
+                                "Data update failed, record ID does not exist."));
+                    }
+                } else {
+                    QueryWrapper<AttApiCatDO> queryWrapper = new QueryWrapper<>();
+                    queryWrapper.eq("id", attApiCatId);
+                    AttApiCatDO existingAttApiCat = attApiCatMapper.selectOne(queryWrapper);
+                    if (existingAttApiCat == null) {
+                        attApiCatMapper.insert(attApiCatDO);
+                        successNum++;
+                        successMessages.add(MessageUtils.messageWithFallback("att.import.insert.success",
+                                "Data insert successful, ID {0} {1} record.", attApiCatId, MessageUtils.messageWithFallback("att.entity.data.service.category", "Data service category")));
+                    } else {
+                        failureNum++;
+                        failureMessages.add(MessageUtils.messageWithFallback("att.import.insert.fail",
+                                "Data insert failed, ID {0} {1} record already exists.", attApiCatId, MessageUtils.messageWithFallback("att.entity.data.service.category", "Data service category")));
+                    }
+                }
+            } catch (Exception e) {
+                failureNum++;
+                String errorMsg = MessageUtils.messageWithFallback("att.import.error.detail",
+                "Data import failed, error: {0}", e.getMessage());
+                failureMessages.add(errorMsg);
+                log.error(errorMsg, e);
+            }
+        }
+        StringBuilder resultMsg = new StringBuilder();
+        if (failureNum > 0) {
+            String failureDetails = String.join("<br/>", failureMessages);
+            resultMsg.append(MessageUtils.messageWithFallback("att.import.result.fail",
+                    "Import failed! {0} records have incorrect format, errors:<br/>{1}",
+                    failureNum, failureDetails));
+            throw new ServiceException("att.error.import.fail", resultMsg.toString(), resultMsg.toString());
+        } else {
+            resultMsg.append(MessageUtils.messageWithFallback("att.import.result.success",
+                    "Congratulations! All data imported successfully! Total: {0} records.", successNum));
+        }
+        return resultMsg.toString();
+    }
+
+    @Override
+    public List<AttApiCatRespDTO> getAttApiCatList(AttApiCatReqDTO attApiCatReqDTO) {
+        LambdaQueryWrapperX<AttApiCatDO> queryWrapperX = new LambdaQueryWrapperX<>();
+        queryWrapperX.likeIfPresent(AttApiCatDO::getName, attApiCatReqDTO.getName())
+                .eqIfPresent(AttApiCatDO::getParentId, attApiCatReqDTO.getParentId())
+                .eqIfPresent(AttApiCatDO::getSortOrder, attApiCatReqDTO.getSortOrder())
+                .eqIfPresent(AttApiCatDO::getDescription, attApiCatReqDTO.getDescription())
+                .eqIfPresent(AttApiCatDO::getCode, attApiCatReqDTO.getCode())
+                .orderByAsc(AttApiCatDO::getSortOrder);
+        List<AttApiCatDO> attApiCatDOS = attApiCatMapper.selectList(queryWrapperX);
+        if (CollectionUtils.isNotEmpty(attApiCatDOS)) {
+            List<AttApiCatRespDTO> attApiCatRespDTOS = new ArrayList<>();
+            for (int i = 0; i < attApiCatDOS.size(); i++) {
+                AttApiCatDO attApiCatDO = attApiCatDOS.get(i);
+                AttApiCatRespDTO attApiCatRespDTO = BeanUtils.toBean(attApiCatDO, AttApiCatRespDTO.class);
+                attApiCatRespDTOS.add(attApiCatRespDTO);
+            }
+            return attApiCatRespDTOS;
+        }
+        return Collections.emptyList();
+    }
+}

@@ -1,0 +1,346 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+   <div class="app-container" ref="app-container">
+      <div class="pagecont-top" v-show="showSearch">
+         <el-form class="btn-style" :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch"
+            >
+            <el-form-item :label="td('sys.monitor.operlog.operAddr')" prop="operIp">
+               <el-input v-model="queryParams.operIp" :placeholder="td('sys.monitor.operlog.operAddrPlaceholder')" clearable class="el-form-input-width"
+                  @keyup.enter="handleQuery" />
+            </el-form-item>
+            <el-form-item :label="td('sys.monitor.operlog.systemModule')" prop="title">
+               <el-input v-model="queryParams.title" :placeholder="td('sys.monitor.operlog.systemModulePlaceholder')" clearable class="el-form-input-width"
+                  @keyup.enter="handleQuery" />
+            </el-form-item>
+            <el-form-item :label="td('sys.monitor.operlog.operPerson')" prop="operName">
+               <el-input v-model="queryParams.operName" :placeholder="td('sys.monitor.operlog.operPersonPlaceholder')" clearable class="el-form-input-width"
+                  @keyup.enter="handleQuery" />
+            </el-form-item>
+            <el-form-item :label="td('sys.monitor.operlog.type')" prop="businessType">
+               <el-select v-model="queryParams.businessType" :placeholder="td('sys.monitor.operlog.operType')" clearable class="el-form-input-width">
+                  <el-option v-for="dict in sys_oper_type" :key="dict.value" :label="dict.label" :value="dict.value" />
+               </el-select>
+            </el-form-item>
+            <el-form-item :label="td('common.texts.status')" prop="status">
+               <el-select v-model="queryParams.status" :placeholder="td('sys.monitor.operlog.operStatus')" clearable class="el-form-input-width">
+                  <el-option v-for="dict in sys_common_status" :key="dict.value" :label="dict.label"
+                     :value="dict.value" />
+               </el-select>
+            </el-form-item>
+            <el-form-item :label="td('sys.monitor.operlog.operTime')" :label-position="labelPosition">
+               <el-date-picker class="el-form-input-width" v-model="dateRange" value-format="YYYY-MM-DD HH:mm:ss"
+                  type="daterange" range-separator="-" :start-placeholder="td('common.form.startDatePlaceholder')" :end-placeholder="td('common.form.endDatePlaceholder')"
+                  :default-time="[new Date(2000, 1, 1, 0, 0, 0), new Date(2000, 1, 1, 23, 59, 59)]"></el-date-picker>
+            </el-form-item>
+            <el-form-item>
+               <el-button plain type="primary" @click="handleQuery" @mousedown="(e) => e.preventDefault()">
+                  <i class="iconfont-mini icon-a-zu22377 mr5"></i>{{ td('common.button.query') }}
+               </el-button>
+               <el-button @click="resetQuery" @mousedown="e => e.preventDefault()">
+                  <i class="iconfont-mini icon-a-zu22378 mr5"></i>{{ td('common.button.reset') }}
+               </el-button>
+            </el-form-item>
+         </el-form>
+      </div>
+      <div class="pagecont-bottom pagecont-bottoms">
+         <div class="justify-between mb15">
+            <el-row :gutter="10" class="btn-style">
+               <el-col :span="1.5">
+                  <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete"
+                     v-hasPermi="['monitor:operlog:remove']">{{ td('common.button.delete') }}</el-button>
+               </el-col>
+               <el-col :span="1.5">
+                  <el-button type="danger" plain icon="Delete" @click="handleClean"
+                     v-hasPermi="['monitor:operlog:remove']">{{ td('sys.monitor.operlog.clearAll') }}</el-button>
+               </el-col>
+               <el-col :span="1.5">
+                  <el-button type="warning" plain icon="Download" @click="handleExport"
+                     v-hasPermi="['monitor:operlog:export']">{{ td('common.button.export') }}</el-button>
+               </el-col>
+            </el-row>
+            <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
+         </div>
+
+         <el-table stripe ref="operlogRef" v-loading="loading" :data="operlogList"
+            @selection-change="handleSelectionChange" :default-sort="defaultSort" @sort-change="handleSortChange">
+            <el-table-column type="selection" width="50" align="center" />
+            <el-table-column :label="td('sys.monitor.operlog.logNo')" align="center" prop="operId" />
+            <el-table-column :label="td('sys.monitor.operlog.systemModule')" align="center" prop="title" :show-overflow-tooltip="{ effect: 'light' }" />
+            <el-table-column :label="td('sys.monitor.operlog.operType')" align="center" prop="businessType">
+               <template #default="scope">
+                  <dict-tag :options="enSysOperType" :value="scope.row.businessType" />
+               </template>
+            </el-table-column>
+            <el-table-column :label="td('sys.monitor.operlog.operPerson')" align="center" width="110" prop="operName"
+               :show-overflow-tooltip="{ effect: 'light' }" sortable="custom"
+               :sort-orders="['descending', 'ascending']" />
+            <el-table-column :label="td('sys.monitor.operlog.operAddr')" align="center" prop="operIp" width="130"
+               :show-overflow-tooltip="{ effect: 'light' }" />
+            <el-table-column :label="td('sys.monitor.operlog.operStatus')" align="center" prop="status">
+               <template #default="scope">
+                  <dict-tag :options="enSysCommonStatus" :value="scope.row.status" />
+               </template>
+            </el-table-column>
+            <el-table-column :label="td('sys.monitor.operlog.operDate')" align="center" prop="operTime" width="180" sortable="custom"
+               :sort-orders="['descending', 'ascending']">
+               <template #default="scope">
+                  <span>{{ parseTime(scope.row.operTime) }}</span>
+               </template>
+            </el-table-column>
+            <el-table-column :label="td('sys.monitor.operlog.costTime')" align="center" prop="costTime" width="110"
+               :show-overflow-tooltip="{ effect: 'light' }" sortable="custom" :sort-orders="['descending', 'ascending']">
+               <template #default="scope">
+                  <span>{{ scope.row.costTime }}{{ td('sys.monitor.operlog.millisecond') }}</span>
+               </template>
+            </el-table-column>
+            <el-table-column :label="td('common.texts.operation')" align="center" class-name="small-padding fixed-width" fixed="right" width="240">
+               <template #default="scope">
+                  <el-button link type="primary" icon="View" @click="handleView(scope.row, scope.index)"
+                     v-hasPermi="['monitor:operlog:query']">{{ td('sys.monitor.operlog.detail') }}</el-button>
+               </template>
+            </el-table-column>
+         </el-table>
+
+         <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum"
+            v-model:limit="queryParams.pageSize" @pagination="getList" />
+      </div>
+
+      <el-dialog :title="td('sys.monitor.operlog.operLogDetail')" v-model="open" width="800px" :append-to="$refs['app-container']" draggable
+         destroy-on-close>
+         <el-form :model="form" label-width="80px" :label-position="labelPosition">
+            <el-row :gutter="20">
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.operModule')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.title }} / {{ typeFormat(form) }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.loginInfo')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.operName }} / {{ form.operIp }} / {{ form.operLocation }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.requestAddr')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.operUrl }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.requestMethod')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.requestMethod }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                  <el-form-item :label="td('sys.monitor.operlog.operMethod')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.method }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                  <el-form-item :label="td('sys.monitor.operlog.requestParam')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.operParam }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                  <el-form-item :label="td('sys.monitor.operlog.returnParam')" :label-position="labelPosition">
+                     <div class="form-readonly">
+                        {{ form.jsonResult }}
+                     </div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.operStatus')" :label-position="labelPosition">
+                     <div class="form-readonly" v-if="form.status === 0">{{ td('sys.monitor.operlog.normal') }}</div>
+                     <div class="form-readonly" v-else-if="form.status === 1">{{ td('sys.monitor.operlog.failed') }}</div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.costTime')" :label-position="labelPosition">
+                     <div class="form-readonly">{{ form.costTime }}{{ td('sys.monitor.operlog.millisecond') }}</div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="12">
+                  <el-form-item :label="td('sys.monitor.operlog.operTime')">
+                     <div class="form-readonly">{{ parseTime(form.operTime) }}</div>
+                  </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                  <el-form-item :label="td('sys.monitor.operlog.exceptionInfo')" v-if="form.status === 1" :label-position="labelPosition">
+                     <div class="form-readonly">{{ form.errorMsg }}</div>
+                  </el-form-item>
+               </el-col>
+            </el-row>
+         </el-form>
+         <template #footer>
+            <div class="dialog-footer">
+               <el-button @click="open = false">{{ td('common.button.close') }}</el-button>
+            </div>
+         </template>
+      </el-dialog>
+   </div>
+</template>
+
+<script setup name="Operlog">
+import { list, delOperlog, cleanOperlog } from "@/api/system/monitor/operlog.js";
+import useDefaultLang from "@/composables/useDefaultLang";
+import enDict from "@/locales/en-US/dict/index.js";
+
+const { td } = useDefaultLang();
+const { proxy } = getCurrentInstance();
+const { sys_oper_type, sys_common_status } = proxy.useDict("sys_oper_type", "sys_common_status");
+
+/** Always use the English dict tag option */
+const enSysOperType = computed(() => {
+  return (sys_oper_type.value || []).map(item => ({
+    ...item,
+    label: enDict.sys_oper_type?.[item.value] ?? item.label
+  }));
+});
+
+const enSysCommonStatus = computed(() => {
+  return (sys_common_status.value || []).map(item => ({
+    ...item,
+    label: enDict.sys_common_status?.[item.value] ?? item.label
+  }));
+});
+
+const operlogList = ref([]);
+const open = ref(false);
+const loading = ref(true);
+const showSearch = ref(true);
+const ids = ref([]);
+const single = ref(true);
+const multiple = ref(true);
+const total = ref(0);
+const title = ref("");
+const dateRange = ref([]);
+const defaultSort = ref({ prop: "operTime", order: "descending" });
+
+const data = reactive({
+   form: {},
+   queryParams: {
+      pageNum: 1,
+      pageSize: 10,
+      operIp: undefined,
+      title: undefined,
+      operName: undefined,
+      businessType: undefined,
+      status: undefined
+   }
+});
+
+const { queryParams, form } = toRefs(data);
+
+/** Query login log */
+function getList() {
+   loading.value = true;
+   list(proxy.addDateRange(queryParams.value, dateRange.value)).then(response => {
+      operlogList.value = response.rows;
+      total.value = response.total;
+      loading.value = false;
+   });
+}
+
+/** Operation log type dictionary translation */
+function typeFormat(row, column) {
+   return proxy.selectDictLabel(sys_oper_type.value, row.businessType);
+}
+
+/** Search button action */
+function handleQuery() {
+   queryParams.value.pageNum = 1;
+   getList();
+}
+
+/** reset button action */
+function resetQuery() {
+   dateRange.value = [];
+   proxy.resetForm("queryRef");
+   queryParams.value.pageNum = 1;
+   proxy.$refs["operlogRef"].sort(defaultSort.value.prop, defaultSort.value.order);
+}
+
+/** Multiple selection box selected data */
+function handleSelectionChange(selection) {
+   ids.value = selection.map(item => item.operId);
+   multiple.value = !selection.length;
+}
+
+/** Sorting trigger events */
+function handleSortChange(column, prop, order) {
+   queryParams.value.orderByColumn = column.prop;
+   queryParams.value.isAsc = column.order;
+   getList();
+}
+
+/** Detailed button operations */
+function handleView(row) {
+   open.value = true;
+   form.value = row;
+}
+
+/** Delete button action */
+function handleDelete(row) {
+   const operIds = row.operId || ids.value;
+   proxy.$modal.confirm(td('sys.monitor.operlog.confirmDelete', { ids: operIds })).then(function () {
+      return delOperlog(operIds);
+   }).then(() => {
+      getList();
+      proxy.$modal.msgSuccess(td('common.message.deleteSuccess'));
+   }).catch(() => { });
+}
+
+/** Clear button action */
+function handleClean() {
+   proxy.$modal.confirm(td('sys.monitor.operlog.confirmClearAll')).then(function () {
+      return cleanOperlog();
+   }).then(() => {
+      getList();
+      proxy.$modal.msgSuccess(td('sys.monitor.operlog.clearSuccess'));
+   }).catch(() => { });
+}
+
+/** Export button action */
+function handleExport() {
+   proxy.download("monitor/operlog/export", {
+      ...queryParams.value,
+   }, `config_${new Date().getTime()}.xlsx`);
+}
+
+getList();
+</script>
+<style scoped lang="scss">
+.form-readonly {
+   width: 100%;
+   border: 1px solid #c0c4cc;
+   padding: 0px 10px;
+   min-height: 34px;
+}
+</style>

@@ -1,0 +1,336 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <el-dialog :title="td('ds.client.multipleTitle')" v-model="visible" width="1200px" :append-to="$refs['app-container']" draggable
+    destroy-on-close @close="cancel">
+    <el-form class="btn-style" :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch"
+       :label-position="labelPosition">
+      <el-form-item label="ID" prop="id" :label-position="labelPosition">
+        <el-input style="width:240px" v-model="queryParams.id" :placeholder="td('ds.client.idPlaceholder')" clearable
+          @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item :label="td('ds.client.appName')" prop="name" :label-position="labelPosition">
+        <el-input style="width:240px" v-model="queryParams.name" :placeholder="td('ds.client.appNamePlaceholder')" clearable
+          @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item :label="td('ds.client.appType')" prop="type" :label-position="labelPosition">
+        <el-select style="width:240px" v-model="queryParams.type" :placeholder="td('ds.client.appTypePlaceholder')" clearable>
+          <el-option v-for="dict in auth_app_type" :key="dict.value" :label="dict.label" :value="dict.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item :label="td('ds.client.appSecret')" prop="secret" :label-position="labelPosition">
+        <el-input style="width:240px" v-model="queryParams.secret" :placeholder="td('ds.client.appSecretPlaceholder')" clearable
+          @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item :label="td('ds.client.homepageUrl')" prop="homepageUrl" :label-position="labelPosition">
+        <el-input style="width:240px" v-model="queryParams.homepageUrl" :placeholder="td('ds.client.homepageUrlPlaceholder')" clearable
+          @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item :label="td('ds.client.syncUrl')" prop="syncUrl" :label-position="labelPosition">
+        <el-input style="width:240px" v-model="queryParams.syncUrl" :placeholder="td('ds.client.syncUrlPlaceholder')" clearable
+          @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item :label="td('ds.client.isPublic')" prop="publicFlag" :label-position="labelPosition">
+        <el-select style="width:240px" v-model="queryParams.publicFlag" :placeholder="td('ds.client.isPublicPlaceholder')" clearable>
+          <el-option v-for="dict in auth_public" :key="dict.value" :label="dict.label" :value="dict.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item :label="td('common.texts.createdTime')" prop="createTime" :label-position="labelPosition">
+        <el-date-picker style="width:240px" clearable v-model="queryParams.createTime" type="date"
+          value-format="YYYY-MM-DD" :placeholder="td('ds.client.createTimePlaceholder')">
+        </el-date-picker>
+      </el-form-item>
+      <el-form-item :label-position="labelPosition">
+        <el-button plain type="primary" @click="handleQuery" @mousedown="(e) => e.preventDefault()">
+          <i class="iconfont-mini icon-a-zu22377 mr5"></i>{{ td('common.button.query') }}
+        </el-button>
+        <el-button @click="resetQuery" @mousedown="(e) => e.preventDefault()">
+          <i class="iconfont-mini icon-a-zu22378 mr5"></i>{{ td('common.button.reset') }}
+        </el-button>
+      </el-form-item>
+    </el-form>
+
+    <el-table ref="multipletableRef" stripe height="300px" v-loading="loading" :data="dataList" reserve-selection
+      row-key="id" @selection-change="handleSelectionChange" @row-click="handleRowClick">
+      <el-table-column type="selection" width="55" align="center" />
+      <el-table-column label="ID" align="center" prop="id" />
+      <el-table-column :label="td('ds.client.appName')" align="center" prop="name">
+        <template #default="scope">
+          {{ scope.row.name || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('ds.client.appType')" align="center" prop="type">
+        <template #default="scope">
+          <dict-tag :options="auth_app_type" :value="scope.row.type" />
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('ds.client.authPath')" align="center" prop="allowUrl">
+        <template #default="scope">
+          {{ scope.row.allowUrl || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('ds.client.syncUrl')" align="center" prop="syncUrl">
+        <template #default="scope">
+          {{ scope.row.syncUrl || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('ds.client.appIcon')" align="center" prop="logo" width="100">
+        <template #default="scope">
+          <image-preview :src="scope.row.logo" :width="50" :height="50" />
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('common.texts.description')" align="center" prop="description">
+        <template #default="scope">
+          {{ scope.row.description || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('ds.client.isPublic')" align="center" prop="publicFlag">
+        <template #default="scope">
+          <dict-tag :options="auth_public" :value="scope.row.publicFlag" />
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('common.texts.createdBy')" align="center" prop="createBy">
+        <template #default="scope">
+          {{ scope.row.createBy || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('common.texts.createdTime')" align="center" prop="createTime" width="180">
+        <template #default="scope">
+          <span>{{ parseTime(scope.row.createTime, '{y}-{m}-{d}') }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column :label="td('common.texts.remark')" align="center" prop="remark">
+        <template #default="scope">
+          {{ scope.row.remark || '-' }}
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum"
+      v-model:limit="queryParams.pageSize" @pagination="getList" />
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button size="mini" @click="cancel">{{ td('common.button.cancel') }}</el-button>
+        <el-button type="primary" size="mini" @click="confirm">
+          {{ td('common.button.confirm') }}
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup name="ClientMultiple">
+import useDefaultLang from "@/composables/useDefaultLang";
+import { listClient } from "@/api/ds/client/client";
+import { ref } from "vue";
+
+const { td } = useDefaultLang();
+const { proxy } = getCurrentInstance();
+
+const { auth_public, auth_app_type } = proxy.useDict('auth_public', 'auth_app_type');
+
+const dataList = ref([]);
+const loading = ref(true);
+const showSearch = ref(true);
+const total = ref(0);
+const dateRange = ref([]);
+const data = reactive({
+  form: {},
+  queryParams: {
+    pageNum: 1,
+    pageSize: 10,
+    id: null,
+    name: null,
+    type: null,
+    secret: null,
+    homepageUrl: null,
+    allowUrl: null,
+    syncUrl: null,
+    logo: null,
+    description: null,
+    publicFlag: null,
+    createTime: null,
+  }
+});
+const { queryParams, form } = toRefs(data);
+
+// -------------------------------------------
+const visible = ref(false);
+// Define multiple selection data
+const multiple = ref([]);
+// Define the last checked data == used for comparison and deletion
+const oldSelection = ref([]);
+// Whether to switch between pages
+const isAuto = ref(false);
+// Current interface table
+const multipletableRef = ref();
+
+const emit = defineEmits(["open", "confirm", "cancel"]);
+
+/** Multi-select box selection event */
+function handleSelectionChange(selection) {
+  // console.log(selection, "===handleSelectionChange");
+  if (selection.length > 0) {
+    // If the selected value is not a null value and one less value is selected
+    if (oldSelection.value.length > selection.length) {
+      oldSelection.value.forEach((item) => {
+        let index = selection.findIndex((ece) => ece.id == item.id);
+        if (index == -1) {
+          multiple.value = multiple.value.filter(
+            (ece) => item.id != ece.id
+          );
+        }
+      });
+    }
+    if (multiple.value.length > 0) {
+      selection.forEach((item) => {
+        let index = multiple.value.findIndex(
+          (ece) => ece.id == item.id
+        );
+        if (index == -1) {
+          multiple.value.push(item);
+        }
+      });
+    } else {
+      multiple.value.push(...selection);
+    }
+  } else {
+    // If it is not caused by paging
+    if (!isAuto.value) {
+      // If a value is selected, cancel to no value selected
+      oldSelection.value.forEach((item) => {
+        let index = selection.findIndex((ece) => ece.id == item.id);
+        if (index == -1) {
+          multiple.value = multiple.value.filter(
+            (ece) => item.id != ece.id
+          );
+        }
+      });
+    }
+  }
+  oldSelection.value = selection;
+}
+
+/** Single machine event */
+function handleRowClick(row) {
+  // Check if current row is already in multiple
+  const index = multiple.value.findIndex(item => item.id === row.id);
+
+  // If the row is already selected, remove it
+  if (index > -1) {
+    multiple.value = multiple.value.filter(item => item.id !== row.id);
+  } else {
+    // If row is not selected, add to multiple
+    multiple.value.push(row);
+  }
+
+  // Synchronously update the selected status of the table
+  multipletableRef.value.toggleRowSelection(row, index === -1);
+}
+
+/**
+ * Select the checkbox of the table
+ * @param {Array} rows Array of selected objects
+ * @param {Boolean} ignoreSelectable Whether to ignore optional
+ */
+function setSelectionRow(rows, ignoreSelectable) {
+  // Select data
+  if (rows.length > 0) {
+    rows.forEach((row) => {
+      let data = dataList.value.filter((item) => item.id == row.id);
+      if (data.length > 0) {
+        multipletableRef.value.toggleRowSelection(data[0], undefined, ignoreSelectable);
+      }
+    });
+  }
+}
+
+function rest() {
+  queryParams.value.pageNum = 1;
+  proxy.resetForm("queryRef");
+  oldSelection.value = []
+}
+
+/**
+ * Open selection box
+ * @param {Array} val array of selected objects
+ */
+function open(val) {
+  if (!Array.isArray(val)) {
+    val = [val];  // Convert non-iterable values to array
+  }
+  visible.value = true;
+  multiple.value = [...val];
+  getList();
+}
+
+/**
+ * Cancel button
+ * @description When canceling the button, reset all states
+ */
+function cancel() {
+  rest();
+  visible.value = false;
+}
+
+/**
+ * OK button
+ * @description When confirming the button, emit the confirm event so that the parent component receives the selected data
+ */
+function confirm() {
+  if (multiple.value.length == 0) {
+    proxy.$modal.msgWarning(td('ds.client.noDataSelected'));
+    return;
+  }
+  emit("confirm", [...multiple.value]);
+  rest();
+  visible.value = false;
+}
+
+/** Query dictionary type list */
+function getList() {
+  loading.value = true;
+  listClient(proxy.addDateRange(queryParams.value, dateRange.value)).then(
+    async (response) => {
+      dataList.value = response.data.rows;
+      total.value = response.data.total;
+      loading.value = false;
+      // Initialization and paging switching selection logic
+      isAuto.value = true;
+      await nextTick();
+      setSelectionRow(multiple.value);
+      isAuto.value = false;
+    }
+  );
+}
+
+/** Search button action */
+function handleQuery() {
+  getList();
+}
+
+/** reset button action */
+function resetQuery() {
+  proxy.resetForm("queryRef");
+  queryParams.value.pageNum = 1;
+  handleQuery();
+}
+
+defineExpose({ open });
+</script>

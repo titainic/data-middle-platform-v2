@@ -1,0 +1,180 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<!-- Complex details routing template
+    {
+        path: '/${controllerPrefix}/${moduleName}',
+        component: Layout,
+        redirect: '${moduleName}',
+        hidden: true,
+        children: [
+            {
+                path: '${businessName}Detail',
+                component: () => import('@/views/${controllerPrefix}/${moduleName}/detail/index.vue'),
+                name: 'tree',
+                meta: { title: td('${controllerPrefix}.${moduleName}.title.detail'),  activeMenu: '/${topModule}/${businessName}'  }
+            }
+        ]
+    }
+ -->
+
+
+
+<template>
+  <div class="app-container" ref="app-container">
+    <div class="pagecont-top" v-show="showSearch" style="padding-bottom:15px">
+      <div class="infotop" >
+        <div class="infotop-title mb15">
+            #foreach($column in $columns)
+              #set($javaField=$column.javaField)
+              #if($column.pk)
+              {{ ${businessName}Detail.${javaField} }}
+            #end
+            #end
+        </div>
+        <el-row :gutter="20">
+          #foreach($column in $columns)
+            #set($javaField=$column.javaField)
+            #set($parentheseIndex=$column.columnComment.indexOf("（"))
+            #if($parentheseIndex != -1)
+              #set($comment=$column.columnComment.substring(0, $parentheseIndex))
+            #else
+              #set($comment=$column.columnComment)
+            #end
+          #if($column.pk)
+            <el-col :span="8">
+              <div class="infotop-row border-top">
+                <div class="infotop-row-lable">{{td('${controllerPrefix}.${moduleName}.column.${javaField}')}}</div>
+                <div class="infotop-row-value">{{ ${businessName}Detail.${javaField} }}</div>
+              </div>
+            </el-col>
+          #elseif($column.list && $column.htmlType == "datetime" )
+            <el-col :span="8">
+              <div class="infotop-row border-top">
+                <div class="infotop-row-lable">{{td('${controllerPrefix}.${moduleName}.column.${javaField}')}}</div>
+                <div class="infotop-row-value">{{ parseTime(${businessName}Detail.${javaField}, '{y}-{m}-{d}') }}</div>
+              </div>
+            </el-col>
+          #elseif($column.list && $column.htmlType == "imageUpload")
+            <el-col :span="8">
+              <div class="infotop-row border-top">
+                <div class="infotop-row-lable">{{td('${controllerPrefix}.${moduleName}.column.${javaField}')}}</div>
+                <div class="infotop-row-value">
+                  <image-preview :src="${businessName}Detail.${javaField}" :width="50" :height="50"/>
+                </div>
+              </div>
+            </el-col>
+          #elseif($column.list && "" != $column.dictType)
+            <el-col :span="8">
+              <div class="infotop-row border-top">
+                <div class="infotop-row-lable">{{td('${controllerPrefix}.${moduleName}.column.${javaField}')}}</div>
+                <div class="infotop-row-value">
+                    <dict-tag :options="${column.dictType}" :value="${businessName}Detail.${javaField} "/>
+                </div>
+              </div>
+            </el-col>
+          #elseif($column.list && "" != $javaField)
+            <el-col :span="8">
+              <div class="infotop-row border-top">
+                <div class="infotop-row-lable">{{td('${controllerPrefix}.${moduleName}.column.${javaField}')}}</div>
+                <div class="infotop-row-value">
+                  {{ ${businessName}Detail.${javaField} || '-' }}
+                </div>
+              </div>
+            </el-col>
+          #end
+          #end
+        </el-row>
+
+      </div>
+    </div>
+
+    <div  class="pagecont-bottom">
+      <el-tabs v-model="activeName" class="demo-tabs" @tab-click="handleClick">
+        <el-tab-pane :label="td('common.display.componentOne')" name="1">
+          <component-one ></component-one>
+        </el-tab-pane>
+        <el-tab-pane :label="td('common.display.componentTwo')" name="2">
+          <component-two ></component-two>
+        </el-tab-pane>
+      </el-tabs>
+    </div>
+
+
+  </div>
+</template>
+
+<script setup name="${BusinessName}">
+import useDefaultLang from "@/composables/useDefaultLang";
+const { td } = useDefaultLang();
+import {get${BusinessName}} from "@/api/";
+import {useRoute} from 'vue-router';
+
+const { proxy } = getCurrentInstance();
+    #if(${dicts} != '')
+      #set($dictsNoSymbol=$dicts.replace("'", ""))
+    const { ${dictsNoSymbol} } = proxy.useDict(${dicts});
+    #end
+
+  const activeName = ref('1')
+
+  const handleClick = (tab, event) => {
+    console.log(tab, event)
+  }
+
+  const showSearch = ref(true);
+  const route = useRoute();
+  let id = route.query.id || 1;
+  // Monitor id changes
+  watch(
+          () => route.query.id,
+          (newId) => {
+            id = newId || 1;  // If id is empty, the default value 1 is used
+            get${BusinessName}DetailById();
+
+          },
+          { immediate: true }  // `immediate` is true, which means that a watch will be executed immediately when the page is loaded.
+  );
+  const data = reactive({
+      ${businessName}Detail: {
+    },
+    form: {},
+  });
+
+  const {  ${businessName}Detail, rules } = toRefs(data);
+
+  /** Form query at the top of the complex details page */
+  function get${BusinessName}DetailById() {
+    ## const _${pkColumn.javaField} = row.${pkColumn.javaField} || ids.value
+    const _${pkColumn.javaField} = id ;
+    get${BusinessName}(_${pkColumn.javaField}).then(response => {
+        ${businessName}Detail.value = response.data;
+      #foreach ($column in $columns)
+        #if($column.htmlType == "checkbox")
+            ${businessName}Detail.value.$column.javaField = ${businessName}Detail.value.${column.javaField}.split(",");
+        #end
+      #end
+      #if($table.sub)
+          ${subclassName}List.value = response.data.${subclassName}List;
+      #end
+    });
+  }
+
+  get${BusinessName}DetailById();
+
+</script>

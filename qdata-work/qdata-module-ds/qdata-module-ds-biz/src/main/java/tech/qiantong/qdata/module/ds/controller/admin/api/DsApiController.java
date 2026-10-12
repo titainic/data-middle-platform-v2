@@ -1,0 +1,337 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.ds.controller.admin.api;
+
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.http.HttpRequest;
+import cn.hutool.http.HttpResponse;
+import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.AesEncryptUtil;
+import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.module.ds.controller.admin.api.vo.DsApiPageReqVO;
+import tech.qiantong.qdata.module.ds.controller.admin.api.vo.DsApiReqVO;
+import tech.qiantong.qdata.module.ds.controller.admin.api.vo.DsApiRespVO;
+import tech.qiantong.qdata.module.ds.controller.admin.api.vo.SqlParseVo;
+import tech.qiantong.qdata.module.ds.convert.api.DsApiConvert;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.DsApiDO;
+import tech.qiantong.qdata.module.ds.dal.dataobject.api.SqlParseDto;
+import tech.qiantong.qdata.module.ds.service.api.IDsApiService;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * API service controller
+ *
+ * @author lhs
+ * @date 2025-02-12
+ */
+@Tag(name = "API服务")
+@RestController
+@RequestMapping("/ds/api")
+@Validated
+public class DsApiController extends BaseController {
+    @Resource private tech.qiantong.qdata.module.ds.service.api.ServiceResourceAccess resources;
+    @Resource
+    private IDsApiService dsApiService;
+
+    @Value("${ds.base_url:}")
+    private String dsBaseUrl;
+
+    @Operation(summary = "查询API服务列表")
+    @PreAuthorize("@ss.hasPermi('ds:api:list')")
+    @GetMapping("/list")
+    public CommonResult<PageResult<DsApiRespVO>> list(DsApiPageReqVO dsApi) {
+        dsApi.setAccessibleApiIds(resources.apiIds("read"));
+        PageResult<DsApiDO> page = dsApiService.getDsApiPage(dsApi);
+        var result=BeanUtils.toBean(page,DsApiRespVO.class);result.setRows(result.getRows().stream().map(resources::present).toList());return CommonResult.success(result);
+    }
+
+    @Operation(summary = "导出API服务列表")
+    @PreAuthorize("@ss.hasPermi('ds:api:export')")
+    @Log(title = "log.op.title.ds.api", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, DsApiPageReqVO exportReqVO) {
+        exportReqVO.setAccessibleApiIds(resources.apiIds("export"));
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<DsApiDO> list = (List<DsApiDO>) dsApiService.getDsApiPage(exportReqVO).getRows();
+        ExcelUtil<DsApiRespVO> util = new ExcelUtil<>(DsApiRespVO.class);
+        util.exportExcel(response, DsApiConvert.INSTANCE.convertToRespVOList(list).stream().map(resources::present).toList(), "Application Management Data");
+    }
+
+    @Operation(summary = "导入API服务列表")
+    @PreAuthorize("@ss.hasPermi('ds:api:import')")
+    @Log(title = "log.op.title.ds.api", businessType = BusinessType.IMPORT)
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        ExcelUtil<DsApiRespVO> util = new ExcelUtil<>(DsApiRespVO.class);
+        List<DsApiRespVO> importExcelList = util.importExcel(file.getInputStream());
+        for(var row:importExcelList){var definition=BeanUtils.toBean(row,DsApiDO.class);resources.prepare(definition,row.getId()==null?"add":"edit",row.getId()!=null);resources.definition(definition,"1".equals(row.getStatus()));row.setProjectId(definition.getProjectId());row.setConfigJson(definition.getConfigJson());if(row.getId()==null){row.setCreatorId(getUserId());row.setCreateBy(getUsername());}else{row.setCreatorId(null);row.setCreateBy(null);row.setCreateTime(null);}}
+        String operName = getUsername();
+        String message = dsApiService.importDsApi(importExcelList, updateSupport, operName);
+        return success(message);
+    }
+
+    @Operation(summary = "检查DolphinScheduler是否可访问")
+    @GetMapping("/checkApi")
+    public CommonResult<Boolean> check() {
+        if (StringUtils.isBlank(dsBaseUrl)) {
+            return CommonResult.success(false);
+        }
+        try (HttpResponse response = HttpRequest.get(dsBaseUrl+"/login/sso").timeout(2000).execute()) {
+            return CommonResult.success(response.getStatus() == 200);
+        } catch (Exception e) {
+            return CommonResult.success(false);
+        }
+    }
+
+    @Operation(summary = "获取API服务详细信息")
+    @PreAuthorize("@ss.hasPermi('ds:api:query')")
+    @GetMapping(value = "/{ID:\\d+}")
+    public CommonResult<DsApiRespVO> getInfo(@PathVariable("ID") Long ID) {
+        resources.api(ID,"read");
+        DsApiDO dsApiDO = dsApiService.getDsApiById(ID);
+        return CommonResult.success(resources.present(BeanUtils.toBean(dsApiDO, DsApiRespVO.class)));
+    }
+
+    @Operation(summary = "根据名称，版本号，路径进行判断是否重复")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:add,ds:api:edit,ds:api:query')")
+    @PostMapping(value = "/repeatFlag")
+    public AjaxResult repeatFlag(@RequestBody JSONObject jsonObject) {
+        if(jsonObject.getLong("id")!=null)resources.api(jsonObject.getLong("id"),"edit");
+        jsonObject.put("projectId",resources.project(jsonObject.getLong("projectId"),"author"));
+        if (StringUtils.isBlank(jsonObject.getString("name"))) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "ds.error.api.name.required", "API name is required"));
+        }
+        if (StringUtils.isBlank(jsonObject.getString("apiVersion"))) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "ds.error.api.version.required", "API version is required"));
+        }
+        if (StringUtils.isBlank(jsonObject.getString("apiUrl"))) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "ds.error.api.path.required", "API path is required"));
+        }
+        DsApiDO dsApiDO = dsApiService.repeatFlag(jsonObject);
+        if (dsApiDO != null) {
+            return AjaxResult.error(MessageUtils.messageWithFallback(
+                    "ds.error.api.duplicate", "An API with the same name, version, and path already exists"));
+        }
+        return AjaxResult.success(dsApiDO);
+    }
+
+
+    @Operation(summary = "删除API服务")
+    @PreAuthorize("@ss.hasPermi('ds:api:remove')")
+    @Log(title = "log.op.title.ds.api", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{id}")
+    public CommonResult<Integer> remove(@PathVariable(name = "id") Long[] id) {
+        for(Long key:id)resources.api(key,"remove");
+        return CommonResult.toAjax(dsApiService.removeDsApi(Arrays.asList(id)));
+    }
+
+    /**
+     * Parses SQL.
+     *
+     * @param sqlParseDto
+     * @return
+     */
+    @Operation(summary = "SQL解析")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:add,ds:api:edit')")
+    @PostMapping("/sqlParse")
+    public AjaxResult sqlParse(@RequestBody @Validated SqlParseDto sqlParseDto) {
+        sqlParseDto.setProjectId(resources.project(sqlParseDto.getProjectId(),"author"));resources.query(sqlParseDto.getProjectId(),tech.qiantong.qdata.module.ds.service.api.ServiceResourceAccess.parse(sqlParseDto.getSourceId()),sqlParseDto.getSqlText(),true);
+        /*try {
+            sqlParseDto.setSqlText(AesEncryptUtil.desEncrypt(sqlParseDto.getSqlText()).trim());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }*/
+        SqlParseVo sqlParseVo = dsApiService.sqlParse(sqlParseDto);
+        return AjaxResult.success(sqlParseVo);
+    }
+
+    @Operation(summary = "接口调试")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:add,ds:api:edit')")
+    @PostMapping("/serviceTesting")
+    public AjaxResult serviceTesting(@RequestBody DsApiDO dataApi) {
+        resources.prepare(dataApi,dataApi.getId()==null?"add":"edit",dataApi.getId()!=null);
+        if (dataApi.getExecuteConfig() != null && StringUtils.isNotBlank(dataApi.getExecuteConfig().getSqlText())) {
+            try {
+                dataApi.getExecuteConfig().setSqlText(normalizeTestingSql(dataApi.getExecuteConfig().getSqlText()));
+            } catch (Exception e) {
+                logger.error("Operation failed", e);
+            }
+        } else {
+            if (dataApi.getExecuteConfig() != null) {
+                dataApi.getExecuteConfig().setSqlText("");
+            }
+        }
+        Object value = dsApiService.serviceTesting(dataApi);
+        return AjaxResult.success(value);
+    }
+
+
+    private static String normalizeTestingSql(String sql) throws Exception {
+        String text = sql == null ? "" : sql.trim();
+        // Current editors send SQL text; older clients may send AES/Base64 SQL.
+        if (!text.isEmpty() && text.length() % 4 == 0 && text.matches("[A-Za-z0-9+/]+={0,2}")) {
+            byte[] decoded = java.util.Base64.getDecoder().decode(text);
+            if (decoded.length > 0 && decoded.length % 16 == 0) {
+                String plain = AesEncryptUtil.desEncrypt(text);
+                if (plain == null) throw new IllegalArgumentException("Invalid encrypted SQL");
+                return plain.trim();
+            }
+        }
+        return text;
+    }
+
+    @Operation(summary = "接口调试")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:add,ds:api:edit')")
+    @PostMapping("/queryServiceForwarding")
+    public void queryServiceForwarding(HttpServletResponse response, @Valid @RequestBody DsApiReqVO dsApiReqVO) {
+        dsApiReqVO.setProjectId(resources.project(dsApiReqVO.getProjectId(),"author"));resources.forward(dsApiReqVO.getProjectId(),dsApiReqVO.getTransmitType(),dsApiReqVO.getApiId());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8");
+        dsApiService.queryServiceForwarding(response, dsApiReqVO);
+    }
+
+
+    /**
+     * Adds an API.
+     *
+     * @param dataApi
+     * @return
+     */
+    @Operation(summary = "保存Api信息")
+    @PreAuthorize("@ss.hasPermi('ds:api:add')")
+    @PostMapping()
+    public AjaxResult saveDataApi(@RequestBody DsApiDO dataApi) {
+        resources.prepare(dataApi,"add",false);
+//        if (dataApi.getExecuteConfig() != null && StringUtils.isNotBlank(dataApi.getExecuteConfig().getSqlText())) {
+//            try {
+//                dataApi.getExecuteConfig().setSqlText(AesEncryptUtil.desEncrypt(dataApi.getExecuteConfig().getSqlText()).trim());
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        }
+        dataApi.setCreateBy(getUsername());
+        dataApi.setCreatorId(getUserId());
+        dataApi.setCreateTime(DateUtil.date());
+        return dsApiService.saveDataApi(dataApi);
+    }
+
+
+    /**
+     * Updates an API.
+     *
+     * @param dataApi
+     * @return
+     */
+    @Operation(summary = "修改Api信息")
+    @PutMapping
+    @PreAuthorize("@ss.hasPermi('ds:api:edit')")
+    public AjaxResult updateDataApi(@RequestBody DsApiDO dataApi) {
+        resources.prepare(dataApi,"edit",true);
+//        if (dataApi.getExecuteConfig() != null && StringUtils.isNotBlank(dataApi.getExecuteConfig().getSqlText())) {
+//            try {
+//                dataApi.getExecuteConfig().setSqlText(AesEncryptUtil.desEncrypt(dataApi.getExecuteConfig().getSqlText()).trim());
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        }
+        dataApi.setUpdatorId(getUserId());
+        dataApi.setUpdateBy(getUsername());
+        dataApi.setUpdateTime(DateUtil.date());
+        return dsApiService.updateDataApi(dataApi);
+    }
+
+
+    /**
+     * Publishes an API.
+     *
+     * @param id
+     * @return
+     */
+
+    @GetMapping(value = "/release/{id}")
+    @PreAuthorize("@ss.hasPermi('ds:api:edit')")
+    public AjaxResult releaseDataApi(@PathVariable String id) {
+        Long key=tech.qiantong.qdata.module.ds.service.api.ServiceResourceAccess.parse(id);resources.api(key,"edit");resources.publication(dsApiService.getDsApiById(key));
+        dsApiService.releaseDataApi(id, getUserId(), getUsername());
+        return AjaxResult.success();
+    }
+
+    /**
+     * Unpublishes an API.
+     *
+     * @param id
+     * @return
+     */
+    @PreAuthorize("@ss.hasPermi('ds:api:edit')")
+    @GetMapping(value = "/cancel/{id}")
+    public AjaxResult cancelDataApi(@PathVariable String id) {
+        resources.api(tech.qiantong.qdata.module.ds.service.api.ServiceResourceAccess.parse(id),"edit");
+        dsApiService.cancelDataApi(id, getUserId(), getUsername());
+        return AjaxResult.success();
+    }
+
+    @Operation(summary = "查询API下拉选服务列表")
+    @GetMapping("/selectList")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:list,ds:api:query')")
+    public CommonResult<List<DsApiRespVO>> selectList(String name) {
+        var allowed=resources.apiIds("read");if(allowed.isEmpty())return CommonResult.success(java.util.List.of());
+        IPage<DsApiDO> page = dsApiService.page(new Page(1, 20), Wrappers.lambdaQuery(DsApiDO.class)
+                .in(DsApiDO::getId,allowed)
+                .like(StringUtils.isNotBlank(name),DsApiDO::getName, name)
+                .select(DsApiDO::getId, DsApiDO::getName));
+        return CommonResult.success(BeanUtils.toBean(page.getRecords(), DsApiRespVO.class));
+    }
+
+
+    @GetMapping("/projects")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:add,ds:api:edit,ds:api:list,ds:api:query')")
+    public CommonResult<?> projects(@RequestParam(defaultValue="false") boolean editable){return CommonResult.success(resources.projectOptions(editable));}
+    @GetMapping("/datasources")
+    @PreAuthorize("@ss.hasAnyPermi('ds:api:add,ds:api:edit')")
+    public CommonResult<?> datasources(@RequestParam Long projectId){return CommonResult.success(resources.datasourceOptions(projectId));}
+
+}

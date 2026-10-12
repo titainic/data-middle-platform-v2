@@ -1,0 +1,25 @@
+
+sa-token:
+  token-name: qdataToken
+  timeout: 2592000
+  active-timeout: -1
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: true
+  oauth2-server:
+    enable-authorization-code: true
+    enable-implicit: true
+    enable-password: true
+    enable-client-credentials: true
+    is-new-refresh: false
+    code-timeout: 300
+    access-token-timeout: 7200
+    refresh-token-timeout: 2592000
+    client-token-timeout: 7200
+    lower-client-token-timeout: -1
+    higher-scope: admin
+    lower-scope: userinfo
+    mode4-return-access-token: false
+    hide-status-field: false
+

@@ -1,0 +1,1373 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+  <div
+    class="app-container"
+    ref="app-container"
+    v-loading="loadingInstance"
+    style="background-color: #f0f2f5"
+  >
+    <div class="custom-card">
+      <div class="steps-inner">
+        <ul class="zl-step">
+          <li
+            v-for="(item, index) in stepsList"
+            :key="index"
+            :class="{
+              statusEnd: activeReult === index,
+              prevStep: index < activeReult,
+              cur: index > activeReult,
+            }"
+          >
+            <div
+              class="step-circle"
+              :class="{
+                active: activeReult === index,
+                prev: index < activeReult,
+              }"
+            >
+              <span>{{ index + 1 }}</span>
+            </div>
+
+            <!-- step name -->
+            <span class="step-name">{{ item.name }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div
+      class="pagecont-top"
+      v-loading="loading"
+      v-show="showSearch"
+      style="padding-bottom: 15px"
+    >
+      <div style="padding:16px"><span>所属项目 </span><el-select v-model="form.projectId" :disabled="!!id" aria-label="质量任务所属项目" @change="changeQualityProject"><el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" :disabled="!p.capabilities?.add" /></el-select></div>
+      <div class="infotop">
+        <div class="main">
+          <el-form
+            ref="formRef"
+            :model="form"
+            label-width="170px"
+            v-show="activeReult == 0"
+            style="padding-right: 90px"
+            :disabled="isReadonly"
+            :label-position="labelPosition"
+          >
+            <div class="h2-titles">{{ td('da.qualityTask.stepBasicInfo') }}</div>
+            <el-row :gutter="20">
+              <el-col :span="11">
+                <el-form-item
+                  :label="td('da.qualityTask.taskName')"
+                  prop="taskName"
+                  :rules="[
+                    {
+                      required: true,
+                      message: td('da.qualityTask.taskNamePlaceholder'),
+                      trigger: 'blur',
+                    },
+                  ]"
+                >
+                  <el-input
+                    v-model="form.taskName"
+                    :placeholder="td('da.qualityTask.taskNamePlaceholder')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="2"> </el-col>
+              <el-col :span="11">
+                <el-form-item
+                  :label="td('da.qualityTask.taskCategory')"
+                  prop="catCode"
+                  :rules="[
+                    {
+                      required: true,
+                      message: td('da.qualityTask.taskCategoryRequired'),
+                      trigger: 'change',
+                    },
+                  ]"
+                >
+                  <el-tree-select
+                    filterable
+                    v-model="form.catCode"
+                    :data="deptOptions"
+                    :props="{
+                      value: 'code',
+                      label: 'name',
+                      children: 'children',
+                    }"
+                    value-key="ID"
+                    :placeholder="td('da.qualityTask.taskCategoryPlaceholder')"
+                    check-strictly
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="11">
+                <el-form-item
+                  :label="td('da.qualityTask.executionStrategy')"
+                  prop="strategy"
+                  :rules="[
+                    {
+                      required: true,
+                      message: td('da.qualityTask.executionStrategyRequired'),
+                      trigger: 'blur',
+                    },
+                  ]"
+                >
+                  <el-select
+                    class="el-form-input-width"
+                    v-model="form.strategy"
+                    :placeholder="td('da.qualityTask.executionStrategyPlaceholder')"
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="dict in dpp_etl_task_execution_type"
+                      :key="dict.value"
+                      :label="dict.label"
+                      :value="dict.value"
+                    ></el-option>
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="2"> </el-col>
+              <el-col :span="11">
+                <el-form-item :label="td('da.qualityTask.responsiblePerson')" prop="contactId">
+                  <el-tree-select
+                    filterable
+                    v-model="form.contactId"
+                    :data="userList"
+                    :props="{
+                      value: 'userId',
+                      label: 'nickName',
+                      children: 'children',
+                    }"
+                    value-key="ID"
+                    :placeholder="td('da.qualityTask.responsiblePersonPlaceholder')"
+                    check-strictly
+                    @change="handleContactChange"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-row :gutter="20">
+              <el-col :span="11">
+                <el-form-item
+                  :label="td('da.qualityTask.schedulePeriodLabel')"
+                  prop="cycle"
+                  :rules="[
+                    {
+                      required: true,
+                      message: td('da.qualityTask.schedulePeriodRequired'),
+                      trigger: 'blur',
+                    },
+                  ]"
+                >
+                  <el-input :disabled="!!id" v-model="form.cycle" :placeholder="td('da.qualityTask.schedulePeriodPlaceholder')">
+                    <template #append>
+                      <el-button
+                        type="primary"
+                        :disabled="!!id || isReadonly"
+                        @click="handleShowCron"
+                        style="background-color: #2666fb; color: #fff"
+                      >
+                        {{ td('da.qualityTask.config') }}
+                        <i class="el-icon-time el-icon--right"></i>
+                      </el-button>
+                    </template>
+                  </el-input>
+                </el-form-item>
+              </el-col>
+              <el-col :span="2"> </el-col>
+              <el-col :span="11">
+                <el-form-item :label="td('da.qualityTask.taskStatusLabel')" prop="status">
+                  <el-radio-group
+                    v-model="form.status"
+                    disabled
+                    class="el-form-input-width"
+                  >
+                    <el-radio
+                      v-for="dict in da_discovery_task_status"
+                      :key="dict.value"
+                      :label="dict.value"
+                    >
+                      {{ dict.label }}
+                    </el-radio>
+                  </el-radio-group>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="24">
+                <el-form-item :label="td('da.qualityTask.taskDescription')" prop="description">
+                  <el-input
+                    v-model="form.description"
+                    type="textarea"
+                    :placeholder="td('da.qualityTask.taskDescriptionPlaceholder')"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <!--                        <el-divider content-position="center">-->
+            <!--                            <span class="blue-text">Attribute information</span>-->
+            <!--                        </el-divider>-->
+            <!-- <div class="clearfix header-text">
+                            <div class="header-left">
+                                <div class="blue-bar"></div>
+
+                            </div>
+                        </div> -->
+            <div class="h2-titles">{{ td('da.qualityTask.propertyInfo') }}</div>
+            <el-row :gutter="20">
+              <el-col :span="11">
+                <el-form-item
+                  :label="td('da.qualityTask.taskPriority')"
+                  prop="priority"
+                  :rules="[
+                    {
+                      required: true,
+                      message: td('da.qualityTask.taskPriorityRequired'),
+                      trigger: 'change',
+                    },
+                  ]"
+                >
+                  <el-select
+                    v-model="form.priority"
+                    :placeholder="td('da.qualityTask.taskPriorityPlaceholder')"
+                  >
+                    <el-option
+                      v-for="dict in priorityOptions"
+                      :key="dict.value"
+                      :label="dict.label"
+                      :value="dict.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="2"> </el-col>
+              <el-col :span="11">
+                <el-form-item
+                  :label="td('da.qualityTask.workerGroup')"
+                  prop="workerGroup"
+                  :rules="[
+                    {
+                      required: true,
+                      message: td('da.qualityTask.workerGroupRequired'),
+                      trigger: 'blur',
+                    },
+                  ]"
+                >
+                  <el-input
+                    v-model="form.workerGroup"
+                    :placeholder="td('da.qualityTask.workerGroupPlaceholder')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="11">
+                <el-form-item :label="td('da.qualityTask.retryCount')" prop="retryTimes">
+                  <el-input
+                    type="number"
+                    v-model="form.retryTimes"
+                    :placeholder="td('da.qualityTask.retryCountPlaceholder')"
+                  >
+                    <template #append>{{ td('da.qualityTask.retryCountUnit') }}</template>
+                  </el-input>
+                </el-form-item>
+              </el-col>
+              <el-col :span="2"> </el-col>
+              <el-col :span="11">
+                <el-form-item :label="td('da.qualityTask.delayTime')" prop="delayTime">
+                  <el-input
+                    type="number"
+                    v-model="form.delayTime"
+                    :placeholder="td('da.qualityTask.delayTimePlaceholder')"
+                  >
+                    <template #append>{{ td('da.qualityTask.delayTimeUnit') }}</template>
+                  </el-input>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item :label="td('common.texts.remark')" prop="remark">
+              <el-input
+                v-model="form.remark"
+                type="textarea"
+                :placeholder="td('common.form.remarkPlaceholder')"
+              />
+            </el-form-item>
+          </el-form>
+
+          <div v-loading="loadingList" v-show="activeReult == 1">
+            <div class="h2-titles">{{ td('da.qualityTask.stepTargetInfo') }}</div>
+            <div class="justify-between mb15">
+              <el-row :gutter="15" class="btn-style">
+                <el-col :span="1.5">
+                  <el-button
+                    type="primary"
+                    icon="Plus"
+                    @click="openDialog(undefined)"
+                    v-if="!isReadonly"
+                    >{{ td('common.button.add') }}</el-button
+                  >
+                </el-col>
+              </el-row>
+            </div>
+            <el-table stripe height="500px" :data="dppQualityTaskObjSaveReqVO">
+              <el-table-column :label="td('common.display.index')" type="index" align="center" />
+              <el-table-column
+                :label="td('da.qualityTask.targetName')"
+                align="center"
+                prop="name"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ scope.row.name }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('da.qualityTask.datasourceName')"
+                align="center"
+                prop="type"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  <img
+                    :src="getDatasourceIcon(scope.row.datasourceType)"
+                    class="iconimg"
+                  />
+                  {{ scope.row.datasourceType }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('da.qualityTask.schemaName')"
+                align="center"
+                prop="type"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ displayObjectSchema(scope.row) }}
+                </template>
+              </el-table-column>
+
+              <el-table-column
+                :label="td('da.qualityTask.tableName')"
+                align="center"
+                prop="tableName"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ scope.row.tableName }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('common.texts.operation')"
+                align="center"
+                class-name="small-padding fixed-width"
+                fixed="right"
+                width="200"
+                v-if="!isReadonly"
+              >
+                <template #default="scope">
+                  <el-button
+                    link
+                    type="primary"
+                    icon="Edit"
+                    @click="openDialog(scope.row, scope.$index + 1)"
+                    >{{ td('common.button.update') }}</el-button
+                  >
+                  <el-button
+                    link
+                    type="danger"
+                    icon="Delete"
+                    @click="handleDelete(scope.row)"
+                    >{{ td('common.button.delete') }}</el-button
+                  >
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div v-loading="loadingList" v-show="activeReult == 2">
+            <div class="clearfix header-text" style="margin-top: 10px">
+              <div class="header-left">
+                <div class="blue-bar"></div>
+                {{ td('da.qualityTask.ruleInfo') }}
+              </div>
+            </div>
+            <el-form
+              class="btn-style"
+              :model="queryParams"
+              ref="queryRef"
+              :inline="true"
+              @submit.prevent
+            >
+              <el-form-item :label="td('da.qualityTask.ruleName')" prop="name">
+                <el-input
+                  class="el-form-input-width"
+                  v-model="queryParams.name"
+                  :placeholder="td('da.qualityTask.ruleNamePlaceholder')"
+                  clearable
+                  @keyup.enter="handleQuery"
+                />
+              </el-form-item>
+              <el-form-item :label="td('da.qualityTask.qualityDimension')" prop="dimensionType">
+                <el-select
+                  v-model="queryParams.dimensionType"
+                  :placeholder="td('da.qualityTask.qualityDimensionPlaceholder')"
+                  style="width: 210px"
+                >
+                  <el-option
+                    v-for="dict in att_rule_audit_q_dimension"
+                    :key="dict.value"
+                    :label="dict.label"
+                    :value="dict.value"
+                  ></el-option>
+                </el-select>
+              </el-form-item>
+
+              <el-form-item :label="td('common.texts.status')" prop="publishStatus">
+                <el-select
+                  v-model="queryParams.publishStatus"
+                  :placeholder="td('common.form.statusPlaceholder')"
+                  clearable
+                  class="el-form-input-width"
+                >
+                  <el-option :label="td('da.qualityTask.online')" value="online" />
+                  <el-option :label="td('da.qualityTask.offline')" value="offline" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <el-button
+                  plain
+                  type="primary"
+                  @click="handleQuery"
+                  @mousedown="(e) => e.preventDefault()"
+                >
+                  <i class="iconfont-mini icon-a-zu22377 mr5"></i>{{ td('common.button.query') }}
+                </el-button>
+                <el-button
+                  @click="resetQuery"
+                  @mousedown="(e) => e.preventDefault()"
+                >
+                  <i class="iconfont-mini icon-a-zu22378 mr5"></i>{{ td('common.button.reset') }}
+                </el-button>
+              </el-form-item>
+            </el-form>
+            <div class="justify-between mb15">
+              <el-row :gutter="15" class="btn-style">
+                <el-col :span="1.5">
+                  <el-button
+                    type="primary"
+                    icon="Plus"
+                    @click="openRuleSelector(undefined)"
+                    v-if="!isReadonly"
+                    >{{ td('common.button.add') }}</el-button
+                  >
+                </el-col>
+                <el-col :span="1.5">
+                  <el-tooltip
+                    :content="td('da.qualityTask.ruleTooltip')"
+                    placement="top"
+                  >
+                    <el-button
+                      type="warning"
+                      @click="selectInspectionRule(undefined)"
+                      v-if="!isReadonly"
+                    >
+                      <el-icon style="margin-right: 4px">
+                        <Refresh />
+                      </el-icon>
+                      {{ td('da.qualityTask.getRules') }}
+                    </el-button>
+                  </el-tooltip>
+                </el-col>
+              </el-row>
+            </div>
+            <el-table
+              stripe
+              height="450px"
+              :data="dppQualityTaskEvaluateSaveReqVO"
+            >
+              <el-table-column :label="td('common.display.index')" type="index" align="center" />
+              <el-table-column
+                :label="td('da.qualityTask.evaluationName')"
+                align="center"
+                prop="name"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ scope.row.name || "-" }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('da.qualityTask.evaluationField')"
+                align="center"
+                prop="evaColumn"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ scope.row.evaColumn || "-" }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('da.qualityTask.inspectionRule')"
+                align="center"
+                prop="ruleName"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ scope.row.ruleName || "-" }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('da.qualityTask.ruleDescription')"
+                align="center"
+                prop="ruleDescription"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  {{ scope.row.ruleDescription || "-" }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('da.qualityTask.qualityDimension')"
+                align="center"
+                prop="dimensionType"
+                width="140"
+                :show-overflow-tooltip="{ effect: 'light' }"
+              >
+                <template #default="scope">
+                  <dict-tag
+                    :options="att_rule_audit_q_dimension"
+                    :value="scope.row.dimensionType"
+                  />
+                </template>
+              </el-table-column>
+
+              <el-table-column
+                :label="td('common.texts.status')"
+                align="center"
+                prop="status"
+                width="100"
+              >
+                <template #default="scope">
+                  {{ scope.row.status == "1" ? td('da.qualityTask.online') : td('da.qualityTask.offline') }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                :label="td('common.texts.operation')"
+                align="center"
+                class-name="small-padding fixed-width"
+                fixed="right"
+                width="200"
+                v-if="!isReadonly"
+              >
+                <template #default="scope">
+                  <!--                                    <el-button link type="primary" icon="view"-->
+                  <!--                                        @click="openRuleDialog(scope.row, scope.$index + 1, true)">View</el-button>-->
+                  <el-button
+                    link
+                    type="primary"
+                    icon="Edit"
+                    @click="openRuleDialog(scope.row, scope.$index + 1)"
+                    >{{ td('common.button.update') }}</el-button
+                  >
+                  <el-button
+                    link
+                    type="danger"
+                    icon="Delete"
+                    @click="handleRuleDelete(scope.$index + 1)"
+                    >{{ td('common.button.delete') }}</el-button
+                  >
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+        <div class="button-style">
+          <el-button type="primary" @click="handleSuccess">{{ td('da.qualityTask.backToList') }}</el-button>
+          <el-button v-if="activeReult != 0" @click="handleLastStep"
+            >{{ td('common.button.previousStep') }}</el-button
+          >
+          <el-button
+            type="primary"
+            v-if="activeReult === 2 && !isReadonly"
+            @click="submitForm"
+            :loading="loadingOptions.loading"
+          >
+            {{ td('da.qualityTask.confirmExit') }}
+          </el-button>
+          <el-button v-if="activeReult !== 2" @click="handleNextStep"
+            >{{ td('common.button.nextStep') }}</el-button
+          >
+        </div>
+      </div>
+    </div>
+    <el-dialog :title="td('da.qualityTask.cronTitle')" v-model="openCron" destroy-on-close>
+      <crontab
+        ref="crontabRef"
+        @hide="openCron = false"
+        @fill="crontabFill"
+        :expression="expression"
+      >
+      </crontab>
+    </el-dialog>
+    <InspectionTargetDialog
+      ref="inspectionTargetDialog"
+      @confirm="Inspectionconfirm"
+    />
+    <RuleSelectorDialog
+      ref="ruleSelectorDialog"
+      @confirm="RuleSelectorconfirm"
+      :dppQualityTaskObjSaveReqVO="dppQualityTaskObjSaveReqVO"
+    />
+  </div>
+</template>
+
+<script setup name="qualityTask">
+import useDefaultLang from "@/composables/useDefaultLang"
+import { ref, reactive, toRefs, onMounted, computed, provide } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import InspectionTargetDialog from "../components/inspectionTarget.vue";
+import RuleSelectorDialog from "../components/ruleBase.vue";
+import { deptUserTree } from "@/api/system/system/user.js";
+import { listAttQualityCat } from "@/api/att/cat/qualityCat/qualityCat.js";
+import {
+  addDppQualityTask,
+  qualityProjects,
+  updateDppQualityTask,
+  getDppQualityTask,
+} from "@/api/da/quality/qualityTask";
+import Crontab from "@/components/Crontab/index.vue";
+import { getColumnByAssetId } from "@/api/dpp/task/index.js";
+import { treeData } from "../data.js";
+
+const { td } = useDefaultLang();
+const { proxy } = getCurrentInstance();
+const route = useRoute();
+const loading = ref(false);
+const showSearch = ref(true);
+let id = route.query.id || "";
+const router = useRouter();
+const {
+  att_rule_audit_q_dimension,
+  da_discovery_task_status,
+  dpp_etl_task_execution_type,
+} = proxy.useDict(
+  "att_rule_audit_q_dimension",
+  "da_discovery_task_status",
+  "dpp_etl_task_execution_type"
+);
+let dppQualityTaskObjSaveReqVO = ref([]);
+const displayObjectSchema = (row) => {
+  if (String(row?.datasourceType || '').toLowerCase() === 'hive') {
+    const qualified = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/
+      .exec(String(row?.tableName || '').replaceAll('`', '').trim());
+    if (qualified) return qualified[1];
+  }
+  try {
+    const config = typeof row?.datasourceConfig === 'string'
+      ? JSON.parse(row.datasourceConfig) : (row?.datasourceConfig || {});
+    return config.dbname || '-';
+  } catch {
+    return '-';
+  }
+};
+// icon
+const getDatasourceIcon = (type) => {
+  switch (type) {
+    case "DM8":
+      return new URL("@/assets/images/common/dpp/ds-dm.png", import.meta.url).href;
+    case "Oracle11":
+      return new URL("@/assets/images/common/dpp/img-oracle-one.png", import.meta.url)
+        .href;
+    case "MySql":
+      return new URL("@/assets/images/common/dpp/ds-mysql.png", import.meta.url)
+        .href;
+    case "Hive":
+      return new URL("@/assets/images/common/dpp/ds-hive.png", import.meta.url)
+        .href;
+    case "Sqlerver":
+      return new URL(
+        "@/assets/images/common/dpp/ds-sqlserver.png",
+        import.meta.url
+      ).href;
+    case "Kafka":
+      return new URL("@/assets/images/common/dpp/ds-kafka.png", import.meta.url)
+        .href;
+    case "HDFS":
+      return new URL("@/assets/images/common/dpp/hdfs.png", import.meta.url)
+        .href;
+    case "SHELL":
+      return new URL("@/assets/images/common/dpp/img-shell-one.png", import.meta.url)
+        .href;
+    case "Kingbase8":
+      return new URL("@/assets/images/common/dpp/ds-kingbase.png", import.meta.url)
+        .href;
+    default:
+      return null;
+  }
+};
+
+let loadingInstance = ref(null); // Global loading instance
+let originList = ref([]);
+
+const dppQualityTaskEvaluateSaveReqVO = ref([...originList.value]);
+
+let loadingList = ref(false);
+const handleQuery = () => {
+  dppQualityTaskEvaluateSaveReqVO.value = originList.value.filter((item) => {
+    if (queryParams.value.name && !item.name.includes(queryParams.value.name))
+      return false;
+    if (
+      queryParams.value.dimensionType &&
+      item.dimensionType !== queryParams.value.dimensionType
+    )
+      return false;
+    if (queryParams.value.publishStatus) {
+      const statusVal =
+        queryParams.value.publishStatus === "online" ? "1" : "0";
+      if (item.status !== statusVal) return false;
+    }
+    return true;
+  });
+};
+function renameRuleToRuleConfig(data, obj) {
+  return data
+    .filter(
+      (col) => Array.isArray(col.cleanRuleList) && col.cleanRuleList.length > 0
+    )
+    .flatMap((col) =>
+      col.cleanRuleList.map((item) => {
+        let parsedRule = {};
+        try {
+          parsedRule = JSON.parse(item.rule || "{}");
+        } catch (e) {
+          console.warn(`Failed to parse rule JSON: ${item.rule}`, e);
+        }
+
+        const evaColumnStr = col.columnName;
+
+        return {
+          ...item,
+          id: undefined,
+          warningLevel: "2",
+          datasourceId: obj?.datasourceId || "",
+          tableName: obj?.tableName || col.tableName,
+          evaColumn: evaColumnStr,
+          rule: JSON.stringify({
+            ...parsedRule,
+            evaColumn: evaColumnStr,
+          }),
+        };
+      })
+    );
+}
+
+async function selectInspectionRule() {
+  loading.value = true;
+
+  try {
+    for (const item of dppQualityTaskObjSaveReqVO.value || []) {
+      try {
+        const res = await getColumnByAssetId({
+          withRule: 1,
+          id: item.datasourceId,
+          tableName: item.tableName,
+        });
+
+        if (res?.data?.length) {
+          const rowsWithSource = res.data.map((row) => ({
+            ...row,
+            datasourceId: item.datasourceId,
+            tableName: item.tableName,
+          }));
+
+          const obj = renameRuleToRuleConfig(rowsWithSource, item) || [];
+
+          let addedCount = 0;
+          obj.forEach((newRule) => {
+            // Rule unique identifier
+            const key = `${newRule.tableName}_${newRule.evaColumn}_${newRule.ruleName}`;
+            // Find if the same rule already exists
+            const existIndex = originList.value.findIndex(
+              (r) => `${r.tableName}_${r.evaColumn}_${r.ruleName}` === key
+            );
+            if (existIndex > -1) {
+              // Cover
+              originList.value.splice(existIndex, 1, newRule);
+            } else {
+              // Append
+              originList.value.push(newRule);
+              addedCount++;
+            }
+          });
+          dppQualityTaskEvaluateSaveReqVO.value = [...originList.value];
+
+          if (addedCount > 0) {
+            ElMessage.success(
+              td('da.qualityTask.rulesAdded', { count: addedCount, tableName: item.tableName })
+            );
+          } else {
+            // ElMessage.info(`No new rules added to table ${item.tableName}`);
+          }
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to fetch rules: datasourceId=${item.datasourceId}, tableName=${item.tableName}`,
+          err
+        );
+      }
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+const resetQuery = () => {
+  queryParams.value = {
+    name: "",
+    qualityDim: "",
+    publishStatus: "",
+  };
+  dppQualityTaskEvaluateSaveReqVO.value = [...originList.value];
+};
+let deptOptions = ref([]);
+
+let userList = ref([]);
+let openCron = ref(false);
+const expression = ref("");
+/** Scheduling cycle button operation */
+function handleShowCron() {
+  if (id || isReadonly.value) return;
+  expression.value = form.value.cycle;
+  openCron.value = true;
+}
+/** Return value after confirmation */
+async function crontabFill(value) {
+  form.value.cycle = value;
+  await nextTick();
+  formRef.value?.validateField("cycle");
+}
+function getDeptTree() {
+  listAttQualityCat({ validFlag: true }).then((response) => {
+    deptOptions.value = proxy.handleTree(response.data, "id", "parentId");
+    deptOptions.value = [
+      {
+        name: td('da.qualityTask.catRootName'),
+        value: "",
+        id: 0,
+        children: deptOptions.value,
+      },
+    ];
+  });
+  deptUserTree().then((res) => {
+    userList.value = res.data;
+  });
+}
+const data = reactive({
+  form: {
+    projectId:route.query.projectId?Number(route.query.projectId):null,
+    taskName: "",
+    catCode: "",
+    status: "1",
+    contactId: "",
+    priority: "",
+    workerGroup: "default",
+    retryCount: 0,
+    retryInterval: 0,
+    delayMinutes: 0,
+    description: "",
+    retryTimes: "",
+    delayTime: "",
+    cycle: "",
+    strategy: "PARALLEL",
+  },
+  queryParams: {
+    pageNum: 1,
+    pageSize: 10,
+    name: "",
+    qualityDim: "",
+    publishStatus: "",
+  },
+  stepsList: [
+    { name: td('da.qualityTask.stepBasicInfo'), id: 0 },
+    { name: td('da.qualityTask.stepTargetInfo'), id: 1 },
+    { name: td('da.qualityTask.stepRuleInfo'), id: 2 },
+  ],
+  activeReult: 0,
+  active: 0,
+  loadingOptions: { loading: false },
+});
+
+const { form, stepsList, activeReult, loadingOptions, queryParams, active } =
+  toRefs(data);
+const projectOptions=ref([]);
+const isReadonly=computed(()=>Boolean(route.query.info) || (id ? !form.value.capabilities?.edit || !!form.value.warehouseAssessmentId : !projectOptions.value.find(p=>p.id===form.value.projectId)?.capabilities?.add));
+provide('qualityProjectId',computed(()=>form.value.projectId));
+function changeQualityProject(){dppQualityTaskObjSaveReqVO.value=[];originList.value=[];dppQualityTaskEvaluateSaveReqVO.value=[];}
+qualityProjects().then(r=>{projectOptions.value=r.data||[];if(!id && !form.value.projectId)form.value.projectId=projectOptions.value.find(p=>p.capabilities?.add)?.id || null;});
+const formRef = ref();
+
+const priorityOptions = ref([
+  { label: td('da.qualityTask.high'), value: "high" },
+  { label: td('da.qualityTask.medium'), value: "medium" },
+  { label: td('da.qualityTask.low'), value: "low" },
+]);
+
+function handleLastStep() {
+  activeReult.value--;
+}
+const inspectionTargetDialog = ref();
+const openDialog = (row, index) => {
+  inspectionTargetDialog.value.openDialog(row, index);
+};
+function handleDelete(row) {
+  const idxTable = dppQualityTaskObjSaveReqVO.value.findIndex(
+    (item) => item.ruleName == row.ruleName
+  );
+  if (idxTable !== -1) {
+    dppQualityTaskObjSaveReqVO.value.splice(idxTable, 1);
+  } else {
+    proxy.$message.warning(td('da.qualityTask.deleteFailed'));
+  }
+}
+function handleRuleDelete(index) {
+  const realIndex = Number(index) - 1;
+  originList.value.splice(realIndex, 1);
+  dppQualityTaskEvaluateSaveReqVO.value = originList.value;
+}
+async function handleNextStep() {
+  try {
+    await formRef.value?.validate();
+  } catch (err) {
+    console.warn("Form validation failed:", err);
+    ElMessage.warning(td('da.qualityTask.validationFailed'));
+    loadingInstance.value = false;
+    return;
+  }
+  activeReult.value++;
+}
+
+function Inspectionconfirm(obj, mode) {
+  const index = Number(mode) - 1;
+  const list = dppQualityTaskObjSaveReqVO.value;
+  const isDuplicate = list.some((item, i) => {
+    if (index >= 0) {
+      return i != index && item.name == obj.name;
+    } else {
+      return item.name == obj.name;
+    }
+  });
+
+  if (isDuplicate) {
+    proxy.$message.warning(td('da.qualityTask.targetNameDuplicate'));
+    return;
+  }
+
+  if (!isNaN(index) && index >= 0 && index < list.length) {
+    list.splice(index, 1, obj);
+  } else {
+    list.push(obj);
+  }
+
+  inspectionTargetDialog.value.closeDialog();
+}
+
+let ruleSelectorDialog = ref();
+const openRuleSelector = (row) => {
+  ruleSelectorDialog.value.openDialog(row);
+};
+const openRuleDialog = (row, index, falg) => {
+  ruleSelectorDialog.value.openDialog(row, index, falg);
+};
+function RuleSelectorconfirm(obj, mode) {
+  const index = Number(mode) - 1;
+  const list = originList.value;
+  const isDuplicate = list.some((item, i) => {
+    if (index >= 0) {
+      return i !== index && item.name == obj.name;
+    } else {
+      return item.name === obj.name;
+    }
+  });
+
+  if (isDuplicate) {
+    proxy.$message.warning(td('da.qualityTask.evalNameDuplicate'));
+    return;
+  }
+
+  if (!isNaN(index) && index >= 0 && index < list.length) {
+    list.splice(index, 1, obj);
+  } else {
+    list.push(obj);
+  }
+
+  dppQualityTaskEvaluateSaveReqVO.value = list;
+  ruleSelectorDialog.value.closeDialog();
+}
+
+// Page jump
+const handleSuccess = () => {
+  router.push("/da/quality/qualityTask");
+};
+async function submitForm() {
+  if(isReadonly.value)return;
+  loadingInstance.value = true;
+  try {
+    await formRef.value?.validate();
+  } catch (err) {
+    console.warn("Form validation failed:", err);
+    ElMessage.warning(td('da.qualityTask.validationFailed'));
+    loadingInstance.value = false;
+    return;
+  }
+  try {
+    const res = form.value.id
+      ? await updateDppQualityTask({
+          ...form.value,
+          dppQualityTaskObjSaveReqVO: dppQualityTaskObjSaveReqVO.value,
+          dppQualityTaskEvaluateSaveReqVO:
+            dppQualityTaskEvaluateSaveReqVO.value,
+        })
+      : await addDppQualityTask({
+          ...form.value,
+          dppQualityTaskObjSaveReqVO: dppQualityTaskObjSaveReqVO.value,
+          dppQualityTaskEvaluateSaveReqVO:
+            dppQualityTaskEvaluateSaveReqVO.value,
+        });
+
+    // response handling
+    if (res.code == "200") {
+      proxy.$modal.msgSuccess(res.msg);
+      handleSuccess();
+    } else {
+      ElMessage.warning(res.msg || td('da.qualityTask.submitFailed'));
+    }
+  } catch (err) {
+  } finally {
+    loadingInstance.value = false;
+  }
+}
+
+function code(obj) {
+  dppQualityTaskObjSaveReqVO.value = [...obj];
+}
+
+async function getDppQualityTaskinfo() {
+  loadingInstance.value = true;
+  const _id = id;
+  try {
+    const response = await getDppQualityTask(_id);
+    const {
+      dppQualityTaskObjSaveReqVO, //object
+      dppQualityTaskEvaluateRespVOS, // rules
+
+      ...obj
+    } = response.data;
+    originList.value = dppQualityTaskEvaluateRespVOS;
+    dppQualityTaskEvaluateSaveReqVO.value = dppQualityTaskEvaluateRespVOS;
+    code(dppQualityTaskObjSaveReqVO);
+    Object.assign(form.value, obj);
+    form.value.contactId = Number(form.value.contactId);
+  } catch (error) {
+    console.error("Failed to fetch quality task:", error);
+    ElMessage.warning(td('da.qualityTask.getTaskFailed'));
+  } finally {
+    loadingInstance.value = false;
+  }
+}
+
+// Monitor id changes
+watch(
+  () => route.query.id,
+  (newId) => {
+    id = newId; // If id is empty, the default value 1 is used
+    if (id) {
+      getDppQualityTaskinfo();
+    }
+  },
+  { immediate: true } //
+);
+
+getDeptTree();
+</script>
+<style lang="scss" scoped>
+.el-card ::v-deep .el-card__body {
+  overflow-y: auto;
+}
+
+.pagecont-top {
+  height: 74vh;
+  position: relative;
+  padding-bottom: 20px;
+}
+
+.pagecont-top .infotop{
+    position: relative;
+    height: 100%;
+    overflow: auto;
+}
+
+.steps-wrap {
+  //width: 87.5vw;
+  height: 80px;
+  padding: 20px 20px;
+  step-height: 40px;
+  //box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  border: 0px solid #ebeef5;
+  background-color: #fff;
+  margin: 15px 15px -34px 15px;
+}
+
+.custom-card {
+  width: 100%;
+  height: 100px;
+  padding: 34px 177px 26px 189px;
+  background: #fff;
+  box-sizing: border-box;
+  margin-bottom: 15px;
+
+  .steps-inner {
+    padding: 0 10px;
+    padding-left: 20px;
+    display: flex;
+    width: auto;
+    color: #303133;
+    transition: 0.3s;
+    transform: translateZ(0);
+
+    &::-webkit-scrollbar {
+      height: 5px;
+    }
+
+    .zl-step {
+      list-style: none;
+      width: 100%;
+      height: 20px;
+      padding: 0;
+      margin: 20px auto;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-end;
+
+      li {
+        position: relative;
+        flex: 1;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #d7d8da;
+        color: #666;
+        font-weight: 500;
+        transition: background 0.3s;
+
+        &:first-child {
+          z-index: 2;
+          clip-path: polygon(
+            0 0,
+            calc(100% - 20px) 0,
+            100% 50%,
+            calc(100% - 20px) 100%,
+            0 100%
+          );
+        }
+
+        &:not(:first-child):not(:last-child) {
+          margin-left: -10px;
+          clip-path: polygon(
+            0 0,
+            calc(100% - 20px) 0,
+            100% 50%,
+            calc(100% - 20px) 100%,
+            0 100%
+          );
+          z-index: 1;
+
+          &::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 20px;
+            height: 100%;
+            background: #fff;
+            clip-path: polygon(0 0, 100% 50%, 0 100%);
+            z-index: 2;
+          }
+        }
+
+        &:last-child {
+          margin-left: -10px;
+          z-index: 0;
+          clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+
+          &::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 20px;
+            height: 100%;
+            background: #fff;
+            clip-path: polygon(0 0, 100% 50%, 0 100%);
+            z-index: 2;
+          }
+        }
+
+        &.statusEnd {
+          background: linear-gradient(270deg, #e9effe 0%, #5589fa 100%);
+          color: #2666fb !important;
+        }
+
+        &.prevStep {
+          background: #e9effe !important;
+          font-weight: normal;
+          font-size: 16px !important;
+          color: #2666fb !important;
+        }
+
+        &.cur {
+          background: #f1f1f5;
+          color: #404040;
+          font-weight: 500;
+        }
+      }
+    }
+
+    .step-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #f1f1f5;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      margin-right: 11px;
+      border: 1px solid #b2b2b2;
+      flex-shrink: 0;
+      transition: all 0.3s;
+
+      &.active {
+        background: #2666fb;
+        color: #fff;
+        border: 1px solid #fff;
+      }
+
+      &.prev {
+        background: #f1f1f5 !important;
+        border: 1px solid #2666fb !important;
+        color: #2666fb !important;
+      }
+    }
+
+    .step-name {
+      font-family: PingFang SC, PingFang SC;
+      font-weight: 500;
+      font-size: 16px;
+    }
+  }
+}
+
+.button-style {
+  position: sticky;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 25px 35px 25px 0px;
+  background: #fff;
+  text-align: right;
+  z-index: 10;
+}
+
+.main {
+  flex: 1;
+  // margin: 15px;
+  background-color: white;
+  padding: 0px 25px 0;
+}
+
+.home {
+  display: flex;
+  flex-direction: column;
+  height: 88vh;
+
+  .clearfix {
+    width: 100%;
+    height: 36px;
+    background-color: #f8f8f9;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+  }
+
+  .clearfix span {
+    display: flex;
+    align-items: center;
+  }
+
+  .blue-bar {
+    background-color: #2666fb; // Blue bar color
+    width: 5px; // Width 5px
+    height: 20px; // Height 20px
+    margin-right: 10px; // Space between image and text
+  }
+}
+
+.option-item {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.blue-text {
+  color: var(--el-color-primary);
+}
+
+.blue-bar {
+  background-color: #2666fb;
+  width: 5px;
+  height: 20px;
+  margin-right: 10px;
+  border-radius: 2px;
+}
+
+.header-text {
+  margin: 20px 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  line-height: 24px;
+  font-style: normal;
+}
+
+.iconimg {
+  width: 15px;
+  height: 15px;
+  font-size: 15px;
+  vertical-align: middle;
+}
+</style>

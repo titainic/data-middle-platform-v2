@@ -1,0 +1,103 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.da.controller.admin.datasource.vo;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+import tech.qiantong.qdata.common.core.domain.BaseEntity;
+import tech.qiantong.qdata.module.da.dal.dataobject.datasource.DaDatasourceProjectRelDO;
+
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import java.util.List;
+
+import org.hibernate.validator.constraints.Range;
+
+/**
+ * Datasource Create/Update Request VO DA_DATASOURCE
+ *
+ * @author lhs
+ * @date 2025-01-21
+ */
+@Schema(description = "数据源 Response VO")
+@Data
+public class DaDatasourceSaveReqVO extends BaseEntity {
+
+    private static final long serialVersionUID = 1L;
+
+    @Schema(description = "ID")
+    private Long id;
+
+    @Schema(description = "数据源名称", example = "")
+    @Size(max = 256, message = "数据源名称长度不能超过256个字符")
+    private String datasourceName;
+
+    @Schema(description = "数据源类型", example = "")
+    @Size(max = 256, message = "数据源类型长度不能超过256个字符")
+    private String datasourceType;
+
+    @Schema(description = "数据源配置(json字符串)", example = "")
+    @Size(max = 256, message = "数据源配置(json字符串)长度不能超过256个字符")
+    private String datasourceConfig;
+
+    @Schema(description = "编辑时显式清除的凭据字段；留空或省略配置中的凭据表示保留原值")
+    private List<String> clearSecrets;
+
+    @Schema(description = "旧项目集合", example = "")
+    private List<Long> projectListOld;
+
+    @Schema(description = "项目集合", example = "")
+    private List<DaDatasourceProjectRelDO> projectList;
+
+    @Schema(description = "IP", example = "")
+    @Size(max = 256, message = "IP长度不能超过256个字符")
+    @Pattern(
+            regexp = "^((25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$|^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}(\\.[a-zA-Z0-9][a-zA-Z0-9-]{0,62})+$|^[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$",
+            message = "IP/域名格式不正确，请检查"
+    )
+    private String ip;
+
+    @Schema(description = "端口号", example = "")
+    @Range(min = 1, max = 65535, message = "端口号需为 1-65535 的数字")
+    private Long port;
+
+    @Schema(description = "数据库表数", example = "")
+    private Long listCount;
+
+    @Schema(description = "同步记录数", example = "")
+    private Long syncCount;
+
+    @Schema(description = "同步数据量大小", example = "")
+    private Long dataSize;
+
+    @Schema(description = "描述", example = "")
+    @Size(max = 256, message = "描述长度不能超过256个字符")
+    private String description;
+
+    @Schema(description = "备注", example = "")
+    @Size(max = 256, message = "备注长度不能超过256个字符")
+    private String remark;
+
+    @Schema(description = "是否有效", example = "false")
+    private Boolean validFlag;
+
+    @Schema(description = "连接验证失败后是否确认继续新增", example = "false")
+    private Boolean skipConnectionValidation;
+
+}

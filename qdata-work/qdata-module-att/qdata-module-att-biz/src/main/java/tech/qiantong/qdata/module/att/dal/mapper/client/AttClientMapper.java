@@ -1,0 +1,62 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.att.dal.mapper.client;
+
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.module.att.controller.admin.client.vo.AttClientPageReqVO;
+import tech.qiantong.qdata.module.att.dal.dataobject.client.AttClientDO;
+import tech.qiantong.qdata.mybatis.core.mapper.BaseMapperX;
+import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * App Management Mapper Interface
+ *
+ * @author qdata
+ * @date 2025-02-18
+ */
+public interface AttClientMapper extends BaseMapperX<AttClientDO> {
+
+    default PageResult<AttClientDO> selectPage(AttClientPageReqVO reqVO) {
+        // Define sortable fields (prevent SQL injection, must match database column names)
+        Set<String> allowedColumns = new HashSet<>(Arrays.asList("id", "create_time", "update_time"));
+
+        // Build dynamic query conditions
+        return selectPage(reqVO, new LambdaQueryWrapperX<AttClientDO>()
+                .in(AttClientDO::getId, reqVO.getAccessibleClientIds()==null || reqVO.getAccessibleClientIds().isEmpty()?java.util.List.of(-1L):reqVO.getAccessibleClientIds())
+                .eqIfPresent(AttClientDO::getProjectId, reqVO.getProjectId())
+                .eqIfPresent(AttClientDO::getId, reqVO.getId())
+                .likeIfPresent(AttClientDO::getName, reqVO.getName())
+                .eqIfPresent(AttClientDO::getType, reqVO.getType())
+                .eqIfPresent(AttClientDO::getHomepageUrl, reqVO.getHomepageUrl())
+                .eqIfPresent(AttClientDO::getAllowUrl, reqVO.getAllowUrl())
+                .eqIfPresent(AttClientDO::getSyncUrl, reqVO.getSyncUrl())
+                .eqIfPresent(AttClientDO::getLogo, reqVO.getLogo())
+                .eqIfPresent(AttClientDO::getDescription, reqVO.getDescription())
+                .eqIfPresent(AttClientDO::getPublicFlag, reqVO.getPublicFlag())
+                .eqIfPresent(AttClientDO::getCreateTime, reqVO.getCreateTime())
+                // If reqVO.getName() is not empty, add exact match condition for name (name = '<name>')
+                // .likeIfPresent(AttClientDO::getName, reqVO.getName())
+                // Sort by createTime in descending order
+                .orderBy(reqVO.getOrderByColumn(), reqVO.getIsAsc(), allowedColumns));
+    }
+}

@@ -1,0 +1,143 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.module.dpp.controller.admin.etl;
+
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+import java.util.Arrays;
+import cn.hutool.core.date.DateUtil;
+import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
+import tech.qiantong.qdata.common.core.page.PageParam;
+import tech.qiantong.qdata.common.annotation.Log;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.core.page.PageResult;
+import tech.qiantong.qdata.common.enums.BusinessType;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
+import tech.qiantong.qdata.common.exception.enums.GlobalErrorCodeConstants;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodeLogPageReqVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodeLogRespVO;
+import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodeLogSaveReqVO;
+import tech.qiantong.qdata.module.dpp.convert.etl.DppEtlNodeLogConvert;
+import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.DppEtlNodeLogDO;
+import tech.qiantong.qdata.module.dpp.service.etl.IDppEtlNodeLogService;
+
+/**
+ * Data Integration Node Log Controller
+ *
+ * @author qdata
+ * @date 2025-02-13
+ */
+@Tag(name = "Data Integration Node - Log")
+@RestController
+@RequestMapping("/dpp/etlNodeLog")
+@Validated
+public class DppEtlNodeLogController extends BaseController {
+    @Resource private tech.qiantong.qdata.module.dpp.service.etl.DevelopmentResourceAccess resources;
+    private void scope(DppEtlNodeLogPageReqVO request){request.setAccessibleIds(resources.childIds(tech.qiantong.qdata.module.dpp.service.etl.DevelopmentResourceAccess.Child.NODE_LOG));}
+
+    @Resource
+    private IDppEtlNodeLogService dppEtlNodeLogService;
+
+    @Operation(summary = "查询数据集成节点-日志列表")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:list')")
+    @GetMapping("/list")
+    public CommonResult<PageResult<DppEtlNodeLogRespVO>> list(DppEtlNodeLogPageReqVO dppEtlNodeLog) {
+        scope(dppEtlNodeLog);
+        PageResult<DppEtlNodeLogDO> page = dppEtlNodeLogService.getDppEtlNodeLogPage(dppEtlNodeLog);
+        return CommonResult.success(BeanUtils.toBean(page, DppEtlNodeLogRespVO.class));
+    }
+
+    @Operation(summary = "导出数据集成节点-日志列表")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:export')")
+    @Log(title = "log.op.title.dpp.node.log", businessType = BusinessType.EXPORT)
+    @PostMapping("/export")
+    public void export(HttpServletResponse response, DppEtlNodeLogPageReqVO exportReqVO) {
+        scope(exportReqVO);
+        exportReqVO.setPageSize(PageParam.PAGE_SIZE_NONE);
+        List<DppEtlNodeLogDO> list = (List<DppEtlNodeLogDO>) dppEtlNodeLogService.getDppEtlNodeLogPage(exportReqVO).getRows();
+        ExcelUtil<DppEtlNodeLogRespVO> util = new ExcelUtil<>(DppEtlNodeLogRespVO.class);
+        util.exportExcel(response, DppEtlNodeLogConvert.INSTANCE.convertToRespVOList(list), "Application Management Data");
+    }
+
+    @Operation(summary = "导入数据集成节点-日志列表")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:import')")
+    @Log(title = "log.op.title.dpp.node.log", businessType = BusinessType.IMPORT)
+    @PostMapping("/importData")
+    public AjaxResult importData(MultipartFile file, boolean updateSupport) throws Exception {
+        resources.requireVersionedTaskWrite();
+        ExcelUtil<DppEtlNodeLogRespVO> util = new ExcelUtil<>(DppEtlNodeLogRespVO.class);
+        List<DppEtlNodeLogRespVO> importExcelList = util.importExcel(file.getInputStream());
+        String operName = getUsername();
+        String message = dppEtlNodeLogService.importDppEtlNodeLog(importExcelList, updateSupport, operName);
+        return success(message);
+    }
+
+    @Operation(summary = "获取数据集成节点-日志详细信息")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:query')")
+    @GetMapping(value = "/{id:\\d+}")
+    public CommonResult<DppEtlNodeLogRespVO> getInfo(@PathVariable("id") Long id) {
+        resources.child(tech.qiantong.qdata.module.dpp.service.etl.DevelopmentResourceAccess.Child.NODE_LOG,id);
+        DppEtlNodeLogDO dppEtlNodeLogDO = dppEtlNodeLogService.getDppEtlNodeLogById(id);
+        return CommonResult.success(BeanUtils.toBean(dppEtlNodeLogDO, DppEtlNodeLogRespVO.class));
+    }
+
+    @Operation(summary = "新增数据集成节点-日志")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:add')")
+    @Log(title = "log.op.title.dpp.node.log", businessType = BusinessType.INSERT)
+    @PostMapping
+    public CommonResult<Long> add(@Valid @RequestBody DppEtlNodeLogSaveReqVO dppEtlNodeLog) {
+        resources.requireVersionedTaskWrite();
+        dppEtlNodeLog.setCreatorId(getUserId());
+        dppEtlNodeLog.setCreateBy(getNickName());
+        dppEtlNodeLog.setCreateTime(DateUtil.date());
+        return CommonResult.toAjax(dppEtlNodeLogService.createDppEtlNodeLog(dppEtlNodeLog));
+    }
+
+    @Operation(summary = "修改数据集成节点-日志")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:edit')")
+    @Log(title = "log.op.title.dpp.node.log", businessType = BusinessType.UPDATE)
+    @PutMapping
+    public CommonResult<Integer> edit(@Valid @RequestBody DppEtlNodeLogSaveReqVO dppEtlNodeLog) {
+        resources.requireVersionedTaskWrite();
+        dppEtlNodeLog.setUpdatorId(getUserId());
+        dppEtlNodeLog.setUpdateBy(getNickName());
+        dppEtlNodeLog.setUpdateTime(DateUtil.date());
+        return CommonResult.toAjax(dppEtlNodeLogService.updateDppEtlNodeLog(dppEtlNodeLog));
+    }
+
+    @Operation(summary = "删除数据集成节点-日志")
+//    @PreAuthorize("@ss.hasPermi('dpp:etlNodeLog:remove')")
+    @Log(title = "log.op.title.dpp.node.log", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
+        resources.requireVersionedTaskWrite();
+        return CommonResult.toAjax(dppEtlNodeLogService.removeDppEtlNodeLog(Arrays.asList(ids)));
+    }
+
+}

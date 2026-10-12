@@ -1,0 +1,426 @@
+<!--
+  Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+
+  This file is part of qData Data Middle Platform (Open Source Edition).
+
+  qData is licensed under Apache License 2.0 with additional qData terms.
+  You may use qData for commercial purposes, but you may not remove, hide,
+  modify, or replace the qData logo, copyright notices, license notices,
+  or attribution information without a separate commercial license.
+
+  White-label use, OEM distribution, rebranding, or presenting qData as
+  another product requires separate commercial authorization from
+  Jiangsu Qiantong Technology Co., Ltd.
+
+  Business License: https://community.qdata.tech/business/policy.html
+  See the LICENSE file in the project root for full license information.
+-->
+
+<template>
+    <el-aside :style="{ width: `${leftWidth}px`, marginLeft: leftWidth == 0 ? '-15px' : '0px' }" class="left-pane">
+        <div class="left-tree" v-loading="loading">
+            <!-- search box -->
+            <el-input class="filter-tree" size="large" v-model="deptName" :placeholder="effectivePlaceholder" clearable
+                prefix-icon="Search" />
+
+            <!-- tree -->
+            <el-tree class="dept-tree" ref="deptTreeRef" :data="deptOptions" node-key="id" highlight-current
+                :props="{ label: 'name', children: 'children', isLeaf: 'isLeaf' }" :lazy="true" :load="handleNodeLoad"
+                :default-expand-all="defaultExpand" :filter-node-method="filterNode"
+                @node-contextmenu="onNodeContextMenu">
+                <template #default="{ node, data }">
+                    <span class="custom-tree-node" @dblclick.stop="handleNodeClick(data, node, 'node')">
+                        <!-- Data source/hierarchy icon -->
+                        <img v-if="node.level === 1" :src="getDatasourceIcon(data.datasourceType)" class="node-icon" />
+                        <img v-if="node.level === 2" src="@/assets/images/common/dpp/img-sr.png" class="node-icon" />
+                        <img v-if="node.level === 3" src="@/assets/images/common/dpp/img-zt.png" class="node-icon" />
+                        <!-- label -->
+                        <span class="treelable">{{ node.label }}</span>
+
+                        <!-- status icon -->
+                        <el-icon v-if="data.loadSuccess" style="color: #22c55e; margin-left: 6px" class="iconimg"
+                            :title="t('components.deptTree.loadSuccess')">
+                            <CircleCheckFilled />
+                        </el-icon>
+                        <el-icon v-if="data.loadError" style="color: #facc15; margin-left: 6px; cursor: pointer"
+                            class="iconimg" @click.stop="retryLoad(node)" :title="t('components.deptTree.loadError')">
+                            <WarnTriangleFilled />
+                        </el-icon>
+                    </span>
+                </template>
+            </el-tree>
+
+            <!-- right click menu -->
+            <div v-if="contextMenuVisible" :style="{ top: `${contextMenuY}px`, left: `${contextMenuX}px` }"
+                class="context-menu" @click.stop>
+                <ul>
+                    <li @click="generateSQL('SELECT')">SELECT</li>
+                </ul>
+            </div>
+        </div>
+    </el-aside>
+
+    <!-- drag bar -->
+    <div class="resize-bar" @mousedown="startResize">
+        <div class="resize-handle-sx">
+            <span class="zjsx"></span>
+            <el-icon v-if="leftWidth == 0" @click.stop="toggleCollapse" class="collapse-icon">
+                <ArrowRight />
+            </el-icon>
+            <el-icon v-else class="collapse-icon" @click.stop="toggleCollapse">
+                <ArrowLeft />
+            </el-icon>
+        </div>
+    </div>
+</template>
+
+
+<script setup>
+import { ref, watch, onMounted, onBeforeUnmount, getCurrentInstance, computed } from "vue";
+import { debounce } from "lodash-es";
+import { useI18n } from 'vue-i18n';
+import {
+    ArrowLeft,
+    ArrowRight,
+    CircleCheckFilled,
+    WarnTriangleFilled,
+} from "@element-plus/icons-vue";
+
+const { proxy } = getCurrentInstance();
+const { t } = useI18n();
+const effectivePlaceholder = computed(() => props.placeholder || t('components.deptTree.searchPlaceholder'));
+
+const props = defineProps({
+    deptOptions: { type: Array, default: () => [] },
+    leftWidth: { type: Number, default: 300 },
+    placeholder: { type: String, default: '' },
+    defaultExpand: { type: Boolean, default: false },
+    loading: { type: Boolean, default: false },
+});
+const emit = defineEmits(["node-click", "update:deptName", "update:leftWidth", "nodeload-click"]);
+
+
+
+const deptName = ref("");
+const deptTreeRef = ref(null);
+const leftWidth = ref(props.leftWidth);
+const isResizing = ref(false);
+let startX = 0;
+
+const contextMenuVisible = ref(false);
+const contextMenuX = ref(0);
+const contextMenuY = ref(0);
+const contextMenuNode = ref(null);
+
+// icon
+const getDatasourceIcon = (type) => {
+    switch (type) {
+        case "DM8": return new URL("@/assets/images/common/dpp/ds-dm.png", import.meta.url).href;
+        case "Oracle11": return new URL("@/assets/images/common/dpp/img-oracle-one.png", import.meta.url).href;
+        case "MySql": return new URL("@/assets/images/common/dpp/ds-mysql.png", import.meta.url).href;
+        case "Hive": return new URL("@/assets/images/common/dpp/ds-hive.png", import.meta.url).href;
+        case "Sqlerver": return new URL("@/assets/images/common/dpp/ds-sqlserver.png", import.meta.url).href;
+        case "Kafka": return new URL("@/assets/images/common/dpp/ds-kafka.png", import.meta.url).href;
+        case "HDFS": return new URL("@/assets/images/common/dpp/hdfs.png", import.meta.url).href;
+        case "SHELL": return new URL("@/assets/images/common/dpp/img-shell-one.png", import.meta.url).href;
+        case "Kingbase8": return new URL("@/assets/images/common/dpp/ds-kingbase.png", import.meta.url).href;
+        case "SQL_Server": return new URL("@/assets/images/common/dpp/icon-ds-sql-server.svg", import.meta.url).href;
+        case "SQL_Server2008": return new URL("@/assets/images/common/dpp/icon-ds-sql-server.svg", import.meta.url).href;
+        case "Doris": return new URL("@/assets/images/common/dpp/icon-doris-one.svg", import.meta.url).href;
+        default: return null;
+    }
+};
+
+// right click menu
+const onNodeContextMenu = (event, data, node) => {
+    event.preventDefault();
+    if (node.level !== 2) {
+        contextMenuVisible.value = false;
+        return;
+    }
+    contextMenuVisible.value = true;
+    contextMenuX.value = event.clientX;
+    contextMenuY.value = event.clientY;
+    contextMenuNode.value = { data, node };
+};
+
+const generateSQL = (type) => {
+  if (!contextMenuNode.value) return;
+  const { data, node } = contextMenuNode.value;
+  const parentData = node.parent ? node.parent.data : null;
+  const dbname = parentData?.dbname;
+  const datasourceType = parentData?.datasourceType;
+  const sid = parentData?.sid; // schema
+  const tableName = data.name || null;
+
+  const fields = (node.childNodes || [])
+      .map((childNode) => childNode.data?.name)
+      .filter(Boolean)
+      .join(", ") || "*";
+
+  let fromPart = tableName;
+  console.log("🚀 ~ generateSQL ~ datasourceType:", datasourceType)
+  if (
+      (datasourceType == "Kingbase8" ||
+          datasourceType == "SQL_Server" ||
+          datasourceType == "SQL_Server2008")
+  ) {
+    fromPart = dbname ? `${dbname}.${sid}.${tableName}` : tableName;
+  } else {
+    fromPart = dbname ? `${dbname}.${tableName}` : tableName;
+  }
+  const sql = `SELECT ${fields} FROM ${fromPart};`;
+  contextMenuVisible.value = false;
+  handleNodeClick(sql, node, "sql");
+};
+
+// Click on a blank space to close the right-click menu
+const onClickOutside = () => {
+    contextMenuVisible.value = false;
+};
+
+// drag
+const startResize = (event) => {
+    isResizing.value = true;
+    startX = event.clientX;
+    document.addEventListener("mousemove", updateResize);
+    document.addEventListener("mouseup", stopResize);
+};
+
+const stopResize = () => {
+    isResizing.value = false;
+    document.removeEventListener("mousemove", updateResize);
+    document.removeEventListener("mouseup", stopResize);
+};
+
+const updateResize = (event) => {
+    if (isResizing.value) {
+        const delta = event.clientX - startX;
+        let newWidth = leftWidth.value + delta;
+        if (newWidth < 0) newWidth = 0;
+        leftWidth.value = newWidth;
+        startX = event.clientX;
+        emit("update:leftWidth", newWidth);
+    }
+};
+
+const toggleCollapse = () => {
+    leftWidth.value = leftWidth.value === 0 ? 300 : 0;
+    emit("update:leftWidth", leftWidth.value);
+};
+
+const findExpandedLevelOneId = (node) => {
+    if (!node) return null;
+
+    if (node.level === 1) {
+        if (node.expanded && node.data.loadError !== true) {
+            return node.data.id;
+        }
+        return null;
+    }
+    return findExpandedLevelOneId(node.parent);
+};
+
+
+const handleNodeClick = (payload, node, type = "node") => {
+    contextMenuVisible.value = false;
+    if (payload?.level === 1) return;
+
+    const parent = node?.parent?.data || null;
+    const children = node?.childNodes?.map(n => n.data) || [];
+
+    const expandedRootId = findExpandedLevelOneId(node);
+    console.log("🚀 ~ handleNodeClick ~ expandedRootId:", expandedRootId)
+    emit("node-click", { type, payload, parent, children, expandedRootId }, node);
+};
+
+
+// Lazy loading
+const handleNodeLoad = (node, resolve) => {
+    node.data.loadError = false;
+    node.data.loadSuccess = false;
+    emit(
+        "nodeload-click",
+        node,
+        (children) => {
+            node.data.loadSuccess = true;
+            resolve(children);
+        },
+        () => {
+            node.data.loadError = true;
+            resolve([]);
+        }
+    );
+};
+
+const retryLoad = (node) => {
+    if (!node) return;
+    node.data.loadError = false;
+    node.data.loadSuccess = false;
+    node.loaded = false;
+    node.expand();
+};
+
+// tree filter
+const filterNode = (value, data) => {
+    if (!value) return true;
+    return data.name.includes(value);
+};
+const filterTree = debounce((val) => {
+    if (deptTreeRef.value) deptTreeRef.value.filter(val);
+}, 300);
+
+watch(deptName, (val) => {
+    emit("update:deptName", val);
+    filterTree(val);
+});
+watch(() => props.leftWidth, (val) => {
+    leftWidth.value = val;
+});
+
+onMounted(() => {
+    window.addEventListener("click", onClickOutside);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener("click", onClickOutside);
+});
+</script>
+
+<style scoped lang="scss">
+.left-pane {
+    background-color: #ffffff;
+    overflow: hidden;
+    height: 80vh;
+}
+
+.left-tree {
+    height: 80vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    -ms-overflow-style: auto;
+}
+
+.left-tree::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.left-tree::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.left-tree::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+
+/* Custom node style */
+.custom-tree-node {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 36px 0 12px;
+
+    .node-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .treelable {
+        margin-left: 10px;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-family: PingFang SC;
+        font-size: 14px;
+        color: rgba(0, 0, 0, 0.85);
+    }
+}
+
+.iconimg {
+    font-size: 15px;
+}
+
+/* drag bar */
+.resize-bar {
+    cursor: ew-resize;
+    background-color: #f0f2f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.resize-handle-sx {
+    width: 15px;
+    text-align: center;
+    position: relative;
+}
+
+.collapse-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 28px;
+    color: #aaa;
+    cursor: pointer;
+    z-index: 10;
+    padding: 5px;
+}
+
+/* Search box style */
+:deep(.filter-tree) {
+    margin-bottom: 16px;
+
+    .el-input__wrapper {
+        border: 1px solid var(--el-color-primary);
+    }
+
+    .el-input__prefix {
+        color: var(--el-color-primary);
+    }
+}
+
+/* Tree selection style */
+:deep(.dept-tree) {
+    &.el-tree--highlight-current .el-tree-node.is-current>.el-tree-node__content {
+        background: rgba(51, 103, 252, 0.06) !important;
+        border: none;
+
+        .custom-tree-node {
+            .treelable {
+                color: var(--el-color-primary);
+            }
+        }
+    }
+}
+
+/* right click menu */
+.context-menu {
+    position: fixed;
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+    z-index: 1000;
+    user-select: none;
+}
+
+.context-menu ul {
+    margin: 0;
+    padding: 8px 0;
+    list-style: none;
+}
+
+.context-menu li {
+    padding: 6px 20px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.context-menu li:hover {
+    background-color: #f0f0f0;
+}
+</style>

@@ -1,0 +1,112 @@
+/*
+ * Copyright © 2025-present Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * This file is part of qData Data Middle Platform (Open Source Edition).
+ *
+ * qData is licensed under Apache License 2.0 with additional qData terms.
+ * You may use qData for commercial purposes, but you may not remove, hide,
+ * modify, or replace the qData logo, copyright notices, license notices,
+ * or attribution information without a separate commercial license.
+ *
+ * White-label use, OEM distribution, rebranding, or presenting qData as
+ * another product requires separate commercial authorization from
+ * Jiangsu Qiantong Technology Co., Ltd.
+ *
+ * Business License: https://community.qdata.tech/business/policy.html
+ * See the LICENSE file in the project root for full license information.
+ */
+
+package tech.qiantong.qdata.ai.controller.admin.chat;
+
+import cn.hutool.core.util.ObjUtil;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
+import tech.qiantong.qdata.ai.core.service.IChatMessageService;
+import tech.qiantong.qdata.ai.core.vo.ChatMessageExportDetailDataReqVO;
+import tech.qiantong.qdata.ai.core.vo.ChatMessageSendReqVO;
+import tech.qiantong.qdata.ai.core.vo.ChatMessageSendRespVO;
+import tech.qiantong.qdata.common.core.controller.BaseController;
+import tech.qiantong.qdata.common.core.domain.CommonResult;
+import tech.qiantong.qdata.common.exception.enums.GlobalErrorCodeConstants;
+import tech.qiantong.qdata.common.utils.object.BeanUtils;
+import tech.qiantong.qdata.module.ai.controller.admin.chat.vo.AiChatMessageRespVO;
+import tech.qiantong.qdata.module.ai.dal.dataobject.chat.AiChatConversationDO;
+import tech.qiantong.qdata.module.ai.dal.dataobject.chat.AiChatMessageDO;
+import tech.qiantong.qdata.module.ai.dal.mapper.model.AiModelMapper;
+import tech.qiantong.qdata.module.ai.service.chat.IAiChatConversationService;
+import tech.qiantong.qdata.module.ai.service.chat.IAiChatMessageService;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * ai chat message controller
+ *
+ * @author qknow
+ * @date 2025-02-17
+ */
+@Tag(name = "ai聊天消息")
+@RestController
+@RequestMapping("/chat/message")
+public class ChatMessageController extends BaseController {
+
+    @Resource
+    private IChatMessageService chatMessageService;
+
+    @Resource
+    private IAiChatMessageService aiChatMessageService;
+
+    @Resource
+    private IAiChatConversationService aiChatConversationService;
+
+    @Operation(summary = "发送消息（流式）", description = "流式返回，响应较快")
+    @PostMapping(value = "/send-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<CommonResult<ChatMessageSendRespVO>> sendChatMessageStream(@RequestBody ChatMessageSendReqVO sendReqVO) {
+        return chatMessageService.sendChatMessageStream(sendReqVO, 1l)
+                .map(CommonResult::success)
+                // Error conversion
+                .onErrorResume(e -> Flux.just(CommonResult.error(GlobalErrorCodeConstants.ERROR.getCode(), e.getMessage())));
+    }
+
+    @Operation(summary = "获得指定对话的消息列表")
+    @GetMapping("/list-by-conversation-id")
+    public CommonResult<List<AiChatMessageRespVO>> getChatMessageListByConversationId(
+            @RequestParam("conversationId") Long conversationId) {
+        AiChatConversationDO conversation = aiChatConversationService.getAiChatConversationById(conversationId);
+        if (conversation == null || ObjUtil.notEqual(conversation.getUserId(), getUserId())) {
+            return CommonResult.success(Collections.emptyList());
+        }
+        List<AiChatMessageDO> messageDOList = aiChatMessageService.list(Wrappers.lambdaQuery(AiChatMessageDO.class)
+                .eq(AiChatMessageDO::getConversationId, conversationId));
+        return CommonResult.success(BeanUtils.toBean(messageDOList, AiChatMessageRespVO.class));
+    }
+
+    @Operation(summary = "删除ai聊天消息")
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable("ids") Long[] ids) {
+        return CommonResult.toAjax(aiChatMessageService.removeAiChatMessage(Arrays.asList(ids)));
+    }
+
+    @Operation(summary = "清空会话聊天消息")
+    @DeleteMapping("/deleteByConversationId")
+    public CommonResult<Integer> deleteByConversationId(@RequestParam("conversationId") Long conversationId) {
+        aiChatMessageService.remove(Wrappers.lambdaQuery(AiChatMessageDO.class)
+                .eq(AiChatMessageDO::getConversationId, conversationId));
+        return CommonResult.success(null);
+    }
+
+
+    @Operation(summary = "导出智能图表的明细数据")
+    @GetMapping(value = "/exportDetailData")
+    public void sendChatMessageStream(HttpServletResponse response, ChatMessageExportDetailDataReqVO exportDetailDataReqVO) {
+        chatMessageService.exportDetailData(response, exportDetailDataReqVO);
+    }
+
+}
