@@ -26,17 +26,27 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Base64;
 import java.util.stream.Collectors;
 
 public class RSAUtil {
 
     private static String loadPrivateKey(String fileName) throws IOException {
-        InputStream inputStream = RSAUtil.class.getClassLoader().getResourceAsStream(fileName);
+        boolean privateKey = "private_key.pem".equals(fileName);
+        String configured = System.getProperty(privateKey ? "qdata.rsa.private-key-file" : "qdata.rsa.public-key-file");
+        if (configured == null || configured.isBlank()) {
+            configured = System.getenv(privateKey ? "QDATA_RSA_PRIVATE_KEY_FILE" : "QDATA_RSA_PUBLIC_KEY_FILE");
+        }
+        InputStream inputStream = configured == null || configured.isBlank()
+                ? RSAUtil.class.getClassLoader().getResourceAsStream(fileName)
+                : Files.newInputStream(Path.of(configured));
         if (inputStream == null) {
             throw new IOException("Private key file not found in classpath: " + fileName);
         }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             return reader.lines().collect(Collectors.joining("\n"));
         }
     }

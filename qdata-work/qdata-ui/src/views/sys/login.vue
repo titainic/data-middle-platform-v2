@@ -43,8 +43,19 @@
                             </template>
                         </el-input>
                     </el-form-item>
+                    <el-form-item v-if="captchaEnabled" prop="code">
+                        <div class="login-captcha">
+                            <el-input v-model="loginForm.code" :placeholder="td('login.codePlaceholder')"
+                                auto-complete="off" @keyup.enter="handleLogin" />
+                            <button type="button" class="captcha-refresh" :aria-label="td('login.getCode')" @click="getCode">
+                                <img v-if="codeUrl" :src="codeUrl" :alt="td('login.code')" />
+                                <span v-else>{{ td('login.getCode') }}</span>
+                            </button>
+                        </div>
+                    </el-form-item>
                     <el-form-item style="width: 100%">
                         <el-button :loading="loading" type="primary" style="width: 100%"
+                            :disabled="!captchaReady"
                             @click="handleLogin">
                             <span v-if="!loading">{{ td('login.loginBtn') }}</span>
                             <span v-else>{{ td('login.logining') }}</span>
@@ -104,6 +115,7 @@ import useDefaultLang from "@/composables/useDefaultLang";
 import Cookies from 'js-cookie';
 import { encrypt, decrypt } from '@/utils/jsencrypt';
 import useUserStore from '@/store/system/user.js';
+import { getCodeImg } from '@/api/system/login.js';
 import { useTimeGreeting } from '@/composables/useTimeGreeting';
 
 const { td } = useDefaultLang();
@@ -112,12 +124,17 @@ const userStore = useUserStore();
 const dialogVisible = ref(false);
 const { proxy } = getCurrentInstance();
 const loading = ref(false);
+const captchaEnabled = ref(true);
+const captchaReady = ref(false);
+const codeUrl = ref('');
 
 const codeFlag = ref(false);
 const loginForm = ref({
-    username: 'qData',
+    username: 'admin',
     password: '',
-    rememberMe: false
+    rememberMe: false,
+    code: '',
+    uuid: ''
 });
 const fpForm = ref({
     username: '',
@@ -128,7 +145,8 @@ const fpForm = ref({
 
 const loginRules = computed(() => ({
     username: [{ required: true, trigger: 'blur', message: td('login.usernameRequired') }],
-    password: [{ required: true, trigger: 'blur', message: td('login.passwordRequired') }]
+    password: [{ required: true, trigger: 'blur', message: td('login.passwordRequired') }],
+    code: [{ required: captchaEnabled.value, trigger: 'blur', message: td('login.codeRequired') }]
 }));
 
 function getCookie() {
@@ -136,6 +154,7 @@ function getCookie() {
     const password = Cookies.get('password');
     const rememberMe = Cookies.get('rememberMe');
     loginForm.value = {
+        ...loginForm.value,
         username: username === undefined ? loginForm.value.username : username,
         password: password === undefined ? loginForm.value.password : decrypt(password),
         rememberMe: rememberMe === undefined ? false : Boolean(rememberMe)
@@ -143,7 +162,23 @@ function getCookie() {
 }
 getCookie();
 
+async function getCode() {
+    captchaReady.value = false;
+    loginForm.value.code = '';
+    try {
+        const result = await getCodeImg();
+        captchaEnabled.value = result.captchaEnabled !== false;
+        codeUrl.value = captchaEnabled.value ? 'data:image/gif;base64,' + result.img : '';
+        loginForm.value.uuid = result.uuid || '';
+        captchaReady.value = true;
+    } catch (_) {
+        codeUrl.value = '';
+    }
+}
+getCode();
+
 function handleLogin() {
+    if (!captchaReady.value || loading.value) return;
     localStorage.setItem('username', loginForm.value.username);
     proxy.$refs.loginRef.validate((valid) => {
         if (valid) {
@@ -167,6 +202,7 @@ function handleLogin() {
                 })
                 .catch(() => {
                     loading.value = false;
+                    getCode();
                 });
         }
     });
@@ -216,6 +252,21 @@ function handleFPCodeClick() {
 
 <style scoped lang="scss">
 .login-minimal {
+    .login-captcha {
+        display: flex;
+        width: 100%;
+        gap: 12px;
+        align-items: center;
+    }
+    .captcha-refresh {
+        flex: 0 0 100px;
+        padding: 0;
+        height: 34px;
+        border: 1px solid #dcdfe6;
+        background: white;
+        cursor: pointer;
+        img { width: 100%; height: 100%; }
+    }
     height: 100%;
     width: 100%;
     overflow: auto;

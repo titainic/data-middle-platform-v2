@@ -1,0 +1,42 @@
+{
+  "schema_version": "qdata-linux-jdk21-20261012",
+  "tables": 217,
+  "included_migrations": [
+    "20260908_architecture_canvas.sql",
+    "20260908_hive_warehouse.sql",
+    "20260908_quality_problem_mysql.sql",
+    "20260909_metadata_log_capacity.sql",
+    "20260909_warehouse_batches.sql",
+    "20260909_warehouse_namespaces.sql",
+    "20260910_metadata_execution_fence.sql",
+    "20260910_metadata_table_selection.sql",
+    "20260910_quality_execution_snapshots.sql",
+    "20260910_warehouse_quality_gate.sql",
+    "20260910_warehouse_serving.sql",
+    "20260914_service_projects.sql",
+    "20260915_architecture_projects.sql",
+    "20260915_client_projects.sql",
+    "20260915_model_type_descriptions.sql",
+    "20260915_native_model_projects.sql",
+    "20260915_project_scheduler.sql",
+    "20260915_quality_task_projects.sql",
+    "20260921_api_parameter_scope.sql",
+    "20260921_asset_column_parent_index.sql",
+    "20260921_asset_project_membership.sql",
+    "20260921_collection_task_projects.sql",
+    "20260922_uploaded_file_ownership.sql",
+    "20260923_development_file_artifacts.sql",
+    "20260923_dg_category_menu.sql",
+    "20260923_dg_data_category_cat.sql",
+    "20260929_managed_object.sql",
+    "20260929_managed_object_auth_indexes.sql",
+    "20261003_warehouse_ds_dispatch.sql",
+    "20261004_warehouse_ds_native.sql"
+  ],
+  "files": {
+    "bootstrap.sql": "eb5f229b0692f44b7eec6029ba5ffedc084152b7e9c0c6650c6d773cf56223d3",
+    "five-layers.sql": "492894e664c96293ace0ce12e75f25f97f5767a37234be2cbcca0ea950536cec",
+    "reference.sql": "27f56dde934cf344b2f07fba3ecc2ab8d0b55e98932c9e610f1e60b47e678c72",
+    "schema.sql": "f3594e2ba8205c43c984bed03b8e8c00a787d150a4b4e70730c0f25178bc92f9"
+  }
+}

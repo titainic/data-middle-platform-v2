@@ -1,0 +1,11 @@
+SET NAMES utf8mb4;
+INSERT INTO system_dept (dept_id,parent_id,ancestors,dept_name,order_num,status,del_flag) VALUES (100,0,'0','平台管理',0,'0','0');
+INSERT INTO system_user (user_id,dept_id,user_name,nick_name,user_type,password,status,del_flag,create_by) VALUES (1,100,'admin','平台管理员','00','__QDATA_ADMIN_PASSWORD_HASH__','0','0','bootstrap');
+INSERT INTO system_role (role_id,role_name,role_key,role_sort,data_scope,status,del_flag) VALUES (1,'超级管理员','admin',1,'1','0','0');
+INSERT INTO system_user_role (user_id,role_id) VALUES (1,1);
+INSERT INTO system_role_menu (role_id,menu_id) SELECT 1,menu_id FROM system_menu;
+INSERT INTO system_post (post_id,post_code,post_name,post_sort,status) VALUES (1,'admin','平台管理员',1,'0');
+INSERT INTO system_user_post (user_id,post_id) VALUES (1,1);
+INSERT INTO att_project (id,name,manager_id,description,code) VALUES (1,'默认项目',1,'首次安装默认项目','default');
+INSERT INTO att_project_user_rel (project_id,user_id) VALUES (1,1);
+INSERT INTO system_config (config_name,config_key,config_value,config_type) VALUES ('关闭公开注册','sys.account.registerUser','false','Y');

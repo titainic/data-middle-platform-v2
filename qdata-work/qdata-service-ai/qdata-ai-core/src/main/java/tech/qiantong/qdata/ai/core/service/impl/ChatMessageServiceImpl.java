@@ -34,6 +34,9 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
+import tech.qiantong.qdata.ai.core.service.AiConversationAccess;
+import tech.qiantong.qdata.common.utils.SecurityUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -114,6 +117,9 @@ public class ChatMessageServiceImpl implements IChatMessageService {
     private IAiChatConversationService aiChatConversationService;
 
     @Resource
+    private AiConversationAccess conversationAccess;
+
+    @Resource
     private StatisticsPromptBuilder promptBuilder;
 
     @Resource
@@ -128,14 +134,14 @@ public class ChatMessageServiceImpl implements IChatMessageService {
 
     @Override
     public Flux<ChatMessageSendRespVO> sendChatMessageStream(ChatMessageSendReqVO sendReqVO, Long userId) {
+        if (!java.util.Objects.equals(userId, SecurityUtils.getUserId())) {
+            throw new AccessDeniedException("AI sender identity does not match session");
+        }
+        AiChatConversationDO conversation = conversationAccess.requireConversation(sendReqVO.getConversationId());
         //User question content
         JSONObject contentObj = JSONObject.parseObject(sendReqVO.getContent());
 
         // Get conversation information
-        AiChatConversationDO conversation = aiChatConversationService.getAiChatConversationById(sendReqVO.getConversationId());
-        if (conversation == null) {
-            return Flux.error(new ServiceException("ai.error.conversation.notfound", "Conversation does not exist"));
-        }
         if (!conversation.getJoinConditionMatchFlag()) {
             return Flux.error(new ServiceException("ai.error.relation.required",
                     "Please configure the relationship manually"));
@@ -318,10 +324,7 @@ public class ChatMessageServiceImpl implements IChatMessageService {
     @Override
     public void exportDetailData(HttpServletResponse response, ChatMessageExportDetailDataReqVO exportDetailDataReqVO) {
         //Get message data
-        AiChatMessageDO message = aiChatMessageService.getById(exportDetailDataReqVO.getMessageId());
-        if (message == null) {
-            throw new ServiceException("ai.error.message.notfound", "Message does not exist");
-        }
+        AiChatMessageDO message = conversationAccess.requireMessage(exportDetailDataReqVO.getMessageId());
         if (StringUtils.isBlank(message.getReplyType()) || !ReplyTypeEnum.CHART.getType().equals(message.getReplyType())) {
             throw new ServiceException("ai.error.message.export.unsupported", "This message does not support export");
         }

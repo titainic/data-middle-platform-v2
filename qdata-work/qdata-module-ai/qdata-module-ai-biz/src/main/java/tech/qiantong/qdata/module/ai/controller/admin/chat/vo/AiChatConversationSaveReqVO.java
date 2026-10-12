@@ -52,7 +52,6 @@ public class AiChatConversationSaveReqVO extends BaseEntity {
     private String title;
 
     @Schema(description = "是否置顶;0：不置顶，1：置顶", example = "")
-    @Size(max = 256, message = "是否置顶;0：不置顶，1：置顶长度不能超过256个字符")
     private Boolean pinned;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

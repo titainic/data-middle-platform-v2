@@ -9,6 +9,7 @@ import tech.qiantong.qdata.common.core.domain.entity.SysUser;
 import tech.qiantong.qdata.common.core.domain.model.LoginUser;
 import tech.qiantong.qdata.common.exception.user.UserPasswordNotMatchException;
 import tech.qiantong.qdata.common.utils.MessageUtils;
+import tech.qiantong.qdata.module.system.service.ISysConfigService;
 import java.util.List;
 import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,6 +21,7 @@ class PasswordAuthenticationBoundaryTest {
         var service=spy(new SysLoginService());
         ReflectionTestUtils.setField(service,"authenticationManager",manager);
         ReflectionTestUtils.setField(service,"tokenService",tokens);
+        ReflectionTestUtils.setField(service,"configService",mock(ISysConfigService.class));
         doNothing().when(service).loginPreCheck(anyString(),anyString());
         doNothing().when(service).recordLoginInfo(anyLong());
         doNothing().when(service).recordLoginEvent(any(),any(),any());

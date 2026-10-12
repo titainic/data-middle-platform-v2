@@ -23,6 +23,7 @@ import org.springframework.data.redis.core.BoundSetOperations;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -37,6 +38,10 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class RedisCache
 {
+    private static final DefaultRedisScript<String> CAPTCHA_CONSUME_SCRIPT = new DefaultRedisScript<>(
+            "local value = redis.call('GET', KEYS[1]); if value then redis.call('DEL', KEYS[1]); end; return value;",
+            String.class);
+
     @Autowired
     public RedisTemplate redisTemplate;
 
@@ -121,6 +126,13 @@ public class RedisCache
     {
         ValueOperations<String, T> operation = redisTemplate.opsForValue();
         return operation.get(key);
+    }
+
+    public String consumeCaptcha(final String key)
+    {
+        return (String) redisTemplate.execute(CAPTCHA_CONSUME_SCRIPT,
+                redisTemplate.getValueSerializer(), redisTemplate.getValueSerializer(),
+                Collections.singletonList(key));
     }
 
     /**

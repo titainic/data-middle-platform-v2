@@ -103,6 +103,11 @@ public class DualServiceImpl implements IDsEtlExecutorService, IDsEtlNodeService
     }
 
     @Override
+    public DsTaskSaveRespDTO getTaskDetail(String projectCode, String taskCode) {
+        throw new UnsupportedOperationException("DolphinScheduler task details are served by qdata-server");
+    }
+
+    @Override
     public DsTaskSaveRespDTO updateTask(DsTaskSaveReqDTO dsTaskSaveReqDTO, String s, String s1) {
         return null;
     }
@@ -145,6 +150,16 @@ public class DualServiceImpl implements IDsEtlExecutorService, IDsEtlNodeService
     @Override
     public DpModelRespDTO getDpModelByIdApi(Long aLong) {
         return null;
+    }
+
+    @Override
+    public DpModelRespDTO getWarehouseModelByTableApi(Long datasourceId, String tableName) {
+        return getWarehouseModelByTableApi(datasourceId, null, tableName);
+    }
+
+    @Override
+    public DpModelRespDTO getWarehouseModelByTableApi(Long datasourceId, String databaseName, String tableName) {
+        throw new UnsupportedOperationException("Warehouse model lookups are served by qdata-server");
     }
 
     @Override

@@ -18,7 +18,6 @@
 
 package tech.qiantong.qdata.ai.controller.admin.chat;
 
-import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,6 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import tech.qiantong.qdata.ai.core.service.IChatMessageService;
+import tech.qiantong.qdata.ai.core.service.AiConversationAccess;
 import tech.qiantong.qdata.ai.core.vo.ChatMessageExportDetailDataReqVO;
 import tech.qiantong.qdata.ai.core.vo.ChatMessageSendReqVO;
 import tech.qiantong.qdata.ai.core.vo.ChatMessageSendRespVO;
@@ -36,14 +36,10 @@ import tech.qiantong.qdata.common.core.domain.CommonResult;
 import tech.qiantong.qdata.common.exception.enums.GlobalErrorCodeConstants;
 import tech.qiantong.qdata.common.utils.object.BeanUtils;
 import tech.qiantong.qdata.module.ai.controller.admin.chat.vo.AiChatMessageRespVO;
-import tech.qiantong.qdata.module.ai.dal.dataobject.chat.AiChatConversationDO;
 import tech.qiantong.qdata.module.ai.dal.dataobject.chat.AiChatMessageDO;
-import tech.qiantong.qdata.module.ai.dal.mapper.model.AiModelMapper;
-import tech.qiantong.qdata.module.ai.service.chat.IAiChatConversationService;
 import tech.qiantong.qdata.module.ai.service.chat.IAiChatMessageService;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -64,12 +60,13 @@ public class ChatMessageController extends BaseController {
     private IAiChatMessageService aiChatMessageService;
 
     @Resource
-    private IAiChatConversationService aiChatConversationService;
+    private AiConversationAccess conversationAccess;
 
     @Operation(summary = "发送消息（流式）", description = "流式返回，响应较快")
     @PostMapping(value = "/send-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<CommonResult<ChatMessageSendRespVO>> sendChatMessageStream(@RequestBody ChatMessageSendReqVO sendReqVO) {
-        return chatMessageService.sendChatMessageStream(sendReqVO, 1l)
+        conversationAccess.requireConversation(sendReqVO.getConversationId());
+        return chatMessageService.sendChatMessageStream(sendReqVO, getUserId())
                 .map(CommonResult::success)
                 // Error conversion
                 .onErrorResume(e -> Flux.just(CommonResult.error(GlobalErrorCodeConstants.ERROR.getCode(), e.getMessage())));
@@ -79,10 +76,7 @@ public class ChatMessageController extends BaseController {
     @GetMapping("/list-by-conversation-id")
     public CommonResult<List<AiChatMessageRespVO>> getChatMessageListByConversationId(
             @RequestParam("conversationId") Long conversationId) {
-        AiChatConversationDO conversation = aiChatConversationService.getAiChatConversationById(conversationId);
-        if (conversation == null || ObjUtil.notEqual(conversation.getUserId(), getUserId())) {
-            return CommonResult.success(Collections.emptyList());
-        }
+        conversationAccess.requireConversation(conversationId);
         List<AiChatMessageDO> messageDOList = aiChatMessageService.list(Wrappers.lambdaQuery(AiChatMessageDO.class)
                 .eq(AiChatMessageDO::getConversationId, conversationId));
         return CommonResult.success(BeanUtils.toBean(messageDOList, AiChatMessageRespVO.class));
@@ -91,12 +85,14 @@ public class ChatMessageController extends BaseController {
     @Operation(summary = "删除ai聊天消息")
     @DeleteMapping("/{ids}")
     public CommonResult<Integer> remove(@PathVariable("ids") Long[] ids) {
+        Arrays.stream(ids).forEach(conversationAccess::requireMessage);
         return CommonResult.toAjax(aiChatMessageService.removeAiChatMessage(Arrays.asList(ids)));
     }
 
     @Operation(summary = "清空会话聊天消息")
     @DeleteMapping("/deleteByConversationId")
     public CommonResult<Integer> deleteByConversationId(@RequestParam("conversationId") Long conversationId) {
+        conversationAccess.requireConversation(conversationId);
         aiChatMessageService.remove(Wrappers.lambdaQuery(AiChatMessageDO.class)
                 .eq(AiChatMessageDO::getConversationId, conversationId));
         return CommonResult.success(null);
@@ -106,6 +102,7 @@ public class ChatMessageController extends BaseController {
     @Operation(summary = "导出智能图表的明细数据")
     @GetMapping(value = "/exportDetailData")
     public void sendChatMessageStream(HttpServletResponse response, ChatMessageExportDetailDataReqVO exportDetailDataReqVO) {
+        conversationAccess.requireMessage(exportDetailDataReqVO.getMessageId());
         chatMessageService.exportDetailData(response, exportDetailDataReqVO);
     }
 

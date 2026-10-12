@@ -24,9 +24,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import tech.qiantong.qdata.ai.core.service.IChatConversationService;
+import tech.qiantong.qdata.ai.core.service.AiConversationAccess;
 import tech.qiantong.qdata.ai.core.vo.AiChatConversationSaveRespVO;
 import tech.qiantong.qdata.common.core.controller.BaseController;
 import tech.qiantong.qdata.common.core.domain.CommonResult;
@@ -62,6 +62,9 @@ public class ChatConversationController extends BaseController {
     @Resource
     private IChatConversationService chatConversationService;
 
+    @Resource
+    private AiConversationAccess conversationAccess;
+
     @Operation(summary = "查询ai聊天对话列表")
     @GetMapping("/myList")
     public CommonResult<List<AiChatConversationRespVO>> myList() {
@@ -70,16 +73,16 @@ public class ChatConversationController extends BaseController {
     }
 
     @Operation(summary = "获取ai聊天对话详细信息")
-    @PreAuthorize("@ss.hasPermi('app:chat:conversation:query')")
     @GetMapping(value = "/{id}")
     public CommonResult<AiChatConversationRespVO> getInfo(@PathVariable("id") Long id) {
-        AiChatConversationDO aiChatConversationDO = aiChatConversationService.getAiChatConversationById(id);
+        AiChatConversationDO aiChatConversationDO = conversationAccess.requireConversation(id);
         return CommonResult.success(BeanUtils.toBean(aiChatConversationDO, AiChatConversationRespVO.class));
     }
 
     @Operation(summary = "新增ai聊天对话")
     @PostMapping
     public CommonResult<AiChatConversationSaveRespVO> add(@Valid @RequestBody AiChatConversationSaveReqVO appChatConversation) {
+        appChatConversation.setUserId(getUserId());
         appChatConversation.setCreatorId(getUserId());
         appChatConversation.setCreateBy(getNickName());
         appChatConversation.setCreateTime(DateUtil.date());
@@ -91,6 +94,8 @@ public class ChatConversationController extends BaseController {
     @Operation(summary = "修改ai聊天对话")
     @PutMapping
     public CommonResult<Integer> edit(@Valid @RequestBody AiChatConversationSaveReqVO appChatConversation) {
+        conversationAccess.requireConversation(appChatConversation.getId());
+        appChatConversation.setUserId(getUserId());
         appChatConversation.setUpdatorId(getUserId());
         appChatConversation.setUpdateBy(getNickName());
         appChatConversation.setUpdateTime(DateUtil.date());
@@ -100,12 +105,15 @@ public class ChatConversationController extends BaseController {
     @Operation(summary = "删除ai聊天对话")
     @DeleteMapping("/{ids}")
     public CommonResult<Integer> remove(@PathVariable("ids") Long[] ids) {
+        Arrays.stream(ids).forEach(conversationAccess::requireConversation);
         return CommonResult.toAjax(aiChatConversationService.removeAiChatConversation(Arrays.asList(ids)));
     }
 
     @Operation(summary = "设置关联关系")
     @PostMapping("/setAssociations")
     public CommonResult<Integer> associations(@RequestBody AiChatConversationSaveReqVO appChatConversation) {
+        conversationAccess.requireConversation(appChatConversation.getId());
+        appChatConversation.setUserId(getUserId());
         if (StringUtils.isBlank(appChatConversation.getAssociations())) {
             throw new ServiceException("ai.error.relation.required", "Please configure the relationship.");
         }

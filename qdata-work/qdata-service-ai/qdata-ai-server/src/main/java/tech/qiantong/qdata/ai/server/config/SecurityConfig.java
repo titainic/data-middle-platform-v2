@@ -18,10 +18,11 @@
 
 package tech.qiantong.qdata.ai.server.config;
 
+import com.alibaba.fastjson2.JSON;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -35,8 +36,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.authentication.logout.LogoutFilter;
 import org.springframework.web.filter.CorsFilter;
 import tech.qiantong.qdata.ai.server.filter.JwtAuthenticationTokenFilter;
-import tech.qiantong.qdata.security.config.properties.PermitAllUrlProperties;
-import tech.qiantong.qdata.security.handle.AuthenticationEntryPointImpl;
+import tech.qiantong.qdata.common.core.domain.AjaxResult;
 import tech.qiantong.qdata.security.handle.LogoutSuccessHandlerImpl;
 
 /**
@@ -52,12 +52,6 @@ public class SecurityConfig {
      */
     @Autowired
     private UserDetailsService userDetailsService;
-
-    /**
-     * Authentication failure handling class
-     */
-    @Autowired
-    private AuthenticationEntryPointImpl unauthorizedHandler;
 
     /**
      * Exit processing class
@@ -76,12 +70,6 @@ public class SecurityConfig {
      */
     @Autowired
     private CorsFilter corsFilter;
-
-    /**
-     * Addresses that allow anonymous access
-     */
-    @Autowired
-    private PermitAllUrlProperties permitAllUrl;
 
     /**
      * Authentication implementation
@@ -119,42 +107,17 @@ public class SecurityConfig {
                     headersCustomizer.cacheControl(cache -> cache.disable()).frameOptions(options -> options.sameOrigin());
                 })
                 // Authentication failure handling class
-                .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
+                .exceptionHandling(exception -> exception.authenticationEntryPoint((request, response, failure) -> {
+                    response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    response.setCharacterEncoding("UTF-8");
+                    response.getWriter().write(JSON.toJSONString(AjaxResult.error(401, "Authentication required")));
+                }))
                 // Based on token, so no session is required
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Annotation marks URLs that allow anonymous access
                 .authorizeHttpRequests((requests) -> {
-                    permitAllUrl.getUrls().forEach(url -> requests.requestMatchers(url).permitAll());
-                    // For login login registration register verification code captchaImage allows anonymous access
-                    requests.requestMatchers("/login", "/updater/**", "/register", "/**", "/captchaImage", "/flyflow/**", "/services/**", "/jmreport/**", "/rp/**", "/drag/**", "/jimubi/**").permitAll()
-                            // Static resources, accessible anonymously
-                            .requestMatchers(HttpMethod.GET, "/",
-                                    "/*.html",
-                                    "/**/*.html",
-                                    "/**/*.css",
-                                    "/**/*.js",
-                                    "/static/**",
-                                    "/index/**",
-                                    "/admin/**",
-                                    "/assets/**",
-                                    "/profile/**",
-                                    "/sso/**",
-                                    "/favicon.ico",
-                                    "/docs/**"
-                            ).permitAll()
-                            .requestMatchers("/swagger-ui.html",
-                                    "/swagger-resources/**",
-                                    "/webjars/**",
-                                    "/*/api-docs",
-                                    "/v3/api-docs/**",
-                                    "/druid/**",
-                                    "/websocket/**",
-                                    "/payment/**",
-                                    "/syncData/**",
-                                    "/sys/**",
-                                    "/oauth2/**"
-                            ).permitAll()
-                            // All requests except the above require authentication and authentication
+                    requests.requestMatchers("/actuator/health", "/error").permitAll()
                             .anyRequest().authenticated();
                 })
                 // Add Logout filter

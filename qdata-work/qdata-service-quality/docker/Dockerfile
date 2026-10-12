@@ -1,4 +1,4 @@
-FROM crpi-kf13onfj0v8f6jax.cn-shanghai.personal.cr.aliyuncs.com/qiantongkeji/eclipse-temurin:8-jre
+FROM eclipse-temurin:21-jre-jammy
 
 # Set time zone and application directory
 ENV TZ=Asia/Shanghai \
@@ -12,7 +12,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
 WORKDIR $APP_HOME
 
 # Copy product
-COPY ./target/*.jar ./qdata-service-quality.jar
+COPY ./target/qdata-service-quality.jar ./qdata-service-quality.jar
 
 EXPOSE 8083
 
