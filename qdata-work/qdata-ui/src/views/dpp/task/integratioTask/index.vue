@@ -1114,7 +1114,7 @@ const handleExecuteOnce = async (row) => {
     const res = await startDppEtlTask(row.id);
     if (Number(res?.code) === 200) {
       proxy.$modal.msgSuccess(
-        td("dpp.integratioTask.executeSuccess", "Executed successfully")
+        res?.msg || td("dpp.integratioTask.executeSuccess", "Executed successfully")
       );
       handleQuery();
     } else {

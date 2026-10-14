@@ -1902,17 +1902,17 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     }
 
     /**
-     * Starts a local Quartz and DataX task.
-     * A manual UI execution generates DataX JSON, invokes datax.py, collects logs, and updates the task instance status.
+     * Submits a local task to Quartz. Execution and its result are recorded asynchronously in task instances.
      */
     private AjaxResult startLocalDataXTask(DppEtlTaskDO dppEtlTaskDO) {
         try {
             schedulerAdapter.trigger(ScheduleCommand.builder().id(dppEtlTaskDO.getQuartzId()).build());
         } catch (SchedulerException e) {
-            throw new RuntimeException(e);
+            log.error("Failed to submit local task to Quartz, taskId={}", dppEtlTaskDO.getId(), e);
+            throw new ServiceException("dpp.error.scheduler.start", "Executing the scheduler, failed!");
         }
         return success(MessageUtils.messageWithFallback(
-                "dpp.datax.execute.success", "DataX task executed successfully"));
+                "dpp.task.submit.success", "Task submitted; check the task instance for the execution result"));
     }
 
     /**
@@ -1921,6 +1921,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
      * @param id
      */
     @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public void startDppEtlTaskDataIntegration(Long id) {
         // The local datax.py executor handles data integration, so load the complete task and node configuration first.
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(id);

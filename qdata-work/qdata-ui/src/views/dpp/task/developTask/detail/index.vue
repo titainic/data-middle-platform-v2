@@ -277,7 +277,7 @@ const handleRun = async () => {
   try {
     const res = await startDppEtlTask(id);
     if (res.code == 200) {
-      proxy.$modal.msgSuccess(td('common.message.msgOpSuccess', 'Operation successful'));
+      proxy.$modal.msgSuccess(res?.msg || td('common.message.msgOpSuccess', 'Operation successful'));
       // Open the console
       activeValue.value = iconList.value[0];
     } else {

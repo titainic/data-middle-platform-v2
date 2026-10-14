@@ -845,7 +845,7 @@ const handleExecuteOnce = async (row) => {
     const res = await startDppEtlTask(row.id);
 
     if (Number(res?.code) === 200) {
-      proxy.$modal.msgSuccess(td("dpp.developTask.executeSuccess", "Executed successfully"));
+      proxy.$modal.msgSuccess(res?.msg || td("dpp.developTask.executeSuccess", "Executed successfully"));
     } else {
       proxy.$modal.msgWarning(
         res?.msg ||

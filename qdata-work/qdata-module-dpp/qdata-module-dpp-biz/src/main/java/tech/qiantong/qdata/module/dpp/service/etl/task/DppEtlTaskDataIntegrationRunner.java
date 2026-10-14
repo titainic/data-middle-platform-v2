@@ -77,6 +77,7 @@ public class DppEtlTaskDataIntegrationRunner {
     private static final int REALTIME_LOG_FLUSH_LINES = 50;
     private static final long REALTIME_LOG_FLUSH_INTERVAL_MILLIS = 1000L;
     private static final String MASKED_SECRET = "******";
+    private static final int TASK_REMARK_MAX_LENGTH = 512;
     private static final Pattern INCREMENT_ID_LOG_PATTERN = Pattern.compile("(?m)^QDATA_INCREMENT_ID=([+-]?\\d+)\\s*$");
     private static final Pattern INCREMENT_TIME_LOG_PATTERN = Pattern.compile("(?m)^QDATA_INCREMENT_TIME=([A-Za-z_][A-Za-z0-9_$#.]*)\\|([^\\r\\n]+?)\\s*$");
     @Resource
@@ -99,7 +100,8 @@ public class DppEtlTaskDataIntegrationRunner {
      *
      * @param dppEtlTaskDO data integration task details
      */
-    @Transactional
+    // Each persistence operation commits independently; a failed DataX process must not roll back its failure state.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void startDppEtlTaskDataIntegration(DppEtlTaskDO dppEtlTaskDO, DppEtlTaskInstanceDO instance, StringBuilder taskLog) {
         Date startTime = new Date();
         List<Long> nodeInstanceIds = new ArrayList<>();
@@ -195,13 +197,23 @@ public class DppEtlTaskDataIntegrationRunner {
         } catch (Exception e) {
             // Mark the task as failed for any exception and write the reason to the local execution log.
             updateNodeInstances(nodeInstanceIds, TaskExecutionStatus.FAILURE);
-            markLocalDataXTaskFail(instance, e);
             LogUtils.appendLocalLogLine(taskLog, "DataX task execution failed: " + JSONUtils.formatJson(JSONUtils.toJson(e.getMessage())));
+            log.error("Local DataX task failed, taskInstanceId={}", instance.getId(), e);
+            try {
+                markLocalDataXTaskFail(instance, e);
+            } catch (RuntimeException statusFailure) {
+                e.addSuppressed(statusFailure);
+                log.error("Failed to persist local DataX failure, taskInstanceId={}", instance.getId(), statusFailure);
+            }
+            if (e instanceof RuntimeException failure) {
+                throw failure;
+            }
+            throw new IllegalStateException("Local DataX task execution failed", e);
         } finally {
             // Save the complete execution log on both success and failure for task instance troubleshooting.
             long duration = (new Date().getTime() - startTime.getTime()) / 1000L;
             LogUtils.appendLocalLogLine(taskLog, "DataX task execution finished, duration: " + duration + " seconds");
-            saveLocalDataXTaskInstanceLog(instance, dppEtlTaskDO, taskLog.toString());
+            saveLocalDataXTaskInstanceLogSafely(instance, dppEtlTaskDO, taskLog.toString());
         }
     }
 
@@ -462,8 +474,10 @@ public class DppEtlTaskDataIntegrationRunner {
             if (params == null) {
                 throw new ServiceException("The node parameter is empty：" + node.getName());
             }
+            String nodeType = StringUtils.defaultIfBlank(node.getType(), params.getString("taskType"));
+            nodeType = StringUtils.defaultIfBlank(nodeType, "DATAX");
             // 直接使用当前节点配置创建运行中实例，不依赖节点历史版本表。
-            boolean created = dppEtlNodeInstanceService.createLocalDataXNodeInstance(DppEtlNodeInstanceDO.builder().id(id).taskType(node.getTaskType() == null ? task.getType() : node.getTaskType()).name(node.getName()).nodeType(params.getString("taskType")).nodeId(node.getId()).nodeCode(node.getCode()).nodeVersion(node.getVersion() == null ? 0 : node.getVersion().intValue()).taskInstanceId(instance.getId()).taskInstanceName(instance.getName()).projectId(task.getProjectId()).projectCode(task.getProjectCode()).submitTime(new Date()).startTime(new Date()).parameters(node.getParameters()).priority(String.valueOf(Priority.MEDIUM.getCode())).retryTimes(node.getFailRetryTimes() == null ? 0 : node.getFailRetryTimes().intValue()).delayTime(node.getDelayTime() == null ? 0 : node.getDelayTime().intValue()).cpuQuota(node.getCpuQuota() == null ? null : node.getCpuQuota().intValue()).memoryMax(node.getMemoryMax() == null ? null : node.getMemoryMax().intValue()).status(String.valueOf(TaskExecutionStatus.RUNNING_EXECUTION.getCode())).componentType(node.getComponentType()).dsId(id).dsTaskInstanceId(instance.getId()).validFlag(Boolean.TRUE).delFlag(Boolean.FALSE).build());
+            boolean created = dppEtlNodeInstanceService.createLocalDataXNodeInstance(DppEtlNodeInstanceDO.builder().id(id).taskType(node.getTaskType() == null ? task.getType() : node.getTaskType()).name(node.getName()).nodeType(nodeType).nodeId(node.getId()).nodeCode(node.getCode()).nodeVersion(node.getVersion() == null ? 0 : node.getVersion().intValue()).taskInstanceId(instance.getId()).taskInstanceName(instance.getName()).projectId(task.getProjectId()).projectCode(task.getProjectCode()).submitTime(new Date()).startTime(new Date()).parameters(node.getParameters()).priority(String.valueOf(Priority.MEDIUM.getCode())).retryTimes(node.getFailRetryTimes() == null ? 0 : node.getFailRetryTimes().intValue()).delayTime(node.getDelayTime() == null ? 0 : node.getDelayTime().intValue()).cpuQuota(node.getCpuQuota() == null ? null : node.getCpuQuota().intValue()).memoryMax(node.getMemoryMax() == null ? null : node.getMemoryMax().intValue()).status(String.valueOf(TaskExecutionStatus.RUNNING_EXECUTION.getCode())).componentType(node.getComponentType()).dsId(id).dsTaskInstanceId(instance.getId()).validFlag(Boolean.TRUE).delFlag(Boolean.FALSE).build());
             if (!created) {
                 throw new ServiceException("Node instance save failed：" + node.getName());
             }
@@ -799,8 +813,11 @@ public class DppEtlTaskDataIntegrationRunner {
     private void markLocalDataXTaskFail(DppEtlTaskInstanceDO instance, Exception e) {
         instance.setStatus(String.valueOf(WorkflowExecutionStatus.FAILURE.getCode()));
         instance.setEndTime(new Date());
-        instance.setRemark(e.getMessage());
-        dppEtlTaskInstanceService.updateById(instance);
+        // The full failure stays in the execution log; remark is varchar(512).
+        instance.setRemark(StringUtils.left(e.getMessage(), TASK_REMARK_MAX_LENGTH));
+        if (!dppEtlTaskInstanceService.updateById(instance)) {
+            throw new IllegalStateException("Failed to persist local DataX task failure: " + instance.getId());
+        }
     }
 
     /**
