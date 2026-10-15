@@ -17,6 +17,7 @@
  */
 
 import request from '@/utils/request'
+import { sanitizeDataXTaskPayload } from '@/utils/dataxTaskPayload'
 
 // Query the data integration task list
 export function listDppEtlTask(query) {
@@ -140,7 +141,7 @@ export function createProcessDefinitions(data) {
         // url: '/dpp/etlTask/createProcessDefinitionEx',
         url: '/dpp/etlTask/createEtlTask',
         method: 'post',
-        data: data
+        data: sanitizeDataXTaskPayload(data)
     })
 }
 // New interface data integration dag
@@ -148,7 +149,7 @@ export function createEtlTaskFrontPostposition(data) {
     return request({
         url: '/dpp/etlTask/createEtlTaskFrontPostposition',
         method: 'post',
-        data: data
+        data: sanitizeDataXTaskPayload(data)
     })
 }
 // Online and offline
@@ -199,7 +200,7 @@ export function updateProcessDefinitions(data, query) {
         // url: '/dpp/etlTask/updateProcessDefinition',
         url: '/dpp/etlTask/updateEtlTask',
         method: 'post',
-        data: data,
+        data: sanitizeDataXTaskPayload(data),
         params: query
     })
 }

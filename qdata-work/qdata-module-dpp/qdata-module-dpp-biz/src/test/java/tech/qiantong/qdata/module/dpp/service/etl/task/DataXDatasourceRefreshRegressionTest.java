@@ -107,6 +107,41 @@ class DataXDatasourceRefreshRegressionTest {
         assertLogsMask("fixture-source", "fixture-target", "fixture-rotated");
     }
 
+    @Test void referenceOnlyNodesExecuteWithServerConnectionConfiguration() {
+        for (var node : List.of(reader, writer)) {
+            var parameters = JSON.parseObject(node.getParameters());
+            String key = node == reader ? "readerDatasource" : "writerDatasource";
+            parameters.put(key, new JSONObject().fluentPut("datasourceId", node == reader ? 11L : 12L));
+            node.setParameters(parameters.toJSONString());
+        }
+        String savedReader = reader.getParameters(), savedWriter = writer.getParameters();
+        run();
+        assertEquals("source-user", parameter("reader").getString("username"));
+        assertEquals("target-user", parameter("writer").getString("username"));
+        assertTrue(submittedJson.contains("current-source:3307"));
+        assertTrue(submittedJson.contains("current-target:3308"));
+        assertEquals(savedReader, reader.getParameters());
+        assertEquals(savedWriter, writer.getParameters());
+        assertEquals("7", instance.getStatus());
+    }
+
+    @Test void forgedClientConnectionMetadataCannotChangeTheExecutionEndpointOrCredentials() {
+        for (var node : List.of(reader, writer)) {
+            var parameters = JSON.parseObject(node.getParameters());
+            var source = parameters.getJSONObject(node == reader ? "readerDatasource" : "writerDatasource");
+            source.put("datasourceType", "Oracle");
+            source.put("ip", "forged-host"); source.put("port", 9999);
+            source.put("datasourceConfig", "{\"username\":\"forged-user\",\"password\":\"fixture-forged\"}");
+            node.setParameters(parameters.toJSONString());
+        }
+        run();
+        assertEquals("source-user", parameter("reader").getString("username"));
+        assertEquals("target-user", parameter("writer").getString("username"));
+        assertTrue(submittedJson.contains("current-source:3307"));
+        assertTrue(submittedJson.contains("current-target:3308"));
+        assertFalse(submittedJson.contains("forged"));
+    }
+
     @Test void encryptedServerPasswordsStillReachTheBuilderAsUsableCredentials() throws Exception {
         String previous = System.getProperty("qdata.aes.key");
         try {

@@ -25,6 +25,7 @@ import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.*;
 import tech.qiantong.qdata.module.dpp.dal.mapper.etl.DppEtlTaskMapper;
 import tech.qiantong.qdata.module.dpp.service.etl.*;
 import tech.qiantong.qdata.module.dpp.service.etl.impl.DppEtlTaskServiceImpl;
+import tech.qiantong.qdata.module.dpp.service.scheduler.DppTaskQuartzService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -169,6 +170,46 @@ class DataXUpdateSaveRegressionTest {
         assertNoServerSecrets(JSON.toJSONString(savedNodes)); assertNoServerSecrets(JSON.toJSONString(savedLogs));
     }
 
+    @Test void referenceOnlyCanvasSupportsLocalAndSchedulerUpdates() {
+        useReferenceOnlySources();
+        String original = request.getTaskDefinitionList();
+        assertEquals(200, controller.updateEtlTask(request).getCode());
+        useDolphin();
+        assertEquals(200, controller.updateEtlTask(request).getCode());
+        assertEquals(original, request.getTaskDefinitionList());
+        assertEquals("source-user", submittedArgs.getJSONObject("reader").getJSONObject("parameter").getString("username"));
+        assertEquals("target-user", submittedArgs.getJSONObject("writer").getJSONObject("parameter").getString("username"));
+        assertFalse(JSON.toJSONString(savedNodes).contains("datasourceConfig"));
+        assertFalse(JSON.toJSONString(savedLogs).contains("datasourceConfig"));
+        assertNoServerSecrets(JSON.toJSONString(savedNodes));
+    }
+
+    @Test void firstCanvasSavePersistsReferenceOnlyNodesAndTheirRelations() {
+        useReferenceOnlySources();
+        var quartz = mock(DppTaskQuartzService.class);
+        ReflectionTestUtils.setField(service, "dppTaskQuartzService", quartz);
+        when(quartz.create(any(), anyString())).thenReturn(90L);
+        when(nodes.createDppEtlNodeBatch(anyList())).thenAnswer(call -> {
+            List<DppEtlNodeSaveReqVO> values = call.getArgument(0);
+            for (var value : values) savedNodes.add(cn.hutool.core.bean.BeanUtil.copyProperties(value, DppEtlNodeDO.class));
+            return savedNodes;
+        });
+        String original = request.getTaskDefinitionList();
+        assertEquals(200, controller.createEtlTaskFrontPostposition(request).getCode());
+        assertEquals(original, request.getTaskDefinitionList());
+        assertEquals(2, savedNodes.size()); assertEquals(2, savedLogs.size());
+        for (var node : savedNodes) {
+            var parameters = JSON.parseObject(node.getParameters());
+            String key = "reader".equals(node.getCode()) ? "readerDatasource" : "writerDatasource";
+            assertEquals(1, parameters.getJSONObject(key).size());
+            assertNotNull(parameters.getJSONObject(key).getLong("datasourceId"));
+        }
+        verify(relations).createDppEtlTaskNodeRelBatch(argThat(rows -> rows.size() == 2));
+        verify(quartz).create(any(), eq("dppQuartzJob.dataIntegration(%sL)"));
+        assertNoServerSecrets(JSON.toJSONString(savedNodes));
+        assertFalse(JSON.toJSONString(savedLogs).contains("datasourceConfig"));
+    }
+
     @Test void repeatedUpdatesReloadCredentialsInsteadOfTrustingClientValues() {
         useDolphin(); controller.updateEtlTask(request);
         when(sources.getDatasourceById(2L)).thenReturn(source(2L, "rotated-reader", "source_db", "rotated-user", "fixture-rotated"));
@@ -251,6 +292,19 @@ class DataXUpdateSaveRegressionTest {
     }
 
     private void useDolphin() { existing.setScheduler(ScheduleConstants.DOLPHINSCHEDULER); request.setScheduler(ScheduleConstants.DOLPHINSCHEDULER); }
+
+    private void useReferenceOnlySources() {
+        var definitions = JSON.parseArray(request.getTaskDefinitionList());
+        for (int i = 0; i < definitions.size(); i++) {
+            var parameters = definitions.getJSONObject(i).getJSONObject("taskParams");
+            String key = i == 0 ? "readerDatasource" : "writerDatasource";
+            var saved = parameters.getJSONObject(key);
+            Long id = saved.getLong("datasourceId");
+            if (id == null) id = saved.getLong("id");
+            parameters.put(key, new JSONObject().fluentPut("datasourceId", id));
+        }
+        request.setTaskDefinitionList(definitions.toJSONString());
+    }
 
     private void assertNoWrites() {
         verify(tasks, never()).updateById(any(DppEtlTaskDO.class));
