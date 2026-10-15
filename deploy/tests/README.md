@@ -1,3 +1,16 @@
+# 构建快照离线验证
+
+在仓库根目录使用 Python 3 执行，无需安装第三方依赖：
+
+```bash
+python3 -m unittest discover -s deploy/tests -p 'test_build.py' -v
+```
+
+测试通过部署脚本实际使用的 `ignore_source` 复制源码，核对系统工具
+`qdata-ui/src/views/sys/tool/build/index.vue` 及全部 Vue 页面字节一致；同时确认其他
+`build`、`target`、`dist`、`node_modules` 目录仍被排除，源码例外中的私有文件过滤规则继续生效。
+验证仅操作本地临时快照，不执行构建、部署或访问数据库，不能替代 Linux 完整构建与浏览器验收。
+
 # AI 身份与会话归属验证
 
 在 Linux 使用 JDK 21，对本次源码生成的独立 AI JAR 执行：

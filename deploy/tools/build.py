@@ -28,6 +28,9 @@ def run(command, cwd=None, env=None):
 def ignore_source(directory, names):
     ignored = []
     for name in names:
+        # This build directory contains a Vue page, not generated output.
+        if name == "build" and Path(directory).parts[-5:] == ("qdata-ui", "src", "views", "sys", "tool"):
+            continue
         if name in {".git", "target", "dist", "node_modules", "runtime", "runtime-data", ".offline", ".codex-backups", "upload", "build", ".idea"}:
             ignored.append(name)
         elif name.endswith((".pem", ".key", ".jar", ".class", ".log")):
