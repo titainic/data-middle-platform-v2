@@ -18,6 +18,10 @@
 **/node_modules/
 **/dist/
 **/build/
+# This Vue route is source; keep every other file in its directory ignored.
+!/qdata-work/qdata-ui/src/views/sys/tool/build/
+/qdata-work/qdata-ui/src/views/sys/tool/build/*
+!/qdata-work/qdata-ui/src/views/sys/tool/build/index.vue
 /deploy/artifacts/
 **/__pycache__/
 **/.flattened-pom.xml
