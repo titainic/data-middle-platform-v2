@@ -734,7 +734,7 @@ export const createDataNode = (graph, data) => {
         }),
         ...(data.type == 1 && {
           querySql: "",
-          csvFile: "",
+          ...(["2", "4"].includes(String(data.componentType)) && { csvFile: "" }),
           topic: "", //Topic
           clmt: "0", //connection status
           logicOperator: "and", //Table input logical connector
@@ -985,7 +985,7 @@ export const getDefaultTaskParams = (data) => {
     const baseParams = {
       ...base,
       querySql: "",
-      csvFile: "",
+      ...(["2", "4"].includes(String(data.componentType)) && { csvFile: "" }),
       inputFields: "", // Will be overwritten by base.inputFields to []
       topic: "",
       clmt: "0",

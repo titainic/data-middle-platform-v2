@@ -77,10 +77,13 @@ public class DevelopmentFileAccessService implements DevelopmentFileAccess {
         for(JSONObject node:nodes)validateNode(projectId,node.getString("componentType"),node.getJSONObject("taskParams"));
     }
     private void validateNode(Long project,String component,JSONObject params) {
-        if(!"2".equals(component) && !"4".equals(component) && (params==null || !params.containsKey("csvFile")))return;
+        String executionPath=params==null?null:params.getString("csvFile");
+        // Older canvases add an empty csvFile placeholder to every input, including database readers.
+        // Actual file inputs and non-empty artifact references must still pass provenance validation.
+        if(!"2".equals(component) && !"4".equals(component) && (executionPath==null || executionPath.isBlank()))return;
         if(params==null)throw denied();String origin="2".equals(component)?params.getString("excelFile"):params.getString("file");
-        if(origin==null || origin.isBlank() || params.getString("csvFile")==null)throw denied();
-        validate(project,origin,params.getString("csvFile"));
+        if(origin==null || origin.isBlank() || executionPath==null || executionPath.isBlank())throw denied();
+        validate(project,origin,executionPath);
     }
     public void task(Long taskId) {
         var task=jdbc.queryForList("SELECT t.project_id FROM dpp_etl_task t JOIN att_project p ON p.id=t.project_id AND p.valid_flag='1' AND p.del_flag='0' WHERE t.id=? AND t.del_flag='0'",taskId);
