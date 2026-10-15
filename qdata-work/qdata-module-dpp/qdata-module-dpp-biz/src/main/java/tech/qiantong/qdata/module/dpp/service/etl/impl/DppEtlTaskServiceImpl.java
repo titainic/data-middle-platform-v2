@@ -61,6 +61,7 @@ import tech.qiantong.qdata.module.att.api.cat.dto.AttTaskCatReqDTO;
 import tech.qiantong.qdata.module.att.api.cat.dto.AttTaskCatRespDTO;
 import tech.qiantong.qdata.module.att.api.service.cat.IAttDataDevCatApiService;
 import tech.qiantong.qdata.module.att.api.service.cat.IAttTaskCatApiService;
+import tech.qiantong.qdata.module.da.api.service.DataResourceAccess;
 import tech.qiantong.qdata.module.dpp.api.etl.dto.DppEtlTaskRespDTO;
 import tech.qiantong.qdata.module.dpp.api.service.etl.DppEtlTaskService;
 import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.*;
@@ -68,6 +69,7 @@ import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.*;
 import tech.qiantong.qdata.module.dpp.dal.mapper.etl.DppEtlTaskMapper;
 import tech.qiantong.qdata.module.dpp.service.etl.task.DppEtlTaskDataIntegrationRunner;
 import tech.qiantong.qdata.module.dpp.service.etl.task.DppEtlTaskSparkRunner;
+import tech.qiantong.qdata.module.dpp.service.etl.task.DppDatasourceResolver;
 import tech.qiantong.qdata.module.dpp.service.etl.task.DataDevelopmentJdbcTaskRunner;
 import tech.qiantong.qdata.module.dpp.service.etl.*;
 import tech.qiantong.qdata.module.dpp.service.scheduler.DppTaskQuartzService;
@@ -149,6 +151,10 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     private DppEtlTaskDataIntegrationRunner dppEtlTaskDataIntegrationRunner;
     @Resource
     private DppEtlTaskSparkRunner dppEtlTaskSparkRunner;
+    @Resource
+    private DppDatasourceResolver datasourceResolver;
+    @Resource
+    private DataResourceAccess dataResourceAccess;
     @Resource private tech.qiantong.qdata.module.dpp.service.etl.DevelopmentFileAccessService developmentFiles;
     @Resource
     private DataDevelopmentJdbcTaskRunner dataDevelopmentJdbcTaskRunner;
@@ -872,6 +878,35 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
                 .collect(Collectors.toList());
     }
 
+    /** Resolve credentials on a separate copy; canvas definitions and version logs stay redacted. */
+    private String resolveUpdateTaskDatasources(String definitions) {
+        List<JSONObject> nodes = JSON.parseArray(definitions, JSONObject.class);
+        // Authorize every connection before loading any server-side credentials or changing saved state.
+        for (JSONObject node : nodes) {
+            JSONObject parameters = node.getJSONObject("taskParams");
+            if (parameters == null) {
+                throw new IllegalArgumentException("任务节点缺少参数");
+            }
+            for (String key : List.of("datasources", "readerDatasource", "writerDatasource")) {
+                boolean required = ("readerDatasource".equals(key)
+                        && TaskComponentTypeEnum.DB_READER.getCode().equals(node.getString("componentType")))
+                        || ("writerDatasource".equals(key)
+                        && TaskComponentTypeEnum.DB_WRITER.getCode().equals(node.getString("componentType")));
+                JSONObject source = parameters.getJSONObject(key);
+                Long id = source == null ? null : source.getLong("datasourceId");
+                if (id == null && source != null) id = source.getLong("id");
+                if (id == null && required) {
+                    throw new IllegalArgumentException("请选择已授权的数据源");
+                }
+                if (id != null) dataResourceAccess.requireDatasource(id);
+            }
+        }
+        for (JSONObject node : nodes) {
+            node.put("taskParams", datasourceResolver.refreshNodeParameters(node.getJSONObject("taskParams")));
+        }
+        return JSON.toJSONString(nodes);
+    }
+
     @Override
     public DppEtlTaskSaveReqVO updateEtlTask(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
@@ -879,6 +914,8 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
             throw new ServiceException("dpp.error.task.online.modify",
                     "Online tasks cannot be modified; take the task offline first");
         }
+
+        String resolvedDefinitions = resolveUpdateTaskDatasources(dppEtlNewNodeSaveReqVO.getTaskDefinitionList());
 
         // Create ETL task extended data
         DppEtlTaskExtDO taskExt = dppEtlTaskExtService.getByTaskId(Long.parseLong(dppEtlNewNodeSaveReqVO.getId()));
@@ -1087,7 +1124,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
 
         List<DsResource> resourceList = new ArrayList<>();
         // Build ETL program required data
-        Map<String, Object> mainArgs = TaskConverter.buildEtlTaskParams(dppEtlNewNodeSaveReqVO.getTaskDefinitionList(), nodeMap, taskInfo, resourceList);
+        Map<String, Object> mainArgs = TaskConverter.buildEtlTaskParams(resolvedDefinitions, nodeMap, taskInfo, resourceList);
 
         // Wrap node info DATAX, SPARK
         String taskDefinition = TaskConverter.buildEtlTaskDefinitionJson(taskExt.getEtlNodeId(), nodeName, nodeCode, 0, mainArgs, dppEtlNewNodeSaveReqVO.getDraftJson());
