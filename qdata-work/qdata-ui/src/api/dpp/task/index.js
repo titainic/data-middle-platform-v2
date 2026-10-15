@@ -77,6 +77,15 @@ export function getTablesByDataSourceId(ID) {
         params: ID.databaseName ? { databaseName: ID.databaseName } : undefined
     });
 }
+
+// Registered identity is distinct from the physical table name and datasource ID.
+export function getOutputTableAssets(query) {
+    return request({
+        url: '/da/asset/getTablesByDataSourceId',
+        method: 'get',
+        params: query
+    });
+}
 // table fields
 export function getColumnByAssetId(data) {
     return request({

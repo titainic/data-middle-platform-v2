@@ -247,7 +247,12 @@ public class DaAssetController extends BaseController {
     public AjaxResult getTablesByDataSourceId(DaAssetPageReqVO daAsset) {
         scope(daAsset);
         List<DaAssetDO> tablesByDataSourceId = daAssetService.getTablesByDataSourceId(daAsset);
-        return AjaxResult.success(tablesByDataSourceId);
+        return AjaxResult.success(tablesByDataSourceId.stream().map(asset -> {
+            Map<String, Object> row = cn.hutool.core.bean.BeanUtil.beanToMap(asset);
+            // Keep the existing id field and add a precision-safe identity for table-output clients.
+            row.put("assetId", asset.getId().toString());
+            return row;
+        }).toList());
     }
 
 

@@ -50,6 +50,8 @@ public class DppEtlTaskSparkRunner {
     private DppDatasourceResolver datasourceResolver;
     @Resource
     private IDppEtlNodeService iDppEtlNodeService;
+    @Resource
+    private SparkPreflightFailureRecorder preflightFailures;
 
     @Value("${ds.spark.master_url}")
     private String sparkMaster;
@@ -95,14 +97,19 @@ public class DppEtlTaskSparkRunner {
      * @param taskLog      live log buffer that receives the driver output
      */
     public void startSparkEtlTask(DppEtlTaskDO dppEtlTaskDO, StringBuilder taskLog) {
-        List<DppEtlNodeRespVO> nodeList = iDppEtlNodeService.listNodeByTaskId(dppEtlTaskDO.getId());
-        if (nodeList == null || nodeList.isEmpty()) {
-            throw new ServiceException("dpp.error.spark.nodes.missing",
-                    "The local Spark task has no configured nodes; save the task first");
+        Map<String, Object> mainArgs;
+        try {
+            mainArgs = prepareTask(dppEtlTaskDO);
+        } catch (RuntimeException failure) {
+            // No driver has started, so RabbitMQ cannot report an instance for this attempt.
+            try {
+                preflightFailures.record(dppEtlTaskDO, failure);
+            } catch (RuntimeException persistenceFailure) {
+                failure.addSuppressed(persistenceFailure);
+                log.error("Failed to persist Spark preflight failure, taskId={}", dppEtlTaskDO.getId(), persistenceFailure);
+            }
+            throw failure;
         }
-        validateReaderAndWriter(nodeList);
-
-        Map<String, Object> mainArgs = buildEtlMainArgs(dppEtlTaskDO, nodeList);
         String payloadJson = JSON.toJSONString(mainArgs);
 
         LogUtils.appendLocalLogLine(taskLog, "********************************* Execute Spark task instance ********************************");
@@ -137,6 +144,21 @@ public class DppEtlTaskSparkRunner {
                 }
             }
         }
+    }
+
+    /** Read-only validation for interactive submission; scheduled runs revalidate before launching. */
+    public void validateTask(DppEtlTaskDO task) {
+        prepareTask(task);
+    }
+
+    private Map<String, Object> prepareTask(DppEtlTaskDO dppEtlTaskDO) {
+        List<DppEtlNodeRespVO> nodeList = iDppEtlNodeService.listNodeByTaskId(dppEtlTaskDO.getId());
+        if (nodeList == null || nodeList.isEmpty()) {
+            throw new ServiceException("dpp.error.spark.nodes.missing",
+                    "The local Spark task has no configured nodes; save the task first");
+        }
+        validateReaderAndWriter(nodeList);
+        return buildEtlMainArgs(dppEtlTaskDO, nodeList);
     }
 
     private void validateReaderAndWriter(List<DppEtlNodeRespVO> nodeList) {

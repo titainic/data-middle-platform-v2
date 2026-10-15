@@ -471,6 +471,8 @@ public class DaAssetServiceImpl extends ServiceImpl<DaAssetMapper, DaAssetDO> im
         if(pageReqVO.getAccessibleAssetIds()!=null){if(pageReqVO.getAccessibleAssetIds().isEmpty())return java.util.List.of();lookup.in(DaAssetDO::getId,pageReqVO.getAccessibleAssetIds());}
         return lookup
                 .eq(DaAssetDO::getDatasourceId, pageReqVO.getDatasourceId())
+                .eq(StringUtils.isNotBlank(pageReqVO.getDatabaseName()), DaAssetDO::getDatabaseName, pageReqVO.getDatabaseName())
+                .eq(StringUtils.isNotBlank(pageReqVO.getTableName()), DaAssetDO::getTableName, pageReqVO.getTableName())
                 .eq(DaAssetDO::getDelFlag, "0")
                 .list();
     }

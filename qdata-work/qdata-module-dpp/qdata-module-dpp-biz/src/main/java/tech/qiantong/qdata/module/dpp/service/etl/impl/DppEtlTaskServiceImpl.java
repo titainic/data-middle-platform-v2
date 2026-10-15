@@ -1865,6 +1865,14 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         }
         if(developmentFiles!=null)developmentFiles.task(id);
         if(dppEtlTaskDO.getWarehouseBatchId()!=null)warehouseBatches.authorizeTask(id);
+        if (StringUtils.equals(dppEtlTaskDO.getScheduler(), ScheduleConstants.QUARTZ)
+                && "1".equals(dppEtlTaskDO.getType()) && isSparkEngineTask(dppEtlTaskDO)) {
+            try {
+                dppEtlTaskSparkRunner.validateTask(dppEtlTaskDO);
+            } catch (IllegalArgumentException e) {
+                throw new ServiceException("Spark任务预检失败：" + e.getMessage());
+            }
+        }
         if (!StringUtils.equals("1", dppEtlTaskDO.getStatus())) {
             DppEtlNewNodeSaveReqVO nodeSaveReqVO = new DppEtlNewNodeSaveReqVO();
             nodeSaveReqVO.setId(String.valueOf(id));

@@ -54,4 +54,48 @@ class DppHiveWritePolicyTest {
         JSONObject params=JSONObject.of("writerDatasource",JSONObject.of("datasourceType","Hive","datasourceId",9L,"datasourceConfig","{\"dbname\":\"qdata_test\"}"),"target_table_name","dwd_iot_db.water_quality","writeModeType",2);
         assertThrows(IllegalArgumentException.class,()->policy.integration(params));
     }
+
+    private JSONObject odsOutput(String table, String assetId) {
+        when(jdbc.queryForList(anyString(),eq("ods_iot_db"),eq(1L))).thenReturn(List.of(Map.of("layer_code","ODS","space_id",7L,"engine_id",8L)));
+        when(jdbc.queryForObject(contains("FROM da_asset"),eq(Long.class),any(),any(),any(),any(),any(),any(),any())).thenAnswer(call -> {
+            Object[] args = call.getArguments();
+            return (Long.valueOf(2L).equals(args[2]) && "air".equals(args[5])
+                    || Long.valueOf(3L).equals(args[2]) && "soil".equals(args[5]))
+                    && Long.valueOf(1L).equals(args[3]) && "ods_iot_db".equals(args[4])
+                    && Long.valueOf(8L).equals(args[6]) && Long.valueOf(1L).equals(args[7])
+                    && Long.valueOf(7L).equals(args[8]) ? 1L : 0L;
+        });
+        return JSONObject.of("writerDatasource",JSONObject.of("datasourceType","Hive","datasourceId",1L,
+                "target_asset_id",assetId,"datasourceConfig","{\"dbname\":\"default\"}"),
+                "target_datasource_id","1","target_asset_id",assetId,"target_table_name","ods_iot_db."+table,"writeModeType",2);
+    }
+
+    @Test void connectionOneCanAppendToDistinctAirAndSoilAssetIdentities() {
+        assertDoesNotThrow(() -> policy.integration(odsOutput("air","2")));
+        assertDoesNotThrow(() -> policy.integration(odsOutput("soil","3")));
+    }
+
+    @Test void legacyConnectionIdAndAnotherTablesAssetRemainRejected() {
+        for(String id:List.of("1","3","999")) assertThrows(IllegalArgumentException.class, () -> policy.integration(odsOutput("air",id)));
+    }
+
+    @Test void correctedIdentityStillRequiresAppendAndConsistentConnection() {
+        var params=odsOutput("air","2");
+        params.put("writeModeType",1); assertThrows(IllegalArgumentException.class,()->policy.integration(params));
+        params.put("writeModeType",2); params.put("target_datasource_id",9L);
+        assertThrows(IllegalArgumentException.class,()->policy.integration(params));
+    }
+
+    @Test void correctedIdentityCannotWriteAnUnregisteredOrRetainedTarget() {
+        assertThrows(IllegalArgumentException.class,()->policy.integration(odsOutput("unknown","2")));
+        assertThrows(IllegalArgumentException.class,()->policy.integration(odsOutput("snapshot","2")));
+    }
+
+    @Test void mismatchedNamespaceSpaceOrEngineRejectsAnOtherwiseCorrectAsset() {
+        var params=odsOutput("air","2");
+        when(jdbc.queryForList(anyString(),eq("ods_iot_db"),eq(1L))).thenReturn(List.of(Map.of("layer_code","ODS","space_id",99L,"engine_id",8L)));
+        assertThrows(IllegalArgumentException.class,()->policy.integration(params));
+        when(jdbc.queryForList(anyString(),eq("ods_iot_db"),eq(1L))).thenReturn(List.of(Map.of("layer_code","ODS","space_id",7L,"engine_id",99L)));
+        assertThrows(IllegalArgumentException.class,()->policy.integration(params));
+    }
 }

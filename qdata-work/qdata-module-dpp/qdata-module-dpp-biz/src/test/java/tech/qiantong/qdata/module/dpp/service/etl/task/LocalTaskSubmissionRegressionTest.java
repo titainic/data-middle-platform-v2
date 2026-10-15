@@ -53,6 +53,33 @@ class LocalTaskSubmissionRegressionTest {
         assertThrows(ServiceException.class, () -> service.startDppEtlTask(31L));
     }
 
+    @Test void sparkPreflightRejectsInvalidAssetsBeforeQuartzSubmission() throws Exception {
+        setup();
+        var mapper = (DppEtlTaskMapper) ReflectionTestUtils.getField(service, "dppEtlTaskMapper");
+        var task = mapper.selectById(31L);
+        task.setType("1"); task.setDraftJson("{\"taskType\":\"SPARK\"}");
+        var spark = mock(DppEtlTaskSparkRunner.class);
+        ReflectionTestUtils.setField(service, "dppEtlTaskSparkRunner", spark);
+        doThrow(new IllegalArgumentException("ODS采集目标必须是该空间已登记的模型资产：ods_iot_db.air"))
+                .when(spark).validateTask(task);
+        var error = assertThrows(ServiceException.class, () -> service.startDppEtlTask(31L));
+        assertTrue(error.getMessage().contains("ODS采集目标"));
+        verifyNoInteractions(scheduler);
+    }
+
+    @Test void validSparkTaskIsCheckedBeforeItIsSubmitted() throws Exception {
+        setup();
+        var mapper = (DppEtlTaskMapper) ReflectionTestUtils.getField(service, "dppEtlTaskMapper");
+        var task = mapper.selectById(31L);
+        task.setType("1"); task.setDraftJson("{\"taskType\":\"SPARK\"}");
+        var spark = mock(DppEtlTaskSparkRunner.class);
+        ReflectionTestUtils.setField(service, "dppEtlTaskSparkRunner", spark);
+        assertEquals(200, service.startDppEtlTask(31L).get("code"));
+        var order = inOrder(spark, scheduler);
+        order.verify(spark).validateTask(task);
+        order.verify(scheduler).trigger(any());
+    }
+
     @Test void asynchronousExecutionSuspendsTheInheritedServiceTransaction() throws Exception {
         setup();
         var runner = mock(DppEtlTaskDataIntegrationRunner.class);

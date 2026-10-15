@@ -199,7 +199,7 @@
         <el-col :span="12">
           <el-form-item
             :label="td('dpp.integration.selectTable', 'Select Table')"
-            prop="taskParams.target_asset_id"
+            prop="taskParams.target_table_name"
             :rules="[
               {
                 required: true,
@@ -210,7 +210,7 @@
            :label-position="labelPosition">
             <el-select
               v-if="!info"
-              v-model="form.taskParams.target_asset_id"
+              v-model="form.taskParams.target_table_name"
               :placeholder="
                 td('dpp.integration.selectTablePlaceholder', 'Please select table')
               "
@@ -226,7 +226,7 @@
               />
             </el-select>
             <div v-else class="form-readonly">
-              {{ form.taskParams.target_asset_id || "-" }}
+              {{ form.taskParams.target_table_name || "-" }}
             </div>
           </el-form-item>
         </el-col>
@@ -458,7 +458,7 @@
         <el-button @click="closeDialog">{{
           td("common.button.close")
         }}</el-button>
-        <el-button type="primary" @click="saveData" v-if="!info">{{
+        <el-button type="primary" :loading="saving" :disabled="loadingTables || loadingList" @click="saveData" v-if="!info">{{
           td("common.button.save")
         }}</el-button>
       </div>
@@ -473,6 +473,7 @@ import { handleType2TaskParams } from "@/views/dpp/utils/opBase.js";
 import { typeList } from "@/utils/graph.js";
 import {
   getTablesByDataSourceId,
+  getOutputTableAssets,
   getHiveDatabases,
   getColumnByAssetId,
   getNodeUniqueKey,
@@ -509,6 +510,8 @@ let ColumnByAssettab = ref([]);
 let dpModelRefs = ref();
 let form = ref({});
 let loadingTables = ref(false);
+const saving = ref(false);
+let assetRequest = 0;
 function handleRule(data) {
   row.value = {};
   row.value = data;
@@ -566,7 +569,7 @@ const getColumnByAssetIdList = async (id) => {
     getColumnByAssetId,
     {
       id: form.value.taskParams.writerDatasource.datasourceId,
-      tableName: form.value.taskParams.target_asset_id,
+      tableName: form.value.taskParams.target_table_name,
     },
     loadingList
   );
@@ -603,7 +606,7 @@ const resetAndFetchTables = async (selectedDatasource) => {
     ip,
     port,
     dbname: code.dbname,
-    target_asset_id: id,
+    target_asset_id: "",
     datasourceId: id,
   };
 
@@ -628,31 +631,65 @@ const handleDatasourceChange = (value) => {
 
 const prepareHiveDatabase = async (datasource) => {
   if (String(datasource?.datasourceType).toUpperCase() !== "HIVE") return;
-  const table = form.value.taskParams.target_table_name || form.value.taskParams.target_asset_id || "";
+  const table = form.value.taskParams.target_table_name || "";
   datasource.databaseName = table.includes(".") ? table.split(".")[0].replaceAll("`", "") : (datasource.databaseName || datasource.dbname);
-  if (!form.value.taskParams.target_asset_id && table) form.value.taskParams.target_asset_id = table;
   hiveDatabases.value = (await getHiveDatabases(datasource.datasourceId)).data;
 };
 const handleDatabaseChange = async () => {
   form.value.taskParams.target_asset_id = "";
+  form.value.taskParams.writerDatasource.target_asset_id = "";
   form.value.taskParams.target_table_name = "";
   form.value.taskParams.target_columns = [];
   ColumnByAssettab.value = [];
   await getTablesByDatasourceId(form.value.taskParams.writerDatasource.datasourceId);
 };
 // Handle table changes
-const setTableName = (selectedDatasource) => {
-  form.value.taskParams.target_table_name = selectedDatasource.tableName;
+const resolveOutputAsset = async () => {
+  const request = ++assetRequest;
+  const params = form.value.taskParams;
+  const writer = params.writerDatasource;
+  params.target_asset_id = "";
+  writer.target_asset_id = "";
+  params.target_datasource_id = String(writer.datasourceId);
+  if (!isHive.value || !params.target_table_name) return;
+  const parts = params.target_table_name.replaceAll("`", "").split(".");
+  const databaseName = parts.length === 2 ? parts[0] : writer.databaseName || writer.dbname;
+  const tableName = parts.at(-1);
+  const response = await getOutputTableAssets({
+    datasourceId: writer.datasourceId,
+    databaseName,
+    tableName,
+    projectId: userStore.projectId,
+    projectCode: userStore.projectCode,
+  });
+  if (request !== assetRequest || params !== form.value.taskParams || writer !== params.writerDatasource
+      || params.target_table_name.replaceAll("`", "").split(".").at(-1) !== tableName
+      || (writer.databaseName || writer.dbname) !== databaseName) {
+    throw new Error("目标表已变化，请重新保存");
+  }
+  // The service applies project access and exact connection/database/table filters.
+  const assets = response.data || [];
+  if (assets.length > 1) throw new Error("目标表存在多个资产登记，请先核对资产身份");
+  const assetId = assets.length === 1 ? assets[0].assetId : "";
+  if (assets.length === 1 && (typeof assetId !== "string" || !/^\d+$/.test(assetId))) {
+    throw new Error("目标表资产身份无效，请刷新后重试");
+  }
+  writer.target_asset_id = assetId;
+  params.target_asset_id = assetId;
 };
 
-const handleChange = (value) => {
+const handleChange = async (value) => {
   const selectedDatasource = TablesByDataSource.value.find(
     (item) => item.tableName == value
   );
   if (selectedDatasource) {
-    setTableName(selectedDatasource);
     ColumnByAssettab.value = [];
-    getColumnByAssetIdList(selectedDatasource.id);
+    try {
+      await resolveOutputAsset();
+      await getColumnByAssetIdList();
+    } catch (error) {
+      proxy.$modal.msgError(error.message || "获取目标表资产失败");
+    }
   }
 };
 
@@ -665,9 +702,13 @@ const off = () => {
 };
 // save data
 const saveData = async () => {
+  if (saving.value) return;
+  saving.value = true;
   try {
     const valid = await dpModelRefs.value?.validate();
     if (!valid) return;
+    // Re-resolve on save, including legacy drafts whose asset ID was a datasource ID.
+    await resolveOutputAsset();
 
     // Generate unique code when there is no code
     if (!form.value.code) {
@@ -709,8 +750,10 @@ const saveData = async () => {
     form.value.taskParams = { ...form.value.taskParams, ...taskParams };
     emit("confirm", form.value);
   } catch (error) {
-    console.error("Failed to save data:", error);
+    proxy.$modal.msgError(error.message || "保存表输出失败");
     loading.value = false;
+  } finally {
+    saving.value = false;
   }
 };
 
@@ -755,6 +798,10 @@ watch(() => [props.visible, props.currentNode], async () => {
 
 
   const taskParams = form.value?.taskParams || {};
+  // Older canvases used target_asset_id as a table-name selector.
+  if (!taskParams.target_table_name && typeof taskParams.target_asset_id === "string" && !/^\d+$/.test(taskParams.target_asset_id)) {
+    taskParams.target_table_name = taskParams.target_asset_id;
+  }
   tableFields.value = taskParams.tableFields?.length
     ? deepCopy(taskParams.tableFields)
     : deepCopy(taskParams.inputFields);
