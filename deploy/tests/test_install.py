@@ -13,6 +13,35 @@ MODULE_SPEC.loader.exec_module(installer)
 
 
 class InstallationSafetyTest(unittest.TestCase):
+    def test_gateway_forwards_websocket_handshakes_on_both_backend_routes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "runtime").mkdir()
+            arguments = installer.argument_parser().parse_args([])
+            with mock.patch.object(installer.shutil, "which", return_value="/usr/bin/docker"), \
+                 mock.patch.object(installer.subprocess, "run", return_value=mock.Mock(returncode=1)), \
+                 mock.patch.object(installer, "run"):
+                installer.install_gateway(arguments, root)
+            configuration = (root / "runtime/nginx.conf").read_text()
+            self.assertIn("map $http_upgrade $connection_upgrade", configuration)
+            self.assertEqual(configuration.count("proxy_set_header Upgrade $http_upgrade;"), 2)
+            self.assertEqual(configuration.count("proxy_set_header Connection $connection_upgrade;"), 2)
+
+    def test_offline_datax_requires_driver_before_attempting_download(self):
+        arguments = installer.argument_parser().parse_args(["--offline", "--datax-archive", "/unused/datax.tar.gz"])
+        with mock.patch.object(installer.subprocess, "run") as run:
+            with self.assertRaisesRegex(installer.InstallError, "datax-mysql-driver"):
+                installer.prepare_datax(arguments, Path("/unused"))
+            run.assert_not_called()
+
+    def test_datax_preparation_receives_the_offline_mysql_driver(self):
+        arguments = installer.argument_parser().parse_args(["--offline", "--datax-archive", "/unused/datax.tar.gz",
+                                                           "--datax-mysql-driver", "/unused/mysql.jar"])
+        with mock.patch.object(installer.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
+            installer.prepare_datax(arguments, Path("/unused"))
+            self.assertIn("--mysql-driver-jar", run.call_args.args[0])
+            self.assertIn("/unused/mysql.jar", run.call_args.args[0])
+
     def test_existing_eight_character_login_password_is_accepted(self):
         with tempfile.TemporaryDirectory() as directory:
             password = Path(directory) / "password"

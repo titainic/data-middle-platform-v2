@@ -45,6 +45,7 @@ public class SysOperLogServiceImpl implements ISysOperLogService
     @Override
     public void insertOperlog(SysOperLog operLog)
     {
+        if (operLog.getOperTime() == null) operLog.setOperTime(new java.util.Date());
         operLogMapper.insertOperlog(operLog);
     }
 

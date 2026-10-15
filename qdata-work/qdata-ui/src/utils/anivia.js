@@ -33,7 +33,7 @@ export function parseTime(time, pattern) {
   } else {
     if ((typeof time === 'string') && (/^[0-9]+$/.test(time))) {
       time = parseInt(time)
-    } else if (typeof time === 'string') {
+    } else if (typeof time === 'string' && !/T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(time)) {
       time = time.replace(new RegExp(/-/gm), '/').replace('T', ' ').replace(new RegExp(/\.[\d]{3}/gm), '');
     }
     if ((typeof time === 'number') && (time.toString().length === 10)) {

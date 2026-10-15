@@ -18,7 +18,8 @@
 
 package tech.qiantong.qdata.security.aspectj;
 
-import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONWriter;
+import com.alibaba.fastjson2.filter.Filter;
 import org.apache.commons.lang3.ArrayUtils;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -109,6 +110,7 @@ public class LogAspect
 
             // *========Database Log=========*//
             SysOperLog operLog = new SysOperLog();
+            operLog.setOperTime(new java.util.Date());
             operLog.setStatus(BusinessStatus.SUCCESS.ordinal());
             // Request address
             String ip = IpUtils.getIpAddr();
@@ -178,7 +180,7 @@ public class LogAspect
         // Whether to save response data, parameters and values
         if (log.isSaveResponseData() && StringUtils.isNotNull(jsonResult))
         {
-            operLog.setJsonResult(StringUtils.substring(JSON.toJSONString(jsonResult), 0, 2000));
+            operLog.setJsonResult(StringUtils.substring(auditJson(jsonResult), 0, 2000));
         }
     }
 
@@ -200,7 +202,7 @@ public class LogAspect
         }
         else
         {
-            operLog.setOperParam(StringUtils.substring(JSON.toJSONString(paramsMap, excludePropertyPreFilter(excludeParamNames)), 0, 2000));
+            operLog.setOperParam(StringUtils.substring(auditJson(paramsMap, excludePropertyPreFilter(excludeParamNames)), 0, 2000));
         }
     }
 
@@ -218,7 +220,7 @@ public class LogAspect
                 {
                     try
                     {
-                        String jsonObj = JSON.toJSONString(o, excludePropertyPreFilter(excludeParamNames));
+                        String jsonObj = auditJson(o, excludePropertyPreFilter(excludeParamNames));
                         params += jsonObj.toString() + " ";
                     }
                     catch (Exception e)
@@ -228,6 +230,16 @@ public class LogAspect
             }
         }
         return params.trim();
+    }
+
+    static String auditJson(Object value, Filter... filters) {
+        try (JSONWriter writer = JSONWriter.of()) {
+            writer.getContext().setZoneId(java.time.ZoneId.of("Asia/Shanghai"));
+            writer.getContext().setDateFormat("yyyy-MM-dd HH:mm:ss");
+            writer.getContext().configFilter(filters);
+            writer.writeAny(value);
+            return writer.toString();
+        }
     }
 
     /**

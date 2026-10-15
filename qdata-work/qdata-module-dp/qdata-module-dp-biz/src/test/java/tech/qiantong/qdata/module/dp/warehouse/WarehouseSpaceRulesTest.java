@@ -48,4 +48,19 @@ class WarehouseSpaceRulesTest {
         assertEquals("thrift://metastore.example:9083", WarehouseSpaceService.metastoreSetting(statement));
         verify(rows).close();
     }
+    @Test void readsKyuubiTwoColumnSettingAndStillRejectsMissingIdentity() throws Exception {
+        Statement statement = mock(Statement.class);
+        ResultSet rows = mock(ResultSet.class);
+        when(statement.executeQuery("SET hive.metastore.uris")).thenReturn(rows);
+        when(rows.next()).thenReturn(true);
+        when(rows.getString(1)).thenReturn("hive.metastore.uris");
+        when(rows.getString(2)).thenReturn("thrift://metastore.example:9083");
+        assertEquals("thrift://metastore.example:9083", WarehouseSpaceService.metastoreSetting(statement));
+        for (String unavailable : Arrays.asList(null, "", "<undefined>")) {
+            when(rows.getString(2)).thenReturn(unavailable);
+            assertThrows(IllegalArgumentException.class, () -> WarehouseSpaceService.metastoreSetting(statement));
+        }
+        when(rows.getString(1)).thenReturn("unrelated.setting");
+        assertThrows(IllegalArgumentException.class, () -> WarehouseSpaceService.metastoreSetting(statement));
+    }
 }

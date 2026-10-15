@@ -77,7 +77,7 @@
                     <el-button type="primary" @click="handleSuccess">{{ td('ds.apiEdit.returnToList') }}</el-button>
                     <el-button v-if="activeReult !== 0" @click="handleLastStep">{{ td('common.button.previousStep') }}
                     </el-button>
-                    <el-button v-if="activeReult !== 2" @click="handleNextStep">{{ td('common.button.nextStep') }}
+                    <el-button v-if="activeReult !== 2" :loading="nextStepLoading" @click="handleNextStep">{{ td('common.button.nextStep') }}
                     </el-button>
                     <el-button type="primary" v-if="activeReult === 2" @click="submitForm"
                         :loading="loadingOptions.loading">{{ td('ds.apiEdit.confirmAndExit') }}
@@ -277,22 +277,27 @@ const handleClick = (tab, event) => {
  * step bar next step
  * proxy.$refs["dsApiRef"].validate(valid => {
  * */
+const nextStepLoading = ref(false);
 function handleNextStep() {
+    if (nextStepLoading.value) return;
     if (activeReult.value === 0) {
-        proxy.$refs.base.validateFormBase('form1', (f1) => {
+        proxy.$refs.base.validateFormBase('form1', async (f1) => {
+            nextStepLoading.value = true;
             form1.value = { ...f1 };
-        });
-        repeatFlag({
-            id: form1.value.id,
-            projectId: form1.value.projectId,
-            name: form1.value.name,
-            apiVersion: form1.value.apiVersion,
-            apiUrl: form1.value.apiUrl
-        }).then((response) => {
-            if (response.code === 200) {
-                activeReult.value++;
-            } else {
-                proxy.$message.warning(td('ds.apiEdit.opFailedCheck'));
+            try {
+                const response = await repeatFlag({
+                    id: f1.id,
+                    projectId: f1.projectId,
+                    name: f1.name,
+                    apiVersion: f1.apiVersion,
+                    apiUrl: f1.apiUrl
+                });
+                if (response.code === 200) activeReult.value++;
+                else proxy.$message.warning(td('ds.apiEdit.opFailedCheck'));
+            } catch (error) {
+                // The request interceptor displays the server error; keep the current step.
+            } finally {
+                nextStepLoading.value = false;
             }
         });
     } else if (activeReult.value === 1) {

@@ -192,15 +192,30 @@ public class DbQueryProperty implements Serializable {
         this.username = configJson.getString("username");
 
         String passwordAes = configJson.getString("password");
-        //Commercial release, temporarily commented out
         if (StringUtils.isNotBlank(passwordAes)) {
+            // The UI sends AES/CBC credentials, while server-side imports may store plaintext.
+            // Only cipher candidates have canonical Base64 and a non-empty multiple of 16 bytes.
+            boolean legacyCiphertext = false;
             try {
-                this.password = AesEncryptUtil.desEncrypt(configJson.getString("password")).trim();
-            } catch (Exception e) {
-                this.password = configJson.getString("password");
+                byte[] decoded = java.util.Base64.getDecoder().decode(passwordAes);
+                legacyCiphertext = decoded.length > 0 && decoded.length % 16 == 0
+                        && java.util.Base64.getEncoder().encodeToString(decoded).equals(passwordAes);
+            } catch (IllegalArgumentException plaintext) {
+                // A plaintext credential is not a failed decryption attempt.
+            }
+            if (legacyCiphertext) {
+                try {
+                    this.password = AesEncryptUtil.desEncrypt(passwordAes);
+                } catch (Exception invalidKey) {
+                    throw new DataQueryException("数据源历史 AES 凭据解密失败，请核对 QDATA_AES_KEY 或重新保存该连接的凭据");
+                }
+                if (this.password == null) {
+                    throw new DataQueryException("数据源历史 AES 凭据解密失败，请核对 QDATA_AES_KEY 或重新保存该连接的凭据");
+                }
+            } else {
+                this.password = passwordAes;
             }
         }
-//        this.password = passwordAes;
         this.sid = configJson.getString("sid");
         this.dbName = configJson.getString("dbname");
         String config = configJson.getString("config");

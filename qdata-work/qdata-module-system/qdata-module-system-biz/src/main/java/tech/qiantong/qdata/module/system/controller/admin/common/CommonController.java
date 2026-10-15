@@ -197,6 +197,7 @@ public class CommonController {
     @PostMapping("/getExcelColumn")
     public AjaxResult getExcelColumn(@RequestBody ExcelColumnReqVO excelColumnReqVO) {
         developmentFiles.getObject().authorizeSource(excelColumnReqVO.getProjectId(),excelColumnReqVO.getExcelFile());
+        String targetHdfs = "DATAX".equals(excelColumnReqVO.getTaskType()) ? null : resolveHdfsUrl(hdfsUrl);
         String excelFile = tech.qiantong.qdata.common.utils.file.SafeUploadPath.resolve(
                 java.nio.file.Path.of(AniviaConfig.getProfile()),excelColumnReqVO.getExcelFile()).toString();
         Integer startColumn = excelColumnReqVO.getStartColumn();
@@ -216,10 +217,10 @@ public class CommonController {
         }
         uploadedFiles.getObject().register(Constants.RESOURCE_PREFIX+"/etl/csv/"+fileName,"UPLOAD");
         String hdfsPath = "/tmp/etl";
-        uploadHdfs(hdfsUrl, hdfsPath, csvFile, fileName);
-        developmentFiles.getObject().register(excelColumnReqVO.getProjectId(),excelColumnReqVO.getExcelFile(),hdfsUrl.replaceAll("/+$", "") + hdfsPath + "/" + fileName);
+        uploadHdfs(targetHdfs, hdfsPath, csvFile, fileName);
+        developmentFiles.getObject().register(excelColumnReqVO.getProjectId(),excelColumnReqVO.getExcelFile(),targetHdfs + hdfsPath + "/" + fileName);
         return AjaxResult.success(ColumnRespVO.builder()
-                .csvFile(hdfsUrl.replaceAll("/+$", "") + hdfsPath + "/" + fileName)
+                .csvFile(targetHdfs + hdfsPath + "/" + fileName)
                 .columnList(columnList).build());
     }
 
@@ -231,6 +232,7 @@ public class CommonController {
     @PostMapping("/getCsvColumn")
     public AjaxResult getCsvColumn(@RequestBody CsvColumnReqVO csvColumnReqVO) {
         developmentFiles.getObject().authorizeSource(csvColumnReqVO.getProjectId(),csvColumnReqVO.getFile());
+        String targetHdfs = "DATAX".equals(csvColumnReqVO.getTaskType()) ? null : resolveHdfsUrl(hdfsUrl);
         String file = tech.qiantong.qdata.common.utils.file.SafeUploadPath.resolve(
                 java.nio.file.Path.of(AniviaConfig.getProfile()), csvColumnReqVO.getFile()).toString();
         String fileName = UUID.randomUUID().toString().replace("-", "") + ".csv";
@@ -248,10 +250,10 @@ public class CommonController {
         }
         uploadedFiles.getObject().register(Constants.RESOURCE_PREFIX+"/etl/csv/"+fileName,"UPLOAD");
         String hdfsPath = "/tmp/etl";
-        uploadHdfs(hdfsUrl, hdfsPath, csvFile, fileName);
-        developmentFiles.getObject().register(csvColumnReqVO.getProjectId(),csvColumnReqVO.getFile(),hdfsUrl.replaceAll("/+$", "") + hdfsPath + "/" + fileName);
+        uploadHdfs(targetHdfs, hdfsPath, csvFile, fileName);
+        developmentFiles.getObject().register(csvColumnReqVO.getProjectId(),csvColumnReqVO.getFile(),targetHdfs + hdfsPath + "/" + fileName);
         return AjaxResult.success(ColumnRespVO.builder()
-                .csvFile(hdfsUrl.replaceAll("/+$", "") + hdfsPath + "/" + fileName)
+                .csvFile(targetHdfs + hdfsPath + "/" + fileName)
                 .columnList(columnList).build());
     }
 
@@ -266,24 +268,49 @@ public class CommonController {
     public void uploadHdfs(String hdfsUrl, String pathStr, String file, String filename) {
         pathStr = pathStr == null ? "" : pathStr;
         pathStr = resolvePath(pathStr, filename);
-        // 1. Create Hadoop configuration object
-        Configuration conf = new Configuration();
-        if (hadoopConfDir != null && !hadoopConfDir.isBlank()) {
-            conf.addResource(new Path(hadoopConfDir, "core-site.xml"));
-            conf.addResource(new Path(hadoopConfDir, "hdfs-site.xml"));
-        }
-        conf.set("fs.defaultFS", hdfsUrl);
+        String endpoint = resolveHdfsUrl(hdfsUrl);
+        Configuration conf = hadoopConfiguration();
+        conf.set("fs.defaultFS", endpoint);
         conf.set("dfs.client.use.datanode.hostname", "true");
-        // If only 1 DN, ensure replica count does not exceed node count
         conf.set("dfs.replication", "1");
         Path path = new Path(pathStr);
-        try (FileSystem fs = FileSystem.get(new URI(hdfsUrl), conf, "hadoop");
+        try (FileSystem fs = FileSystem.newInstance(new URI(endpoint), conf, "hadoop");
              InputStream inputStream = new FileInputStream(file);
              FSDataOutputStream outputStream = fs.create(path, false)) {
             IOUtils.copy(inputStream, outputStream);
         } catch (Exception e) {
             log.error("HDFS upload failed", e);
-            throw new ServiceException("sys.error.hdfs.upload.fail", "HDFS upload failed: {0}", e.getMessage());
+            throw new ServiceException("sys.error.hdfs.upload.fail",
+                    "HDFS 上传失败，请检查 NameNode/DataNode 连通性及 /tmp/etl 写入权限；原始上传文件已保留");
+        }
+    }
+
+    private Configuration hadoopConfiguration() {
+        Configuration conf = new Configuration();
+        if (hadoopConfDir != null && !hadoopConfDir.isBlank()) {
+            conf.addResource(new Path(hadoopConfDir, "core-site.xml"));
+            conf.addResource(new Path(hadoopConfDir, "hdfs-site.xml"));
+        }
+        return conf;
+    }
+
+    String resolveHdfsUrl(String configured) {
+        String endpoint = configured == null || configured.isBlank()
+                ? hadoopConfiguration().getTrimmed("fs.defaultFS", "") : configured.trim();
+        try {
+            URI uri = new URI(endpoint);
+            if (!"hdfs".equalsIgnoreCase(uri.getScheme()) || uri.getAuthority() == null
+                    || uri.getAuthority().isBlank() || uri.getHost() == null || uri.getUserInfo() != null
+                    || uri.getPort() == 0 || uri.getPort() > 65535
+                    || uri.getQuery() != null || uri.getFragment() != null
+                    || (uri.getPath() != null && !uri.getPath().isEmpty() && !"/".equals(uri.getPath()))) {
+                throw new IllegalArgumentException("Invalid HDFS endpoint");
+            }
+            return endpoint.replaceAll("/+$", "");
+        } catch (Exception invalid) {
+            throw new ServiceException("sys.error.hdfs.config.invalid",
+                    "未配置有效 HDFS 地址。请设置 ds.hdfs.url（QDATA_HDFS_URL）为 hdfs://NameNode:端口 或 HA nameservice，"
+                            + "并通过 ds.spark.hadoop_conf_dir 提供 core-site.xml、hdfs-site.xml；原始上传文件已保留");
         }
     }
 

@@ -336,15 +336,19 @@ def prepare_datax(arguments, root):
         return
     if arguments.skip_datax:
         return
+    if arguments.offline and (not arguments.datax_archive or not arguments.datax_mysql_driver):
+        raise InstallError("Offline DataX preparation requires --datax-archive and --datax-mysql-driver, or an existing --datax-home")
     directory = root / "tools/datax"
     command = ["bash", str(REPOSITORY / "deploy/prepare-datax.sh"), "--dest", str(directory)]
     if arguments.datax_archive:
         command.extend(["--archive", str(arguments.datax_archive.resolve())])
     if arguments.datax_sha256:
         command.extend(["--sha256", arguments.datax_sha256])
+    if arguments.datax_mysql_driver:
+        command.extend(["--mysql-driver-jar", str(arguments.datax_mysql_driver.resolve())])
     result = subprocess.run(command)
     if result.returncode:
-        raise InstallError("DataX preparation failed; provide --datax-home or an offline --datax-archive")
+        raise InstallError("DataX preparation failed; provide --datax-home or an offline --datax-archive with --datax-mysql-driver")
     arguments.datax_home = directory
 
 
@@ -678,6 +682,10 @@ events {{ worker_connections 1024; }}
 http {{
     access_log off;
     client_max_body_size 3000m;
+    map $http_upgrade $connection_upgrade {{
+        default upgrade;
+        '' close;
+    }}
     server {{
         listen {arguments.web_port};
         {ai_location}
@@ -689,6 +697,8 @@ http {{
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_set_header X-Forwarded-Port $server_port;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
             proxy_read_timeout 600s;
         }}
         location / {{
@@ -699,6 +709,8 @@ http {{
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_set_header X-Forwarded-Port $server_port;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
             proxy_read_timeout 600s;
         }}
     }}
@@ -829,6 +841,7 @@ def argument_parser():
     parser.add_argument("--datax-home", type=Path)
     parser.add_argument("--datax-archive", type=Path)
     parser.add_argument("--datax-sha256")
+    parser.add_argument("--datax-mysql-driver", type=Path, help="Offline MySQL Connector/J 9.7.0 JAR for DataX")
     parser.add_argument("--skip-datax", action="store_true")
     parser.add_argument("--hadoop-conf-dir", type=Path)
     parser.add_argument("--spark-home", type=Path)

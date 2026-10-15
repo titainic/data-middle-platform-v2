@@ -943,28 +943,7 @@ onMounted(async () => {
     await getConversation(id);
   }
 
-  // If there is no activeConversationId, set the default data range
-  if (!activeConversationId.value) {
-    datasourceId.value = defaultDataScope.datasourceId;
-    factTableName.value = defaultDataScope.factTableName;
-    factTableComment.value = defaultDataScope.factTableComment;
-    dimensionTable.value = defaultDataScope.dimensionTable;
-
-    // Parse dimension tables and synchronize to tableCommentMap
-    try {
-      const arr = JSON.parse(dimensionTable.value);
-      if (Array.isArray(arr)) {
-        arr.forEach((item) => {
-          if (item.tableName) {
-            tableCommentMap.value[item.tableName] = item.tableComment || "";
-          }
-        });
-      }
-    } catch (e) {
-      console.error("Failed to parse dimensionTable:", e);
-    }
-    dimensionTableNames.value = parseDimensionTableNames(dimensionTable.value);
-  }
+  // New conversations keep the empty scope until the user selects authorized data.
 
   // Get list data
   activeMessageListLoading.value = true;

@@ -127,9 +127,16 @@ public class WarehouseSpaceService {
             require(rows.next(), "Hive未返回元数据服务身份，不能登记独立执行环境");
             String value = rows.getString(1);
             String prefix = "hive.metastore.uris=";
-            require(value != null && value.toLowerCase(Locale.ROOT).startsWith(prefix),
-                    "Hive未返回元数据服务身份，不能登记独立执行环境");
-            String setting = value.substring(prefix.length()).trim();
+            // HiveServer2 returns one key=value column; Spark/Kyuubi SET returns key and value columns.
+            String setting;
+            if ("hive.metastore.uris".equalsIgnoreCase(value)) {
+                setting = rows.getString(2);
+            } else {
+                require(value != null && value.toLowerCase(Locale.ROOT).startsWith(prefix),
+                        "Hive未返回元数据服务身份，不能登记独立执行环境");
+                setting = value.substring(prefix.length());
+            }
+            setting = setting == null ? "" : setting.trim();
             require(!setting.isBlank() && !"<undefined>".equalsIgnoreCase(setting),
                     "Hive元数据服务身份不可用，不能登记独立执行环境");
             return setting;
