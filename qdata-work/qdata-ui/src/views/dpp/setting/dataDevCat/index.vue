@@ -962,6 +962,8 @@ async function validateDataDevCatName(_rule, value, callback) {
     const response = await isDataDevCatNameUsed({
       parentId: form.value.parentId,
       name: value.trim(),
+      projectId: userStore.projectId,
+      projectCode: userStore.projectCode,
     }, warningRequestOptions);
     if (response.data === true) {
       callback(new Error(td("dpp.setting.dataDevCat.nameUsed", "名称已被使用")));
