@@ -18,7 +18,8 @@
 
 package tech.qiantong.qdata.module.dpp.listener;
 
-import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -36,6 +37,7 @@ import tech.qiantong.qdata.module.dpp.service.etl.IDppEtlTaskInstanceService;
 
 import jakarta.annotation.Resource;
 import java.util.Map;
+import java.util.TimeZone;
 
 /**
  * <P>
@@ -49,6 +51,12 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class ProcessListener {
+
+    // Match the callback DTO's @JsonFormat contract. Fastjson does not apply
+    // Jackson's GMT+8 annotation to the executor's unzoned date strings.
+    private static final ObjectMapper CALLBACK_MAPPER = new ObjectMapper()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
 
     @Resource
     private IDppEtlTaskInstanceService dppEtlTaskInstanceService;
@@ -81,7 +89,7 @@ public class ProcessListener {
     public void processInstanceUpdate(Map map, Channel channel, Message message) {
         log.error("Starting process instance create-or-update>>>>>>>>>>>>>>>>>>>>>>>>>>>");
         Integer type = (Integer) map.get("type");
-        ProcessInstance processInstance = JSON.parseObject(JSON.toJSONString(map.get("instance")), ProcessInstance.class);
+        ProcessInstance processInstance = CALLBACK_MAPPER.convertValue(map.get("instance"), ProcessInstance.class);
         Boolean flag = false;
         try {
             if (type == 1) {

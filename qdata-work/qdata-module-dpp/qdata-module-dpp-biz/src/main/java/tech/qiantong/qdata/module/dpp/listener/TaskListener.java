@@ -18,7 +18,8 @@
 
 package tech.qiantong.qdata.module.dpp.listener;
 
-import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
@@ -36,6 +37,7 @@ import tech.qiantong.qdata.module.dpp.service.etl.IDppEtlNodeInstanceService;
 
 import jakarta.annotation.Resource;
 import java.util.Map;
+import java.util.TimeZone;
 
 /**
  * <P>
@@ -50,6 +52,11 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TaskListener {
 
+    // Use the same GMT+8 date contract as the Spark callback producer and DTO.
+    private static final ObjectMapper CALLBACK_MAPPER = new ObjectMapper()
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
+
     @Resource
     private IDppEtlNodeInstanceService dppEtlNodeInstanceService;
 
@@ -59,7 +66,7 @@ public class TaskListener {
             value = @Queue(value = "ds.queue.taskInstance.insert", durable = "true", exclusive = "false", autoDelete = "false")))
     public void taskInstanceInsert(Map map, Channel channel, Message message) {
         log.info("Task instance creation message started >>>>>>>>>>>>>>>>>>>>>>>>>>>");
-        TaskInstance taskInstance = JSON.parseObject(JSON.toJSONString(map), TaskInstance.class);
+        TaskInstance taskInstance = CALLBACK_MAPPER.convertValue(map, TaskInstance.class);
         try {
             dppEtlNodeInstanceService.createNodeInstance(taskInstance);
         } catch (ServiceException serviceException) {
@@ -79,7 +86,7 @@ public class TaskListener {
             value = @Queue(value = "ds.queue.taskInstance.update", durable = "true", exclusive = "false", autoDelete = "false")))
     public void taskInstanceUpdate(Map map, Channel channel, Message message) {
         log.info("Task instance update message started >>>>>>>>>>>>>>>>>>>>>>>>>>>");
-        TaskInstance taskInstance = JSON.parseObject(JSON.toJSONString(map), TaskInstance.class);
+        TaskInstance taskInstance = CALLBACK_MAPPER.convertValue(map, TaskInstance.class);
         Boolean flag = false;
         try {
             flag = dppEtlNodeInstanceService.updateNodeInstance(taskInstance);

@@ -461,7 +461,7 @@ public abstract class AbstractDbQueryFactory implements DbQuery {
 
     @Override
     public List<Map<String, Object>> queryList(String sql) {
-        return jdbcTemplate.query(sql, new MyRowMapper());
+        return jdbcTemplate.query(sql, resultRowMapper());
     }
 
     @Override
@@ -520,7 +520,7 @@ public abstract class AbstractDbQueryFactory implements DbQuery {
 
     @Override
     public List<Map<String, Object>> queryList(String sql, Object[] args) {
-        return jdbcTemplate.query(sql, new MyRowMapper(), args);
+        return jdbcTemplate.query(sql, resultRowMapper(), args);
     }
 
     @Override
@@ -559,14 +559,19 @@ public abstract class AbstractDbQueryFactory implements DbQuery {
     private MyRowMapper paginationRowMapper(String sql, long offset) {
         if (dbDialect instanceof tech.qiantong.qdata.common.database.dialect.HiveDialect hive
                 && hive.wrapsForPagination(sql, offset)) {
-            return new MyRowMapper() {
+            return new HiveRowMapper() {
                 @Override protected String getColumnKey(String label) {
                     String prefix = "qdata_page.";
                     return label.regionMatches(true, 0, prefix, 0, prefix.length()) ? label.substring(prefix.length()) : label;
                 }
             };
         }
-        return new MyRowMapper();
+        return resultRowMapper();
+    }
+
+    private MyRowMapper resultRowMapper() {
+        return dbDialect instanceof tech.qiantong.qdata.common.database.dialect.HiveDialect
+                ? new HiveRowMapper() : new MyRowMapper();
     }
 
     /**
@@ -579,7 +584,7 @@ public abstract class AbstractDbQueryFactory implements DbQuery {
     @Override
     public List<Map<String, Object>> queryList(String sql, Map<String, Object> params, Integer cache) {
         NamedParameterJdbcTemplate namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
-        List<Map<String, Object>> records = namedJdbcTemplate.query(sql, params, new MyRowMapper());
+        List<Map<String, Object>> records = namedJdbcTemplate.query(sql, params, resultRowMapper());
         return records;
     }
 
@@ -593,7 +598,7 @@ public abstract class AbstractDbQueryFactory implements DbQuery {
     @Override
     public Map<String, Object> queryOne(String sql, Map<String, Object> params, Integer cache) {
         NamedParameterJdbcTemplate namedJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
-        MyRowMapper mapper = new MyRowMapper();
+        MyRowMapper mapper = resultRowMapper();
         return namedJdbcTemplate.query(sql, params, rs -> {
             if (rs.next()) {
                 // Only the first row is mapped, the List is no longer assembled
