@@ -26,8 +26,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import tech.qiantong.qdata.common.constant.Constants;
-import tech.qiantong.qdata.common.constant.CacheConstants;
-import tech.qiantong.qdata.common.core.redis.RedisCache;
 import tech.qiantong.qdata.common.constant.UserConstants;
 import tech.qiantong.qdata.common.core.domain.entity.SysUser;
 import tech.qiantong.qdata.common.core.domain.model.LoginUser;
@@ -65,8 +63,6 @@ public class SysLoginService {
     @Autowired
     private ISysConfigService configService;
 
-    @Autowired
-    private RedisCache redisCache;
 
 
 
@@ -76,13 +72,11 @@ public class SysLoginService {
      *
      * @param username username
      * @param password password
-     * @param code verification code
-     * @param uuid unique identifier
+     * @param code legacy field, ignored for password login
+     * @param uuid legacy field, ignored for password login
      * @return result
      */
     public Map login(String username, String password, String code, String uuid) {
-        // Verification code verification
-        validateCaptcha(username, code, uuid);
         // Login pre-verification
         loginPreCheck(username, password);
         // User verification
@@ -116,20 +110,6 @@ public class SysLoginService {
 
     protected void recordLoginEvent(String username, String status, String message) {
         AsyncManager.me().execute(AsyncFactory.recordLogininfor(username, status, message));
-    }
-
-    public void validateCaptcha(String username, String code, String uuid) {
-        if (!configService.selectCaptchaEnabled()) return;
-        String verifyKey = CacheConstants.CAPTCHA_CODE_KEY + StringUtils.nvl(uuid, "");
-        String expected = redisCache.consumeCaptcha(verifyKey);
-        if (expected == null) {
-            recordLoginEvent(username, Constants.LOGIN_FAIL, MessageUtils.messageEn("user.jcaptcha.expire"));
-            throw new CaptchaExpireException();
-        }
-        if (code == null || !expected.equalsIgnoreCase(code)) {
-            recordLoginEvent(username, Constants.LOGIN_FAIL, MessageUtils.messageEn("user.jcaptcha.error"));
-            throw new CaptchaException();
-        }
     }
 
     /**

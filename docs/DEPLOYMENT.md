@@ -210,7 +210,7 @@ python3 deploy/install.py --help
 sudo env PATH="$PATH" JAVA_HOME="$JAVA_HOME" python3 deploy/install.py --java-home "$JAVA_HOME" --install-dir /data/qdata --instance qdata --with-ai
 ```
 
-首次交互输入管理员登录密码（5–20 位），用户为 `admin`，可以使用原来熟悉的密码。登录方式仍是账号、密码和当前验证码。密码 bcrypt 写入新 MySQL 空库；万能密码关闭。加密配置及指纹校验由安装器自动处理，文件保存在安装目录 `runtime/`，普通新装无需生成、复制或填写密钥。
+首次交互输入管理员登录密码（5–20 位），用户为 `admin`，可以使用原来熟悉的密码。登录仅需账号和密码，无图形验证码。密码 bcrypt 写入新 MySQL 空库；万能密码关闭。加密配置及指纹校验由安装器自动处理，文件保存在安装目录 `runtime/`，普通新装无需生成、复制或填写密钥。
 
 登录页按照服务器返回的验证码开关展示验证码。启用时获取并填写当前图像结果后提交；后端通过 Redis 一次性校验验证码，失败后页面刷新图像。验证码成功生成、浏览器提交正确 / 错误验证码及过期 / 复用拒绝是独立检查，不能仅凭 `/captchaImage` 返回 200 判定登录校验已通过。
 
