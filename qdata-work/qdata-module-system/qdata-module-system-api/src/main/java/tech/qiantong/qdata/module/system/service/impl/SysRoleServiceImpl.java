@@ -25,6 +25,7 @@ import tech.qiantong.qdata.common.constant.UserConstants;
 import tech.qiantong.qdata.common.core.domain.entity.SysRole;
 import tech.qiantong.qdata.common.core.domain.entity.SysUser;
 import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.utils.DateUtils;
 import tech.qiantong.qdata.common.utils.SecurityUtils;
 import tech.qiantong.qdata.common.utils.StringUtils;
 import tech.qiantong.qdata.common.utils.spring.SpringUtils;
@@ -259,6 +260,8 @@ public class SysRoleServiceImpl implements ISysRoleService
     @Transactional
     public int insertRole(SysRole role)
     {
+        // Bind the event instant through JDBC, just like the operation audit log.
+        role.setCreateTime(DateUtils.getNowDate());
         // Insert role information
         roleMapper.insertRole(role);
         return insertRoleMenu(role);
