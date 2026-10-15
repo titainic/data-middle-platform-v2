@@ -12,6 +12,7 @@ import tech.qiantong.qdata.common.enums.TaskExecutionStatus;
 import tech.qiantong.qdata.datax.DataXExecutor;
 import tech.qiantong.qdata.datax.DataXJsonBuilder;
 import tech.qiantong.qdata.datax.DataXResult;
+import tech.qiantong.qdata.module.da.api.service.asset.IDaDatasourceApiService;
 import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNodeRespVO;
 import tech.qiantong.qdata.module.dpp.dal.dataobject.etl.*;
 import tech.qiantong.qdata.module.dpp.service.etl.*;
@@ -43,6 +44,8 @@ class LocalDataXExecutionRegressionTest {
         ReflectionTestUtils.setField(runner, "dppEtlTaskInstanceService", instances);
         ReflectionTestUtils.setField(runner, "iDppEtlTaskInstanceLogService", logs);
         ReflectionTestUtils.setField(runner, "dataXExecutor", executor);
+        ReflectionTestUtils.setField(runner, "datasourceResolver", new DppDatasourceResolver(
+                mock(IDaDatasourceApiService.class), mock(DppHiveWritePolicy.class)));
         task.setId(31L); task.setType("1"); task.setCode("offline-task"); task.setName("offline regression");
         instance.setId(101L); instance.setTaskId(task.getId()); instance.setStatus("1");
         reader = node(1L, TaskComponentTypeEnum.DB_READER.getCode());

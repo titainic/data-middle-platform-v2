@@ -94,6 +94,8 @@ public class DppEtlTaskDataIntegrationRunner {
     private IDppEtlNodeInstanceService dppEtlNodeInstanceService;
     @Resource
     private IRedisService redisService;
+    @Resource
+    private DppDatasourceResolver datasourceResolver;
 
     /**
      * Starts a local DataX data integration task.
@@ -155,13 +157,16 @@ public class DppEtlTaskDataIntegrationRunner {
                         "The local DataX task has no input or output node; save the task first");
             }
 
-            Map<String, Object> readerNodeJsonMap = JSONUtils.convertTaskDefinitionJsonMap(readerNode.getParameters());
+            // Saved API parameters omit credentials; resolve them only on the server for each execution.
+            Map<String, Object> readerNodeJsonMap = datasourceResolver.refreshNodeParameters(
+                    JSONUtils.convertTaskDefinitionJsonMap(readerNode.getParameters()));
             readerNodeJsonMap.put("componentType", readerNode.getComponentType());
             applyCachedIncrementIdCursor(readerNode, readerNodeJsonMap, taskLog);
             IncrementIdCursorContext incrementIdCursor = buildIncrementIdCursorContext(readerNode, readerNodeJsonMap);
             DateIncrementCursorContext dateIncrementCursor = buildDateIncrementCursorContext(readerNode, readerNodeJsonMap);
 
-            Map<String, Object> writerNodeJsonMap = JSONUtils.convertTaskDefinitionJsonMap(writerNode.getParameters());
+            Map<String, Object> writerNodeJsonMap = datasourceResolver.refreshNodeParameters(
+                    JSONUtils.convertTaskDefinitionJsonMap(writerNode.getParameters()));
             List<Map<String, Object>> definitionJsonMaps = new ArrayList<>();
 
             for (DppEtlNodeRespVO processorNode : processorNodes) {
