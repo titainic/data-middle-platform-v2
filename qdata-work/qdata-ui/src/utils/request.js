@@ -40,7 +40,8 @@ const service = axios.create({
   timeout: 600000
 })
 
-let cancelTokens = [];
+// Retain the explicit cancellation API, but only while requests are pending.
+const cancelTokens = new Map();
 
 // request interceptor
 service.interceptors.request.use(config => {
@@ -103,18 +104,22 @@ service.interceptors.request.use(config => {
     }
   }
 
-  // Create a cancellation token and add it to the request configuration
-  const source = axios.CancelToken.source();
-  config.cancelToken = source.token;
-  cancelTokens.push(source);
+  // A caller owns its signal/token. Do not replace it with a global token.
+  if (!config.cancelToken && !config.signal) {
+    const source = axios.CancelToken.source();
+    config.cancelToken = source.token;
+    cancelTokens.set(source.token, source);
+    source.token.promise.then(() => cancelTokens.delete(source.token));
+  }
   return config
 }, error => {
   console.log(error)
-  Promise.reject(error)
+  return Promise.reject(error)
 })
 
 // response interceptor
 service.interceptors.response.use(res => {
+  cancelTokens.delete(res.config?.cancelToken);
   const hideErrorMessage = (res.config.headers || {}).hideErrorMessage === true || (res.config.headers || {}).hideErrorMessage === 'true'
   // If the status code is not set, the default success status is
   const code = res.data.code || 200;
@@ -157,6 +162,11 @@ service.interceptors.response.use(res => {
   }
 },
   error => {
+    cancelTokens.delete(error.config?.cancelToken);
+    // Cancellation remains a rejected, settled Promise. Never turn it into null.
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
     const hideErrorMessage = (error.config?.headers || {}).hideErrorMessage === true || (error.config?.headers || {}).hideErrorMessage === 'true'
     console.log('err' + error)
     let { message } = error;
@@ -171,8 +181,6 @@ service.interceptors.response.use(res => {
       message = i18n.global.t('common.request.timeout');
     } else if (message.includes("Request failed with status code")) {
       message = i18n.global.t('common.request.interfaceError').replace('{code}', message.substr(message.length - 3));
-    } else if ((message.includes(i18n.global.t('common.request.routeChangeCancel')))) {
-      return null
     } else if (error.isRepeatSubmit) {
       ElMessage({ message: error.message, type: 'warning' });
       return Promise.reject(error);
@@ -243,5 +251,5 @@ export default service
 // Export function to cancel request
 export function clearCancelTokens() {
   cancelTokens.forEach(source => source.cancel('Route change: Request canceled'));
-  cancelTokens = [];
+  cancelTokens.clear();
 }
