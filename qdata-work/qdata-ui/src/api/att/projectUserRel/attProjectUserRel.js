@@ -17,6 +17,7 @@
  */
 
 import request from '@/utils/request';
+import { notifyProjectOptionsChanged } from '@/utils/projectOptions.js';
 
 const buildHeaders = (options = {}) => ({
     hideErrorMessage: options.hideErrorMessage === true
@@ -57,7 +58,7 @@ export function addAttProjectUserRel(data, options = {}) {
         method: 'post',
         data: data,
         headers: buildHeaders(options)
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Add new project-user relationship
@@ -67,7 +68,7 @@ export function addUserListAndRoleList(data, options = {}) {
         method: 'post',
         data: data,
         headers: buildHeaders(options)
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Modify the relationship between projects and users
@@ -77,7 +78,7 @@ export function updateAttProjectUserRel(data, options = {}) {
         method: 'put',
         data: data,
         headers: buildHeaders(options)
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Modify the relationship between projects and users
@@ -87,7 +88,7 @@ export function editUserListAndRoleList(data, options = {}) {
         method: 'put',
         data: data,
         headers: buildHeaders(options)
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Delete the relationship between project and user
@@ -96,7 +97,7 @@ export function delAttProjectUserRel(id, options = {}) {
         url: '/att/projectUserRel/' + id,
         method: 'delete',
         headers: buildHeaders(options)
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Query role list

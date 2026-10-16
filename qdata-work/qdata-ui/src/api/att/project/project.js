@@ -17,6 +17,7 @@
  */
 
 import request from '@/utils/request';
+import { notifyProjectOptionsChanged } from '@/utils/projectOptions.js';
 
 const buildHeaders = (options = {}) => ({
     hideErrorMessage: options.hideErrorMessage === true
@@ -71,7 +72,7 @@ export function editProjectStatus(id, status) {
     return request({
         url: `/att/project/editProjectStatus/${id}/${status}`,
         method: 'get'
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Add new items
@@ -80,7 +81,7 @@ export function addAttProject(data) {
         url: '/att/project',
         method: 'post',
         data: data
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Modify project
@@ -89,7 +90,7 @@ export function updateAttProject(data) {
         url: '/att/project',
         method: 'put',
         data: data
-    });
+    }).then(notifyProjectOptionsChanged);
 }
 
 // Delete project
@@ -97,5 +98,5 @@ export function delAttProject(id) {
     return request({
         url: '/att/project/' + id,
         method: 'delete'
-    });
+    }).then(notifyProjectOptionsChanged);
 }

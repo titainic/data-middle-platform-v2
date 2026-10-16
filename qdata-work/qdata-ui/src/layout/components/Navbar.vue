@@ -62,6 +62,8 @@
                 :fit-input-width="true"
                 v-model="userStore.projectId"
                 @change="projectIdChange"
+                :loading="projectOptionsLoading"
+                @visible-change="visible => visible && refreshProjectOptions()"
                 :placeholder="t('sys.dashboard.projectPlaceholder')"
                 clearable
                 popper-class="custom-option-style"
@@ -370,7 +372,7 @@ import { finishLogout } from "@/store/system/logoutFlow.mjs";
 import { onMounted, ref, watch } from "vue";
 import moment from "moment";
 import { listNotice } from "@/api/system/system/notice";
-import { currentUser } from "@/api/att/project/project";
+import useProjectOptions from "@/composables/useProjectOptions.js";
 import { da, id } from "element-plus/es/locale/index.mjs";
 import usePermissionStore from "@/store/system/permission";
 import { getRoutersDpp } from "@/api/system/menu";
@@ -442,7 +444,7 @@ const showProjectSelector = computed(() => width.value >= 1200 && isFlag.value);
 const open = ref(false);
 const title = ref(null);
 const form = ref({});
-const projectOptions = ref([]);
+const { projectOptions, projectOptionsLoading, refreshProjectOptions } = useProjectOptions(userStore, permissionStore);
 
 const tableData = ref([{ projectId: null, duration: null }]);
 
@@ -620,7 +622,9 @@ function projectIdChange(row, newValue) {
   }
   if (userStore.projectId) {
     localStorage.setItem("qdataProjectId", userStore.projectId);
-    getRoutersDpp(userStore.projectId).then((res) => {
+    const requestedProjectId = userStore.projectId;
+    getRoutersDpp(requestedProjectId).then((res) => {
+      if (String(requestedProjectId) !== String(userStore.projectId)) return;
       // Update routing data in the store
       permissionStore.updateTopbarRoutes(res.data);
       let topMenus = [];
@@ -771,43 +775,10 @@ const initWebSocket = () => {
     msgCount.value = messages.value ? messages.value.length : 0;
   };
 };
-const listProject = () => {
-  if (userStore.id) {
-    currentUser().then((response) => {
-      console.log("---------- listProjectUserRel-------------", response);
-      projectOptions.value = response.data;
-      response.data[0] == null || response.data[0] == undefined
-        ? (userStore.projectId = null)
-        : (userStore.projectId = response.data[0].id);
-      if (!response.data || response.data.length == 0) {
-        localStorage.removeItem("qdataProjectId");
-      }
-      var qdataProjectId = localStorage.getItem("qdataProjectId");
-      if (userStore.projectId) {
-        if (qdataProjectId) {
-          userStore.projectId = parseInt(qdataProjectId);
-        } else {
-          localStorage.setItem("qdataProjectId", userStore.projectId);
-        }
-        const project = projectOptions.value.find(
-          (item) => item.id === userStore.projectId
-        );
-        if (project) {
-          userStore.projectCode = project.code;
-        }
-        getRoutersDpp(userStore.projectId).then((res) => {
-          // Update routing data in the store
-          permissionStore.updateTopbarRoutes(res.data);
-        });
-      }
-    });
-  }
-};
 
 onMounted(() => {
   initWebSocket();
   console.log(userStore);
-  listProject();
   /*getCurrentAppVersion().then((res) => {
     if (res.data != null) {
       // Is it the latest version?
