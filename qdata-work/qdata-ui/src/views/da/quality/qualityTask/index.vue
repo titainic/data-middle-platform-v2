@@ -368,7 +368,7 @@ function handleStatusChange(row, e) {
 function crontabFill(value) {
   row.value.crontab = value;
   updateDaDiscoveryTaskCronExpression({
-    cycle: row.value.cycle,
+    cycle: value,
     status: '1',
     id: Number(row.value.id),
   }).then((response) => {
