@@ -28,6 +28,23 @@ CategoryProjectIsolationTest 使用真实两类目服务、真实DppEtlTaskServi
 
 H2不能证明MySQL REPEATABLE READ下的快照/锁行为、多实例行为或95运行验收。实际命令、测试数与构建结果见Paperclip研发报告及证据包。
 
+## 本轮实际研发结果（2026-10-17，Asia/Shanghai）
+
+- JDK 21.0.10，30个相关模块离线package成功；CategoryProjectIsolationTest 31/31、TaskCategoryCodeAllocationTest 16/16、CleanCategoryCodeAllocationTest 20/20、DataXUpdateSaveRegressionTest 14/14，合计81/81，0失败、0异常、0跳过。
+- 新增用例为真实服务/SQL/事务+H2；DataX相邻14例沿用其既有持久化/调度/权限替身，不代表真实DataX运行验收。
+- 初轮附加DataX测试因沙箱阻止Mockito JVM附加而在初始化阶段失败；按本地离线验证授权在沙箱外重跑，81项及package均成功。最初Scala临时目录失败亦已排除。未通过跳过用例掩盖失败。
+- AI兼容类DualServiceImpl以本轮当前接口和测试类路径通过JDK21 javac --release 21 -proc:none；完整AI模块离线Maven因未缓存spring-ai-bom 1.1.2及spring-ai-alibaba-bom 1.1.2.2停止，不能称为AI模块构建通过。完整qdata-server及95未运行。
+- 测试命令（工作目录qdata-work；JAVA_HOME指向既有JDK21，MAVEN_OPTS配置独立java.io.tmpdir）：
+
+```sh
+mvn -o -s /private/tmp/bin98-maven-settings.xml -Dmaven.repo.local=/private/tmp/qdata-bin89-maven \
+  -pl qdata-module-dpp/qdata-module-dpp-biz -am \
+  -Dtest=CategoryProjectIsolationTest,TaskCategoryCodeAllocationTest,CleanCategoryCodeAllocationTest,DataXUpdateSaveRegressionTest \
+  -Dsurefire.failIfNoSpecifiedTests=false package
+```
+
+- 既有警告保留：Scala版本差异、shaded模块描述符、MapStruct未映射字段及Mockito动态agent提示；无依赖升级或代码静默替代。
+
 ## 独立验收交接
 
 技术总负责人-Atlas审查后，另行派测试与部署工程师-Sentinel执行：
