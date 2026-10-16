@@ -26,7 +26,12 @@
             <el-input v-model="deptName" :placeholder="td('sys.system.user.deptNamePlaceholder')" clearable prefix-icon="Search"
               style="margin-bottom: 20px" />
           </div>
-          <div class="head-container">
+          <div class="head-container" v-loading="deptTreeLoading">
+            <el-alert v-if="deptTreeFailed" type="error" :closable="false" show-icon
+              :title="td('sys.system.user.deptLoadFailed', '部门加载失败，请重试')"
+            >
+              <el-button link type="primary" @click="getDeptTree">{{ td('common.button.retry', '重试') }}</el-button>
+            </el-alert>
             <el-tree :data="deptOptions" :props="{ label: 'label', children: 'children' }"
               :filter-node-method="filterNode" ref="deptTreeRef" node-key="id" highlight-current default-expand-all
               @node-click="handleNodeClick">
@@ -118,11 +123,11 @@
           <div class="justify-between mb15">
             <el-row :gutter="10" class="btn-style">
               <el-col :span="1.5">
-                <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['system:user:add']">{{ td('common.button.add') }}
+                <el-button type="primary" plain icon="Plus" :loading="dialogLoading" @click="handleAdd" v-hasPermi="['system:user:add']">{{ td('common.button.add') }}
                 </el-button>
               </el-col>
               <el-col :span="1.5">
-                <el-button type="primary" plain icon="Edit" :disabled="single" @click="handleUpdate"
+                <el-button type="primary" plain icon="Edit" :disabled="single || dialogLoading" @click="handleUpdate"
                   v-hasPermi="['system:user:edit']">{{ td('common.button.update') }}
                 </el-button>
               </el-col>
@@ -180,7 +185,7 @@
                                 <el-tooltip content="Assign roles" placement="top" v-if="scope.row.userId !== 1">
                                    <el-button link type="primary" icon="CircleCheck" @click="handleAuthRole(scope.row)" v-hasPermi="['system:user:edit']"></el-button>
                                 </el-tooltip> -->
-                <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"
+                <el-button link type="primary" icon="Edit" :disabled="dialogLoading" @click="handleUpdate(scope.row)"
                   v-hasPermi="['system:user:edit']" v-if="scope.row.userId !== 1">{{ td('common.button.update') }}
                 </el-button>
                 <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)"
@@ -221,7 +226,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="td('sys.system.user.belongDept')" prop="deptId" :label-position="labelPosition">
-              <el-tree-select v-model="form.deptId" :data="deptOptions"
+              <el-tree-select v-model="form.deptId" :data="deptOptions" :disabled="deptTreeLoading || deptTreeFailed"
                 :props="{ value: 'id', label: 'label', children: 'children' }" value-key="id" :placeholder="td('sys.system.user.selectBelongDept')"
                 check-strictly />
               <!--                     <treeselect v-model="form.deptId" :options="deptOptions" :flat="true" :show-count="true" placeholder="Please select the department you belong to"-->
@@ -301,7 +306,7 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="cancel">{{ td('common.button.cancel') }}</el-button>
-          <el-button type="primary" :loading="submitLoading" @click="submitForm">{{ td('common.button.confirm') }}</el-button>
+          <el-button type="primary" :loading="submitLoading" :disabled="deptTreeLoading || deptTreeFailed" @click="submitForm">{{ td('common.button.confirm') }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -352,7 +357,7 @@ import {
   addUser,
   deptTreeSelect,
 } from "@/api/system/system/user.js";
-import { computed } from "vue"
+import { computed, nextTick, onActivated, onMounted } from "vue"
 import useDefaultLang from "@/composables/useDefaultLang";
 const { td } = useDefaultLang();
 const router = useRouter();
@@ -462,6 +467,10 @@ const title = ref("");
 const dateRange = ref([]);
 const deptName = ref("");
 const deptOptions = ref(undefined);
+const deptTreeLoading = ref(false);
+const deptTreeFailed = ref(false);
+const dialogLoading = ref(false);
+let deptTreeRequest;
 const initPassword = ref(undefined);
 const postOptions = ref([]);
 const roleOptions = ref([]);
@@ -555,9 +564,26 @@ watch(deptName, (val) => {
 
 /** Query department drop-down tree structure */
 function getDeptTree() {
-  deptTreeSelect().then((response) => {
-    deptOptions.value = response.data;
+  // 激活页面和打开弹窗可能同时触发刷新，共用当前请求，避免旧响应覆盖新树。
+  if (deptTreeRequest) return deptTreeRequest;
+  deptTreeLoading.value = true;
+  deptTreeFailed.value = false;
+  deptTreeRequest = deptTreeSelect().then(async (response) => {
+    deptOptions.value = response.data ?? [];
+    await nextTick();
+    proxy.$refs.deptTreeRef?.filter(deptName.value);
+    proxy.$refs.deptTreeRef?.setCurrentKey(queryParams.value.deptId ?? null);
+    return true;
+  }).catch(() => {
+    // 请求层统一提示错误；清除过期选项，调用方据此阻止打开弹窗。
+    deptOptions.value = [];
+    deptTreeFailed.value = true;
+    return false;
+  }).finally(() => {
+    deptTreeLoading.value = false;
+    deptTreeRequest = undefined;
   });
+  return deptTreeRequest;
 }
 
 /** Query user list */
@@ -795,22 +821,35 @@ function cancel() {
 }
 
 /** Add button operation */
-function handleAdd() {
+async function handleAdd() {
+  if (dialogLoading.value) return;
+  dialogLoading.value = true;
   reset();
-  getUser().then((response) => {
+  try {
+    const [deptReady, response] = await Promise.all([getDeptTree(), getUser()]);
+    if (!deptReady) return;
     postOptions.value = response.posts;
     roleOptions.value = response.roles;
     open.value = true;
     title.value = td('sys.system.user.addUser');
     form.value.password = initPassword.value;
-  });
+  } catch {
+    // 请求层已提示用户/岗位/角色加载错误，保持弹窗关闭以便重试。
+    open.value = false;
+  } finally {
+    dialogLoading.value = false;
+  }
 }
 
 /** Modify button actions */
-function handleUpdate(row) {
+async function handleUpdate(row) {
+  if (dialogLoading.value) return;
+  dialogLoading.value = true;
   reset();
   const userId = row.userId || ids.value;
-  getUser(userId).then((response) => {
+  try {
+    const [deptReady, response] = await Promise.all([getDeptTree(), getUser(userId)]);
+    if (!deptReady) return;
     form.value = response.data;
     postOptions.value = response.posts;
     roleOptions.value = response.roles;
@@ -819,7 +858,12 @@ function handleUpdate(row) {
     open.value = true;
     title.value = td('sys.system.user.editUser');
     form.password = "";
-  });
+  } catch {
+    // 请求层已提示加载错误，保持弹窗关闭以便重试。
+    open.value = false;
+  } finally {
+    dialogLoading.value = false;
+  }
 }
 
 /** submit button */
@@ -853,7 +897,8 @@ function submitForm() {
   });
 }
 
-getDeptTree();
+onMounted(getDeptTree);
+onActivated(getDeptTree);
 getList();
 </script>
 <style scoped lang="scss">
