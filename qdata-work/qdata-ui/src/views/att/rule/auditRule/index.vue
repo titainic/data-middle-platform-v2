@@ -314,6 +314,7 @@
 </template>
 
 <script setup name="AuditRule">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import {
   listAttAuditRule,
   getAttAuditRule,
@@ -423,7 +424,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
-  url: import.meta.env.VITE_APP_BASE_API + "/att/auditRule/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/att/auditRule/importData"),
 });
 
 const data = reactive({

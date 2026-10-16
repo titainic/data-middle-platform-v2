@@ -329,6 +329,7 @@
 </template>
 
 <script setup name="SensitiveLevel">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import {
     listDaSensitiveLevel,
     getDaSensitiveLevel,
@@ -397,7 +398,7 @@ const upload = reactive({
     // Set upload request headers
     headers: { Authorization: 'Bearer ' + getToken() },
     // Upload URL
-    url: import.meta.env.VITE_APP_BASE_API + '/da/daSensitiveLevel/importData'
+    url: joinApiPath(import.meta.env.VITE_APP_BASE_API, '/da/daSensitiveLevel/importData')
 });
 
 const data = reactive({

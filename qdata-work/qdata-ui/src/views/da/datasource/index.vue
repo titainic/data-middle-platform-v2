@@ -947,6 +947,7 @@
 </template>
 
 <script setup name="DataSource">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import { onActivated, onBeforeUnmount } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import { ElMessageBox } from "element-plus";
@@ -1050,7 +1051,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload URL
-  url: import.meta.env.VITE_APP_BASE_API + "/da/daDatasource/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/da/daDatasource/importData"),
 });
 
 const data = reactive({

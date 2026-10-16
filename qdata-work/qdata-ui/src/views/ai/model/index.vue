@@ -313,6 +313,7 @@
 </template>
 
 <script setup name="Model">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import {
   listModel,
   getModel,
@@ -461,7 +462,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
-  url: import.meta.env.VITE_APP_BASE_API + "/ai/model/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/ai/model/importData"),
 });
 
 const data = reactive({

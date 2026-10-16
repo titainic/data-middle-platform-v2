@@ -180,6 +180,7 @@
 </template>
 
 <script setup name="CleanCat">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import { useI18n } from 'vue-i18n'
 import useDefaultLang from "@/composables/useDefaultLang";
 import { listAttCleanCat, getAttCleanCat, delAttCleanCat, addAttCleanCat, updateAttCleanCat } from "@/api/att/cat/cleanCat/cleanCat.js";
@@ -238,7 +239,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload URL
-  url: import.meta.env.VITE_APP_BASE_API + "/att/attCleanCat/importData"
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/att/attCleanCat/importData")
 });
 
 const data = reactive({

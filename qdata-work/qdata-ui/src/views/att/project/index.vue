@@ -527,6 +527,7 @@
 </template>
 
 <script setup name="Project">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import {
   listAttProject,
   getAttProject,
@@ -595,7 +596,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
-  url: import.meta.env.VITE_APP_BASE_API + "/att/project/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/att/project/importData"),
 });
 
 const data = reactive({

@@ -1009,6 +1009,7 @@
 </template>
 
 <script setup name="DppDataSource">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import { ref, computed, watch, onActivated, onBeforeUnmount } from "vue";
 import { onBeforeRouteLeave } from "vue-router";
 import { ElMessageBox } from "element-plus";
@@ -1169,7 +1170,7 @@ const upload = reactive({
   // Set the head of the request for upload
   headers: { Authorization: "Bearer " + getToken() },
   // Uploading Address
-  url: import.meta.env.VITE_APP_BASE_API + "/da/daDatasource/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/da/daDatasource/importData"),
 });
 
 const data = reactive({

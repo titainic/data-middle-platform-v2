@@ -282,6 +282,7 @@
 </template>
 
 <script setup name="DataDomain">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import useDefaultLang from "@/composables/useDefaultLang"
 import {
   getDataDomain,
@@ -424,7 +425,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
-  url: import.meta.env.VITE_APP_BASE_API + "/dm/dataDomain/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/dm/dataDomain/importData"),
 });
 
 const data = reactive({

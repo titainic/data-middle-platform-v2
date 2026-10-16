@@ -298,6 +298,7 @@
 </template>
 
 <script setup name="DpDataElem">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import DeptTree from "@/components/DeptTree";
 import {
   listDpDataElem,
@@ -412,7 +413,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
-  url: import.meta.env.VITE_APP_BASE_API + "/dp/dataElem/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/dp/dataElem/importData"),
 });
 
 const data = reactive({

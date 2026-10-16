@@ -605,6 +605,7 @@
 </template>
 
 <script setup name="Student">
+import { joinApiPath } from '@/utils/apiUrl.js';
     import {
         listStudent,
         getStudent,
@@ -670,7 +671,7 @@
         // Set upload request headers
         headers: { Authorization: 'Bearer ' + getToken() },
         // Upload address
-        url: import.meta.env.VITE_APP_BASE_API + '/example/student/importData'
+        url: joinApiPath(import.meta.env.VITE_APP_BASE_API, '/example/student/importData')
     });
 
     const data = reactive({

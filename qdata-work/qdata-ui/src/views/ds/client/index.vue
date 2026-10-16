@@ -379,6 +379,7 @@
 </template>
 
 <script setup name="Client">
+import { joinApiPath } from '@/utils/apiUrl.js';
 import {
   listClient,
   getClient,
@@ -449,7 +450,7 @@ const upload = reactive({
   // Set upload request headers
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
-  url: import.meta.env.VITE_APP_BASE_API + "/att/client/importData",
+  url: joinApiPath(import.meta.env.VITE_APP_BASE_API, "/att/client/importData"),
 });
 const {
   importLoading, importFiles, resetImport, submitFileForm,
