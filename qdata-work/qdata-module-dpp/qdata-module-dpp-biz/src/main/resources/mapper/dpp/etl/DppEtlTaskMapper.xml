@@ -360,10 +360,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             LEFT JOIN SYSTEM_USER cu on t.PERSON_CHARGE = cu.USER_ID AND cu.DEL_FLAG = '0'
         <choose>
             <when test="params.type == '1'.toString()">
-                LEFT JOIN  ATT_TASK_CAT t2 ON t.CAT_CODE = t2.CODE AND t2.DEL_FLAG = '0'
+                LEFT JOIN  ATT_TASK_CAT t2 ON t.CAT_CODE = t2.CODE AND t.PROJECT_ID = t2.PROJECT_ID AND t2.DEL_FLAG = '0'
             </when>
             <when test="params.type == '3'.toString()">
-                LEFT JOIN ATT_DATA_DEV_CAT t2 ON t.CAT_CODE = t2.CODE AND t2.DEL_FLAG = '0'
+                LEFT JOIN ATT_DATA_DEV_CAT t2 ON t.CAT_CODE = t2.CODE AND t.PROJECT_ID = t2.PROJECT_ID AND t2.DEL_FLAG = '0'
             </when>
             <when test="params.type == '4'.toString()">
                 LEFT JOIN ATT_JOB_CAT t2 ON t.CAT_CODE = t2.CODE AND t2.DEL_FLAG = '0'

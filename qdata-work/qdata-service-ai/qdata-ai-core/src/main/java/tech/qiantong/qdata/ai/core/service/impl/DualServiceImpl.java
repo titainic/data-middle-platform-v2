@@ -228,12 +228,12 @@ public class DualServiceImpl implements IDsEtlExecutorService, IDsEtlNodeService
     }
 
     @Override
-    public long getCountByCatCode(String s, List<String> list) {
+    public long getCountByCatCode(Long projectId, String s, List<String> list) {
         return 0;
     }
 
     @Override
-    public long getCountByCatId(Long aLong, List<String> list) {
+    public long getCountByCatId(Long projectId, Long aLong, List<String> list) {
         return 0;
     }
 

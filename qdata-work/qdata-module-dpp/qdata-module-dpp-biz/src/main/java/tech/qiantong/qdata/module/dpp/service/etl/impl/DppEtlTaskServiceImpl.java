@@ -230,7 +230,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     public Long createDppEtlTask(DppEtlTaskSaveReqVO createReqVO) {
         DppEtlTaskDO dppEtlTaskDO = BeanUtils.toBean(createReqVO, DppEtlTaskDO.class);
         if (StringUtils.isNotEmpty(dppEtlTaskDO.getCatCode()) && StringUtils.isNotEmpty(createReqVO.getType())) {
-            dppEtlTaskDO.setCatId(attCatService.getCatIdByTableNameAndCatCode(TaskCatEnum.findEnumByType(createReqVO.getType()).toString(), dppEtlTaskDO.getCatCode()));
+            dppEtlTaskDO.setCatId(attCatService.getCatIdByTableNameAndCatCode(TaskCatEnum.findEnumByType(createReqVO.getType()).toString(), dppEtlTaskDO.getCatCode(), dppEtlTaskDO.getProjectId()));
         }
         dppEtlTaskMapper.insert(dppEtlTaskDO);
         return dppEtlTaskDO.getId();
@@ -241,12 +241,18 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         var existing=updateReqVO.getId()==null?null:dppEtlTaskMapper.selectById(updateReqVO.getId());
         if(existing!=null && existing.getWarehouseBatchId()!=null && (updateReqVO.getName()!=null || updateReqVO.getCode()!=null || updateReqVO.getVersion()!=null || updateReqVO.getDraftJson()!=null || updateReqVO.getProjectId()!=null || updateReqVO.getProjectCode()!=null || updateReqVO.getScheduler()!=null || updateReqVO.getActuator()!=null || updateReqVO.getTimeout()!=null))
             throw new IllegalArgumentException("受管任务的项目、配置与版本已冻结，请创建新批次");
-        // Related validation
+        if (existing != null && updateReqVO.getProjectId() != null
+                && !Objects.equals(existing.getProjectId(), updateReqVO.getProjectId())) {
+            throw new ServiceException("任务不能转移到其他项目");
+        }
 
         // Update data integration task
         DppEtlTaskDO updateObj = BeanUtils.toBean(updateReqVO, DppEtlTaskDO.class);
-        if (StringUtils.isNotEmpty(updateReqVO.getCatCode()) && StringUtils.isNotEmpty(updateReqVO.getType())) {
-            updateReqVO.setCatId(attCatService.getCatIdByTableNameAndCatCode(TaskCatEnum.findEnumByType(updateReqVO.getType()).toString(), updateReqVO.getCatCode()));
+        String categoryType = StringUtils.isNotEmpty(updateReqVO.getType()) ? updateReqVO.getType()
+                : existing == null ? null : existing.getType();
+        if (StringUtils.isNotEmpty(updateReqVO.getCatCode()) && StringUtils.isNotEmpty(categoryType)) {
+            updateObj.setCatId(attCatService.getCatIdByTableNameAndCatCode(TaskCatEnum.findEnumByType(categoryType).toString(),
+                    updateReqVO.getCatCode(), existing == null ? updateReqVO.getProjectId() : existing.getProjectId()));
         }
         return dppEtlTaskMapper.updateById(updateObj);
     }
@@ -2080,6 +2086,8 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         return result;
     }
 
+    private record CategoryKey(Long projectId, String code) {}
+
     private DppEtlTaskTreeRespVO buildTaskDevCaTree(List<DppEtlTaskRespVO> dppEtlTaskRespVOList, List<AttDataDevCatRespDTO> attDataDevCatApiList) {
 
         // 1. Create top-level directory node
@@ -2098,6 +2106,8 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
             node.setId(cat.getId());
             node.setLabel(cat.getName());
             node.setCode(cat.getCode());
+            node.setProjectId(cat.getProjectId());
+            node.setProjectCode(cat.getProjectCode());
             node.setChildren(new ArrayList<>());
             // Category node's dppEtlTaskCount will be assigned later
             catNodeMap.put(cat.getId(), node);
@@ -2107,7 +2117,8 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         List<DppEtlTaskTreeRespVO> catRoots = new ArrayList<>();
         for (AttDataDevCatRespDTO cat : attDataDevCatApiList) {
             DppEtlTaskTreeRespVO node = catNodeMap.get(cat.getId());
-            if (cat.getParentId() != null && catNodeMap.containsKey(cat.getParentId())) {
+            if (cat.getParentId() != null && catNodeMap.containsKey(cat.getParentId())
+                    && Objects.equals(cat.getProjectId(), catNodeMap.get(cat.getParentId()).getProjectId())) {
                 // If parent category exists, add to parent's children
                 DppEtlTaskTreeRespVO parentNode = catNodeMap.get(cat.getParentId());
                 parentNode.getChildren().add(node);
@@ -2125,9 +2136,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         root.setDppEtlTaskCount(filteredTasks.size());
 
         // For easy lookup of category nodes by category code, build a code-to-node mapping
-        Map<String, DppEtlTaskTreeRespVO> catCodeMap = new HashMap<>();
+        Map<CategoryKey, DppEtlTaskTreeRespVO> catCodeMap = new HashMap<>();
         for (DppEtlTaskTreeRespVO catNode : catNodeMap.values()) {
-            catCodeMap.put(catNode.getCode(), catNode);
+            catCodeMap.put(new CategoryKey(catNode.getProjectId(), catNode.getCode()), catNode);
         }
 
         // 5. Iterate tasks, mount each task under the corresponding category node (match condition: task's catCode equals category node's code)
@@ -2136,7 +2147,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
             if (taskCatCode == null) {
                 continue;
             }
-            DppEtlTaskTreeRespVO categoryNode = catCodeMap.get(taskCatCode);
+            DppEtlTaskTreeRespVO categoryNode = catCodeMap.get(new CategoryKey(task.getProjectId(), taskCatCode));
             if (categoryNode != null) {
                 // Convert task to tree node
                 DppEtlTaskTreeRespVO taskNode = new DppEtlTaskTreeRespVO();
@@ -2210,6 +2221,8 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
             node.setId(cat.getId());
             node.setLabel(cat.getName());
             node.setCode(cat.getCode());
+            node.setProjectId(cat.getProjectId());
+            node.setProjectCode(cat.getProjectCode());
             node.setChildren(new ArrayList<>());
             // Category node's dppEtlTaskCount will be assigned later
             catNodeMap.put(cat.getId(), node);
@@ -2219,7 +2232,8 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         List<DppEtlTaskTreeRespVO> catRoots = new ArrayList<>();
         for (AttTaskCatRespDTO cat : attTaskCatApiList) {
             DppEtlTaskTreeRespVO node = catNodeMap.get(cat.getId());
-            if (cat.getParentId() != null && catNodeMap.containsKey(cat.getParentId())) {
+            if (cat.getParentId() != null && catNodeMap.containsKey(cat.getParentId())
+                    && Objects.equals(cat.getProjectId(), catNodeMap.get(cat.getParentId()).getProjectId())) {
                 // If parent category exists, add to parent's children
                 DppEtlTaskTreeRespVO parentNode = catNodeMap.get(cat.getParentId());
                 parentNode.getChildren().add(node);
@@ -2237,9 +2251,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         root.setDppEtlTaskCount(filteredTasks.size());
 
         // For easy lookup of category nodes by category code, build a code-to-node mapping
-        Map<String, DppEtlTaskTreeRespVO> catCodeMap = new HashMap<>();
+        Map<CategoryKey, DppEtlTaskTreeRespVO> catCodeMap = new HashMap<>();
         for (DppEtlTaskTreeRespVO catNode : catNodeMap.values()) {
-            catCodeMap.put(catNode.getCode(), catNode);
+            catCodeMap.put(new CategoryKey(catNode.getProjectId(), catNode.getCode()), catNode);
         }
 
         // 5. Iterate tasks, mount each task under the corresponding category node (match condition: task's catCode equals category node's code)
@@ -2248,7 +2262,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
             if (taskCatCode == null) {
                 continue;
             }
-            DppEtlTaskTreeRespVO categoryNode = catCodeMap.get(taskCatCode);
+            DppEtlTaskTreeRespVO categoryNode = catCodeMap.get(new CategoryKey(task.getProjectId(), taskCatCode));
             if (categoryNode != null) {
                 DppEtlTaskExtDO etlTaskExtDO = dppEtlTaskExtService.getByTaskId(task.getId());
                 // Convert task to tree node
@@ -2337,17 +2351,28 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         return dppEtlTaskMapper.checkTaskIdInAsset(assetIdList);
     }
 
+    private static void requireCategoryProject(Long projectId) {
+        if (projectId == null || projectId <= 0) throw new ServiceException("请明确类目所属项目");
+    }
+
     @Override
-    public long getCountByCatCode(String catCode, List<String> taskTypes) {
+    public long getCountByCatCode(Long projectId, String catCode, List<String> taskTypes) {
+        requireCategoryProject(projectId);
+        if (StringUtils.isBlank(catCode)) throw new ServiceException("类目编码不能为空");
         return this.lambdaQuery()
+                .eq(DppEtlTaskDO::getProjectId, projectId)
                 .likeRight(DppEtlTaskDO::getCatCode, catCode)
+                .apply("LEFT(cat_code, CHAR_LENGTH({0}))={0}", catCode)
                 .in(taskTypes != null && !taskTypes.isEmpty(), DppEtlTaskDO::getType, taskTypes)
                 .count();
     }
 
     @Override
-    public long getCountByCatId(Long catId, List<String> taskTypes) {
+    public long getCountByCatId(Long projectId, Long catId, List<String> taskTypes) {
+        requireCategoryProject(projectId);
+        if (catId == null || catId <= 0) throw new ServiceException("类目标识无效");
         return this.lambdaQuery()
+                .eq(DppEtlTaskDO::getProjectId, projectId)
                 .eq(DppEtlTaskDO::getCatId, catId)
                 .in(taskTypes != null && !taskTypes.isEmpty(), DppEtlTaskDO::getType, taskTypes)
                 .count();

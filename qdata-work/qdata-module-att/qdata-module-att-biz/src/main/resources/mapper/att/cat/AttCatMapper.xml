@@ -29,5 +29,8 @@
             ${tableName}
         WHERE
             CODE = #{catCode} AND DEL_FLAG = 0
+        <if test="tableName == 'ATT_TASK_CAT' or tableName == 'ATT_DATA_DEV_CAT'">
+            AND PROJECT_ID = #{projectId}
+        </if>
     </select>
 </mapper>

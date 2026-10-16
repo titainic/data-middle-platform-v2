@@ -35,5 +35,5 @@ public interface IAttCatService {
      * @param catCode
      * @return
      */
-    Long getCatIdByTableNameAndCatCode(String tableName, String catCode);
+    Long getCatIdByTableNameAndCatCode(String tableName, String catCode, Long projectId);
 }

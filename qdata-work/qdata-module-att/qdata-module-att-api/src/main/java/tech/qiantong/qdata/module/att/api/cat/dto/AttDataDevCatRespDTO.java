@@ -34,6 +34,10 @@ public class AttDataDevCatRespDTO {
     /** ID */
     private Long id;
 
+    /** Owning project is part of category identity when codes can repeat across projects. */
+    private Long projectId;
+    private String projectCode;
+
     /** Category Name */
     private String name;
 

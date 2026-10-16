@@ -32,5 +32,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AttCatMapper {
 
-    Long getCatIdByTableNameAndCatCode(@Param("tableName") String tableName, @Param("catCode") String catCode);
+    Long getCatIdByTableNameAndCatCode(@Param("tableName") String tableName, @Param("catCode") String catCode, @Param("projectId") Long projectId);
 }

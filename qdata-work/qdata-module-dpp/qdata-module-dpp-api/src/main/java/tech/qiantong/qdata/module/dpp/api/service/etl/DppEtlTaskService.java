@@ -37,13 +37,14 @@ public interface DppEtlTaskService {
     int checkTaskIdInAsset(List<Long> assetIdList);
 
     /**
-     * Count tasks under a category and all of its descendants.
+     * Count tasks under a category and its descendants in the explicit owning project.
+     * Missing project or blank code is rejected; legacy codes are literal prefixes.
      */
-    long getCountByCatCode(String catCode, List<String> taskTypes);
+    long getCountByCatCode(Long projectId, String catCode, List<String> taskTypes);
 
     /**
-     * Count tasks directly associated with a category.
+     * Count tasks directly associated with a category in the explicit owning project.
      */
-    long getCountByCatId(Long catId, List<String> taskTypes);
+    long getCountByCatId(Long projectId, Long catId, List<String> taskTypes);
 
 }

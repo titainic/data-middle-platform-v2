@@ -67,7 +67,7 @@ public interface IAttDataDevCatService extends IService<AttDataDevCatDO> {
     /**
      * Check whether a category name is already used under the same parent.
      */
-    boolean isNameUsed(Long id, Long parentId, String name);
+    boolean isNameUsed(Long projectId, Long id, Long parentId, String name);
 
     /**
      * Count data development tasks directly associated with the category.
@@ -128,5 +128,5 @@ public interface IAttDataDevCatService extends IService<AttDataDevCatDO> {
      * @param parentCode
      * @return
      */
-    String createCode(Long parentId, String parentCode);
+    String createCode(Long projectId, Long parentId, String parentCode);
 }
