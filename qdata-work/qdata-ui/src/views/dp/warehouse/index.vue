@@ -164,7 +164,7 @@
       </section></el-tab-pane>
       </el-tabs>
     </div>
-    <el-dialog v-model="dataVisible" title="Hive 数据预览（前 50 行）" width="85%"><el-table :data="dataRows" border max-height="500"><el-table-column v-for="key in Object.keys(dataRows[0] || {})" :key="key" :prop="key" :label="key" min-width="150" /></el-table><p v-if="!dataRows.length">目标表暂无数据。</p></el-dialog>
+    <el-dialog v-model="dataVisible" title="Hive 数据预览（前 50 行）" width="85%"><el-table :data="dataRows" border max-height="500"><el-table-column v-for="key in dataColumns" :key="key" :prop="key" :label="key" min-width="150" /></el-table><p v-if="!dataRows.length">目标表暂无数据。</p></el-dialog>
     <el-dialog :model-value="!!runDetail" title="执行详情" width="85%" @close="runDetail=null"><template v-if="runDetail"><p>批次 {{runDetail.batch_id}} · {{statusLabel(runDetail.status)}}</p><pre>{{runDetail.message}}</pre><h3>实际提交 SQL</h3><pre>{{runDetail.sql_text || '尚未提交 SQL'}}</pre><h3>执行时的模型与血缘快照</h3><pre>{{JSON.stringify(JSON.parse(runDetail.definition_json),null,2)}}</pre></template></el-dialog>
   </div>
 </template>
@@ -192,6 +192,11 @@ const engineForm=ref({name:'',datasourceId:null,catalogKey:''});
 const qualifiedName=model=>model ? `${model.databaseName ? model.databaseName+'.' : ''}${model.tableName}` : '';
 const empty=()=>{const space=warehouseContext.value.spaces[0];return {id:null,revision:0,name:'',tableName:'',databaseName:space?.databases.ODS || '',spaceId:space?.id || null,datasetId:null,layer:'ODS',role:'DETAIL',datasourceId:space?.datasourceId || datasources.value[0]?.id || null,grain:'',topic:'',description:'',storage:'PARQUET',rawTable:'',selectSql:'',upstreamIds:[],columns:[],dimensions:[]};};
 const form=ref(empty());
+const dataColumns=computed(()=>{
+  if(dataRows.value.length)return Object.keys(dataRows.value[0] || {});
+  const names=(form.value.columns || []).map(column=>typeof column?.name==='string'?column.name.trim():'').filter(Boolean);
+  return [...new Set(names)];
+});
 const modelCapabilities=computed(()=>form.value.spaceId ? warehouseContext.value.spaces.find(s=>String(s.id)===String(form.value.spaceId))?.capabilities || {} : warehouseContext.value.legacyCapabilities || {});
 const dirty=computed(()=>snapshot.value!==JSON.stringify(form.value));
 const executing=computed(()=>logs.value.some(l=>['QUEUED','RUNNING'].includes(l.status)));
