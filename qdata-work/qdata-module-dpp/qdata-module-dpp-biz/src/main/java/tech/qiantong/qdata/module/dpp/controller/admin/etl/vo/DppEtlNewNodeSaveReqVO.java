@@ -27,7 +27,9 @@ import tech.qiantong.qdata.common.core.domain.BaseEntity;
 import tech.qiantong.qdata.common.utils.JSONUtils;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.groups.Default;
 import java.util.List;
 import java.util.Map;
 
@@ -43,17 +45,24 @@ import java.util.Map;
 @AllArgsConstructor
 public class DppEtlNewNodeSaveReqVO extends BaseEntity {
 
+    /** Full task writes; release, scheduling and copy requests use the default group. */
+    public interface TaskSave extends Default {}
+
     /** Category Code */
     @Parameter(name = "catCode", description = "类目编码")
+    @Size(max = 32, message = "类目编码长度不能超过32个字符", groups = TaskSave.class)
     private String catCode;
     private Long catId;
 
     /** Person in Charge */
-    @Parameter(name = "catCode", description = "责任人")
+    @Parameter(name = "personCharge", description = "责任人")
+    @NotBlank(message = "责任人不能为空", groups = TaskSave.class)
+    @Size(max = 32, message = "责任人长度不能超过32个字符", groups = TaskSave.class)
     private String personCharge;
 
     /** Contact Number */
     @Parameter(name = "catCode", description = "联系电话")
+    @Size(max = 32, message = "联系电话长度不能超过32个字符", groups = TaskSave.class)
     private String contactNumber;
 
     @Parameter(name = "projectCode", description = "项目编码", required = true)
@@ -62,12 +71,16 @@ public class DppEtlNewNodeSaveReqVO extends BaseEntity {
 
     @Schema(description = "任务类型", example = "")
     @Size(max = 256, message = "任务类型长度不能超过256个字符")
+    @Size(max = 10, message = "任务类型长度不能超过10个字符", groups = TaskSave.class)
     private String type;
 
     @Schema(description = "项目id", example = "")
+    @NotNull(message = "项目ID不能为空", groups = TaskSave.class)
     private Long projectId;
 
     @Parameter(name = "name", description = "名称", required = true)
+    @NotBlank(message = "任务名称不能为空", groups = TaskSave.class)
+    @Size(max = 128, message = "任务名称长度不能超过128个字符", groups = TaskSave.class)
     private String name;
 
     @Parameter(name = "description", description = "描述", required = true)
@@ -93,6 +106,8 @@ public class DppEtlNewNodeSaveReqVO extends BaseEntity {
     private String otherParamsJson;
 
     @Parameter(name = "executionType", description = "执行类型", required = false)
+    @NotBlank(message = "执行策略不能为空", groups = TaskSave.class)
+    @Size(max = 32, message = "执行策略长度不能超过32个字符", groups = TaskSave.class)
     private String executionType;
 
     // Online status 0:Offline, 1:Online
@@ -101,14 +116,18 @@ public class DppEtlNewNodeSaveReqVO extends BaseEntity {
     private String schedulerState;
     private String status;
     private String code;
+    @NotBlank(message = "调度表达式不能为空", groups = TaskSave.class)
+    @Size(max = 255, message = "调度表达式长度不能超过255个字符", groups = TaskSave.class)
     private String crontab;
     private String id;
     private Integer version;
 
     @Schema(description = "调度器", example = "DOLPHINSCHEDULER")
+    @Size(max = 32, message = "调度器长度不能超过32个字符", groups = TaskSave.class)
     private String scheduler;
 
     @Schema(description = "执行器", example = "SPARK")
+    @Size(max = 32, message = "执行器长度不能超过32个字符", groups = TaskSave.class)
     private String actuator;
 
     /**
