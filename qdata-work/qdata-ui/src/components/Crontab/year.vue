@@ -31,11 +31,12 @@
         <el-form-item>
             <el-radio v-model="radioValue" :value="3" @change="onRadioChange">
                 {{ td('common.crontab.cycleFrom') }}
-                <el-input-number v-model="cycle01" :min="fullYear" :max="2098" /> -
+                <el-input-number v-model="cycle01" :min="1970" :max="maxFullYear - 1" @change="onRadioChange" /> -
                 <el-input-number
                     v-model="cycle02"
-                    :min="cycle01 ? cycle01 + 1 : fullYear + 1"
-                    :max="2099"
+                    :min="cycle01 ? cycle01 + 1 : 1971"
+                    :max="maxFullYear"
+                    @change="onRadioChange"
                 />
             </el-radio>
         </el-form-item>
@@ -43,8 +44,8 @@
         <el-form-item>
             <el-radio v-model="radioValue" :value="4" @change="onRadioChange">
                 {{ td('common.crontab.year.averagePrefix') }}
-                <el-input-number v-model="average01" :min="fullYear" :max="2098" /> {{ td('common.crontab.year.averageMiddle') }}
-                <el-input-number v-model="average02" :min="1" :max="2099 - average01 || fullYear" />
+                <el-input-number v-model="average01" :min="1970" :max="maxFullYear" @change="onRadioChange" /> {{ td('common.crontab.year.averageMiddle') }}
+                <el-input-number v-model="average02" :min="1" :max="maxFullYear" @change="onRadioChange" />
                 {{ td('common.crontab.year.averageSuffix') }}
             </el-radio>
         </el-form-item>
@@ -55,15 +56,16 @@
                 <el-select
                     clearable
                     v-model="checkboxList"
+                    @change="onRadioChange"
                     :placeholder="td('common.crontab.multiSelect')"
                     multiple
                     :multiple-limit="8"
                 >
                     <el-option
-                        v-for="item in 9"
+                        v-for="item in yearOptions"
                         :key="item"
-                        :value="item - 1 + fullYear"
-                        :label="item - 1 + fullYear"
+                        :value="item"
+                        :label="item"
                     />
                 </el-select>
             </el-radio>
@@ -93,41 +95,34 @@
             default: () => {}
         }
     });
-    const fullYear = ref(0);
-    const maxFullYear = ref(0);
+    const fullYear = new Date().getFullYear();
+    // Match the existing preview and Quartz CronExpression.MAX_YEAR horizon.
+    const maxFullYear = fullYear + 100;
     const radioValue = ref(1);
-    const cycle01 = ref(0);
-    const cycle02 = ref(0);
-    const average01 = ref(0);
+    const cycle01 = ref(fullYear);
+    const cycle02 = ref(fullYear + 1);
+    const average01 = ref(fullYear);
     const average02 = ref(1);
-    const checkboxList = ref([]);
-    const checkCopy = ref([]);
+    const checkboxList = ref([fullYear]);
+    const checkCopy = ref([fullYear]);
+    // Keep imported years visible even outside the default nine-year window.
+    const yearOptions = ref(Array.from({ length: 9 }, (_, index) => fullYear + index));
     const cycleTotal = computed(() => {
-        console.log('1');
-
-        cycle01.value = props.check(cycle01.value, fullYear.value, maxFullYear.value - 1);
-        cycle02.value = props.check(cycle02.value, cycle01.value + 1, maxFullYear.value);
-        return cycle01.value + '-' + cycle02.value;
+        const start = props.check(cycle01.value, 1970, maxFullYear - 1);
+        const end = props.check(cycle02.value, start + 1, maxFullYear);
+        return start + '-' + end;
     });
     const averageTotal = computed(() => {
-        console.log('2');
-        average01.value = props.check(average01.value, fullYear.value, maxFullYear.value - 1);
-        average02.value = props.check(average02.value, 1, 10);
-        return average01.value + '/' + average02.value;
+        const start = props.check(average01.value, 1970, maxFullYear);
+        const step = props.check(average02.value, 1, maxFullYear);
+        return start + '/' + step;
     });
-    const checkboxString = computed(() => {
-        console.log('3');
-        return checkboxList.value.join(',');
-    });
-    watch(
-        () => props.cron.year,
-        (value) => changeRadioValue(value)
-    );
-    watch([radioValue, cycleTotal, averageTotal, checkboxString], () => onRadioChange());
+    const checkboxString = computed(() => checkboxList.value.join(','));
+    // Hydration must never emit: the parent can still be resolving its expression.
+    // Only explicit control change events below write back to the parent.
+    watch(() => props.cron.year, changeRadioValue, { immediate: true });
     function changeRadioValue(value) {
-        console.log(value, 'ccccnnn');
-
-        if (value === '') {
+        if (!value) {
             radioValue.value = 1;
         } else if (value === '*') {
             radioValue.value = 2;
@@ -138,17 +133,17 @@
             radioValue.value = 3;
         } else if (value.indexOf('/') > -1) {
             const indexArr = value.split('/');
-            average01.value = Number(indexArr[1]);
-            average02.value = Number(indexArr[0]);
+            average01.value = Number(indexArr[0]);
+            average02.value = Number(indexArr[1]);
             radioValue.value = 4;
         } else {
             checkboxList.value = [...new Set(value.split(',').map((item) => Number(item)))];
+            yearOptions.value = [...new Set([...yearOptions.value, ...checkboxList.value])].sort((a, b) => a - b);
+            checkCopy.value = [...checkboxList.value];
             radioValue.value = 5;
         }
     }
     function onRadioChange() {
-        console.log(radioValue.value);
-
         switch (radioValue.value) {
             case 1:
                 emit('update', 'year', '', 'year');
@@ -164,22 +159,14 @@
                 break;
             case 5:
                 if (checkboxList.value.length === 0) {
-                    checkboxList.value.push(checkCopy.value[0]);
+                    checkboxList.value = [...checkCopy.value];
                 } else {
-                    checkCopy.value = checkboxList.value;
+                    checkCopy.value = [...checkboxList.value];
                 }
                 emit('update', 'year', checkboxString.value, 'year');
                 break;
         }
     }
-    onMounted(() => {
-        fullYear.value = Number(new Date().getFullYear());
-        maxFullYear.value = fullYear.value + 10;
-        cycle01.value = fullYear.value;
-        cycle02.value = cycle01.value + 1;
-        average01.value = fullYear.value;
-        checkCopy.value = [fullYear.value];
-    });
 </script>
 
 <style lang="scss" scoped>
