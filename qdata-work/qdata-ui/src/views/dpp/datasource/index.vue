@@ -1010,8 +1010,8 @@
 
 <script setup name="DppDataSource">
 import { joinApiPath } from '@/utils/apiUrl.js';
-import { ref, computed, watch, onActivated, onBeforeUnmount } from "vue";
-import { onBeforeRouteLeave } from "vue-router";
+import { ref, computed, watch, onActivated, onDeactivated, onBeforeUnmount } from "vue";
+import axios from "axios";
 import { ElMessageBox } from "element-plus";
 import {
   listDaDatasource,
@@ -1144,18 +1144,30 @@ const projectIdAndCodeList = ref([]);
 const route = useRoute();
 let type = route.query.type || null;
 let isDatasourcePageActive = true;
+let listRequestId = 0;
+let optionsRequestId = 0;
+let projectRequestId = 0;
+
+function deactivateDatasourcePage() {
+  isDatasourcePageActive = false;
+  ++listRequestId;
+  ++optionsRequestId;
+  ++projectRequestId;
+  loading.value = false;
+  loadingProject.value = false;
+}
 
 onActivated(() => {
+  if (isDatasourcePageActive) return;
   isDatasourcePageActive = true;
+  getList();
+  getProjectOptions();
+  if (openProject.value) getListProject();
 });
 
-onBeforeRouteLeave(() => {
-  isDatasourcePageActive = false;
-});
-
-onBeforeUnmount(() => {
-  isDatasourcePageActive = false;
-});
+// Use committed lifecycle transitions: a rejected navigation must leave this page active.
+onDeactivated(deactivateDatasourcePage);
+onBeforeUnmount(deactivateDatasourcePage);
 
 /*** User Import Parameters */
 const upload = reactive({
@@ -1338,15 +1350,19 @@ const selectable = (row) => !row.dppAssigned;
 // Listen id changes
 watch(
   () => userStore.projectCode,
-  (newCode) => {
-    getList();
-  },
-  { immediate: true } // `immediate` for true means that when the page is loaded, watch
+  () => {
+    if (isDatasourcePageActive) getList();
+  }
 );
 
 function getProjectOptions() {
-  deptUserTree().then((response) => {
+  if (!isDatasourcePageActive) return;
+  const requestId = ++optionsRequestId;
+  return deptUserTree().then((response) => {
+    if (!isDatasourcePageActive || requestId !== optionsRequestId) return;
     projectOptions.value = response.data;
+  }).catch((error) => {
+    if (!axios.isCancel(error)) console.error("Failed to load datasource options", error);
   });
 }
 
@@ -1362,15 +1378,18 @@ function handleDatasourceChange(type) {
 }
 
 function getListProject() {
+  if (!isDatasourcePageActive) return;
+  const requestId = ++projectRequestId;
   openProject.value = true;
   loadingProject.value = true;
-  noDppAdd(queryParamsProject.value).then((response) => {
+  return noDppAdd(queryParamsProject.value).then((response) => {
+    if (!isDatasourcePageActive || requestId !== projectRequestId) return;
     projectList.value = response.data.rows;
     totalProject.value = response.data.total;
-    loadingProject.value = false;
 
     // Set the selected item before the table is loaded
-    nextTick(() => {
+    return nextTick(() => {
+      if (!isDatasourcePageActive || requestId !== projectRequestId) return;
       projectList.value.forEach((project) => {
         form.value.projectList.forEach((item) => {
           if (item.projectId === project.id) {
@@ -1379,6 +1398,10 @@ function getListProject() {
         });
       });
     });
+  }).catch((error) => {
+    if (!axios.isCancel(error)) console.error("Failed to load datasource projects", error);
+  }).finally(() => {
+    if (requestId === projectRequestId) loadingProject.value = false;
   });
 }
 
@@ -1416,22 +1439,24 @@ function resetQueryProject() {
 
 /** Query list of data sources */
 function getList() {
+  if (!isDatasourcePageActive) return;
+  const requestId = ++listRequestId;
   loading.value = true;
   if (type == 1) {
     queryParams.value.projectId = userStore.projectId;
     queryParams.value.projectCode = userStore.projectCode;
-    listDaDatasourceByProjectCode(queryParams.value).then((response) => {
-      daDatasourceList.value = response.data.rows;
-      total.value = response.data.total;
-      loading.value = false;
-    });
-  } else {
-    listDaDatasource(queryParams.value).then((response) => {
-      daDatasourceList.value = response.data.rows;
-      total.value = response.data.total;
-      loading.value = false;
-    });
   }
+  const load = type == 1 ? listDaDatasourceByProjectCode : listDaDatasource;
+  return load(queryParams.value).then((response) => {
+    if (!isDatasourcePageActive || requestId !== listRequestId) return;
+    daDatasourceList.value = response.data.rows;
+    total.value = response.data.total;
+  }).catch((error) => {
+    // The interceptor reports real HTTP/business errors; keep them visible in diagnostics.
+    if (!axios.isCancel(error)) console.error("Failed to load datasources", error);
+  }).finally(() => {
+    if (requestId === listRequestId) loading.value = false;
+  });
 }
 
 // Cancel button

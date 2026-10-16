@@ -16,6 +16,8 @@
  * See the LICENSE file in the project root for full license information.
  */
 
+import axios from 'axios'
+import { getCurrentInstance, getCurrentScope, onActivated, onDeactivated, onScopeDispose } from 'vue'
 import useDictStore from '@/store/system/dict'
 import { getDicts } from '@/api/system/system/dict/data'
 import { i18n } from '@/plugins/vueI18n'
@@ -45,6 +47,19 @@ function mapAndTranslate(dictType, items) {
  */
 export function useDict(...args) {
   const res = ref({});
+  let active = true;
+  if (getCurrentScope()) onScopeDispose(() => { active = false; });
+  if (getCurrentInstance()) {
+    onDeactivated(() => { active = false; });
+    onActivated(() => {
+      active = true;
+      // A shared dictionary may have finished loading while this page was cached.
+      args.forEach(dictType => {
+        const dicts = useDictStore().getDict(dictType);
+        if (dicts) res.value[dictType] = mapAndTranslate(dictType, dicts);
+      });
+    });
+  }
   return (() => {
     args.forEach((dictType, index) => {
       res.value[dictType] = [];
@@ -55,7 +70,10 @@ export function useDict(...args) {
         getDicts(dictType).then(resp => {
           const rawData = resp.data.map(p => ({ label: p.dictLabel, value: p.dictValue, elTagType: p.listClass, elTagClass: p.cssClass, remark: p.remark }))
           useDictStore().setDict(dictType, rawData);
-          res.value[dictType] = mapAndTranslate(dictType, rawData);
+          if (active) res.value[dictType] = mapAndTranslate(dictType, rawData);
+        }).catch(error => {
+          // Real errors are reported by the interceptor and remain visible here.
+          if (!axios.isCancel(error)) console.error("Failed to load dictionary", dictType, error);
         })
       }
     })

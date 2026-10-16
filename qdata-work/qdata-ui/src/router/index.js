@@ -17,7 +17,6 @@
  */
 
 import { createWebHistory, createRouter } from 'vue-router';
-import { clearCancelTokens } from '@/utils/request'; // Make sure the import path is correct
 
 /* Layout */
 import Layout from '@/layout';
@@ -112,13 +111,9 @@ const router = createRouter({
     }
 });
 
-// Add cancellation request logic in route guard
-router.beforeEach((to, from, next) => {
-    if (to.path !== from.path) {
-        clearCancelTokens(); // Cancel all outstanding requests before routing switch
-    }
-    next();
-});
+// Request lifetime belongs to its caller. A route change must not cancel shared
+// dictionary/authentication loads or mutations whose callers still need a result.
+// Page loads discard stale responses in their component lifecycle instead.
 
 /**
  * Reset routing
