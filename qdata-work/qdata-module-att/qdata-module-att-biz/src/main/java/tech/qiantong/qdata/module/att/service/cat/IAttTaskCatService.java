@@ -124,9 +124,10 @@ public interface IAttTaskCatService extends IService<AttTaskCatDO> {
     /**
      * Generate code
      *
-     * @param parentId
-     * @param parentCode
+     * @param projectId explicit owning project; the transaction must include the subsequent insert
+     * @param parentId zero for a root category
+     * @param parentCode optional expected parent code, never used to override stored data
      * @return
      */
-    String createCode(Long parentId, String parentCode);
+    String createCode(Long projectId, Long parentId, String parentCode);
 }

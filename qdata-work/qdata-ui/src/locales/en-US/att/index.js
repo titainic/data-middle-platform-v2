@@ -373,7 +373,7 @@ export default {
       nameRequired: 'System name is required',
       typeRequired: 'System type is required',
       confirmStatus: 'Are you sure to "{status}" "{name}" source system?',
-      statusSuccess: '{status}" successful',
+      statusSuccess: '{status} successful',
       deleteConfirm: '{deletable} can be deleted, {undeletable} cannot be deleted. Delete the deletable ones?'
     },
     textareaLimit: '500 characters'

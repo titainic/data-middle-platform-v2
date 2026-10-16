@@ -18,6 +18,8 @@
 
 package tech.qiantong.qdata.module.att.dal.mapper.cat;
 
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import tech.qiantong.qdata.common.core.page.PageResult;
 import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttTaskCatPageReqVO;
 import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttTaskCatDO;
@@ -26,6 +28,7 @@ import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -35,6 +38,23 @@ import java.util.Set;
  * @date 2025-03-11
  */
 public interface AttTaskCatMapper extends BaseMapperX<AttTaskCatDO> {
+
+    /** A stable row serializes allocation even when a project has no categories yet. */
+    @Select("SELECT id FROM att_project WHERE id=#{projectId} AND del_flag='0' FOR UPDATE")
+    Long lockProjectForCode(@Param("projectId") Long projectId);
+
+    /**
+     * Reserve this project's next-level prefixes, including orphan/deleted history.
+     * Use a locking read: a controller may already have opened a repeatable-read snapshot
+     * before it waited for the project lock. Do not parse arbitrary historical suffixes.
+     * LEFT equality treats legacy '%'/'_' parent codes literally rather than as LIKE wildcards.
+     */
+    @Select("SELECT UPPER(LEFT(code, #{length})) FROM ATT_TASK_CAT "
+            + "WHERE project_id=#{projectId} AND CHAR_LENGTH(code)>=#{length} "
+            + "AND UPPER(LEFT(code, CHAR_LENGTH(#{parentCode})))=UPPER(#{parentCode}) FOR UPDATE")
+    List<String> selectOccupiedCodePrefixes(@Param("projectId") Long projectId,
+                                            @Param("parentCode") String parentCode,
+                                            @Param("length") int length);
 
     default PageResult<AttTaskCatDO> selectPage(AttTaskCatPageReqVO reqVO) {
         // Define sortable fields (prevent SQL injection, must match database column names)

@@ -402,8 +402,8 @@ export default {
     message: {
       nameRequired: '系统名称不能为空',
       typeRequired: '系统类型不能为空',
-      confirmStatus: '确认要"{status}<{name}"来源系统吗？',
-      statusSuccess: '{status}"成功',
+      confirmStatus: '确认要{status}来源系统“{name}”吗？',
+      statusSuccess: '{status}成功',
       deleteConfirm: '可删除"{deletable}"个，不可删除"{undeletable}"个，是否删除可删部分'
     },
     textareaLimit: '500个字符'

@@ -37,7 +37,6 @@ import tech.qiantong.qdata.module.att.api.service.cat.IAttTaskCatApiService;
 import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttTaskCatPageReqVO;
 import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttTaskCatRespVO;
 import tech.qiantong.qdata.module.att.controller.admin.cat.vo.AttTaskCatSaveReqVO;
-import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttModelCatDO;
 import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttTaskCatDO;
 import tech.qiantong.qdata.module.att.dal.mapper.cat.AttTaskCatMapper;
 import tech.qiantong.qdata.module.att.service.cat.IAttTaskCatService;
@@ -47,7 +46,9 @@ import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -76,9 +77,12 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
     @Override
     public Long createAttTaskCat(AttTaskCatSaveReqVO createReqVO) {
         normalizeAndValidate(createReqVO);
+        if (createReqVO.getParentId() == null) createReqVO.setParentId(0L);
+        // Acquire the project lock before name/code reads; hold it through insert/commit.
+        String code = createCode(createReqVO.getProjectId(), createReqVO.getParentId(), null);
         checkDuplicate(createReqVO.getId(), createReqVO.getParentId(), createReqVO.getName(),createReqVO.getProjectId());
         AttTaskCatDO dictType = BeanUtils.toBean(createReqVO, AttTaskCatDO.class);
-        dictType.setCode(createCode(createReqVO.getParentId(), null));
+        dictType.setCode(code);
         attTaskCatMapper.insert(dictType);
         return dictType.getId();
     }
@@ -171,9 +175,12 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
     }
 
     private void checkDuplicate(Long id, Long parentId, String name,Long projectId) {
-        long count = this.lambdaQuery().eq(AttTaskCatDO::getProjectId,projectId).eq(AttTaskCatDO::getParentId, parentId)
-                .eq(AttTaskCatDO::getName, name).ne(id != null, AttTaskCatDO::getId, id).count();
-        if (count > 0) {
+        // Current read after the project lock, also under MySQL REPEATABLE READ.
+        var duplicates = attTaskCatMapper.selectList(new LambdaQueryWrapper<AttTaskCatDO>()
+                .select(AttTaskCatDO::getId).eq(AttTaskCatDO::getProjectId,projectId)
+                .eq(AttTaskCatDO::getParentId, parentId).eq(AttTaskCatDO::getName, name)
+                .ne(id != null, AttTaskCatDO::getId, id).last("FOR UPDATE"));
+        if (!duplicates.isEmpty()) {
             throw new ServiceException("att.error.cat.name.duplicate", "当前上级类目下已存在同名类目，请修改。");
         }
     }
@@ -229,35 +236,45 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
     }
 
     @Override
-    public String createCode(Long parentId, String parentCode) {
-        String categoryCode = null;
-        /*
-         * Three scenarios:
-         * 1. No data in database - call YouBianCodeUtil.getNextYouBianCode(null);
-         * 2. Adding child node, no sibling elements - YouBianCodeUtil.getSubYouBianCode(parentCode,null);
-         * 3. Adding child node with sibling elements - YouBianCodeUtil.getNextYouBianCode(lastCode);
-         * */
-        // Find same category and determine the previous maximum code value
-        LambdaQueryWrapper<AttTaskCatDO> query = new LambdaQueryWrapper<AttTaskCatDO>()
-                .eq(AttTaskCatDO::getParentId, parentId)
-                .likeRight(StringUtils.isNotBlank(parentCode), AttTaskCatDO::getCode, parentCode)
-                .isNotNull(AttTaskCatDO::getCode)
-                .orderByDesc(AttTaskCatDO::getCode).last("FOR UPDATE");
-        List<AttTaskCatDO> list = baseMapper.selectList(query);
-        if (list == null || list.size() == 0) {
-            if (parentId == 0) {
-                // Case 1
-                categoryCode = YouBianCodeUtil.getNextYouBianCode(null);
-            } else {
-                // Case 2
-                AttTaskCatDO parent = baseMapper.selectById(parentId);
-                categoryCode = YouBianCodeUtil.getSubYouBianCode(parent.getCode(), null);
-            }
-        } else {
-            // Case 3
-            categoryCode = YouBianCodeUtil.getNextYouBianCode(list.get(0).getCode());
+    public String createCode(Long projectId, Long parentId, String parentCode) {
+        if (projectId == null || projectId <= 0 || parentId == null || parentId < 0) {
+            throw new ServiceException("请明确类目所属项目和有效上级类目");
         }
-        return categoryCode;
+        if (attTaskCatMapper.lockProjectForCode(projectId) == null) {
+            throw new ServiceException("类目所属项目不存在，请刷新后重试");
+        }
+        String prefix = "";
+        if (parentId != 0) {
+            AttTaskCatDO parent = attTaskCatMapper.selectOne(new LambdaQueryWrapper<AttTaskCatDO>()
+                    .eq(AttTaskCatDO::getId, parentId).eq(AttTaskCatDO::getProjectId, projectId)
+                    .last("FOR UPDATE"));
+            if (parent == null || !Boolean.TRUE.equals(parent.getValidFlag())) {
+                throw new ServiceException("上级类目不存在、未启用或不属于当前项目");
+            }
+            prefix = parent.getCode();
+            if (StringUtils.isBlank(prefix)) {
+                throw new ServiceException("上级类目编码为空，无法生成子类目编码，请联系管理员核对");
+            }
+        }
+        if (StringUtils.isNotBlank(parentCode) && !parentCode.equals(prefix)) {
+            throw new ServiceException("上级类目编码不匹配，请刷新后重试");
+        }
+        int length = prefix.length() + YouBianCodeUtil.ZHANWEI_LENGTH;
+        if (length > 128) {
+            throw new ServiceException("类目编码长度已达上限，无法新增子类目");
+        }
+        var occupied = new HashSet<>(attTaskCatMapper.selectOccupiedCodePrefixes(projectId, prefix, length));
+        // Only pass generated A01..Z99 segments to the common numeric incrementer.
+        // Historical parent codes (e.g. bin11cat) remain opaque and unchanged.
+        String segment = YouBianCodeUtil.getNextYouBianCode(null);
+        while (true) {
+            String candidate = prefix + segment;
+            if (!occupied.contains(candidate.toUpperCase(Locale.ROOT))) return candidate;
+            if ("Z99".equals(segment)) {
+                throw new ServiceException("当前上级类目编码已用尽，无法新增类目");
+            }
+            segment = YouBianCodeUtil.getNextYouBianCode(segment);
+        }
     }
 
     /**
