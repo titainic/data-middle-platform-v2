@@ -43,7 +43,14 @@ public class AttCatServiceImpl implements IAttCatService {
     private AttCatMapper attCatMapper;
 
     @Override
-    public Long getCatIdByTableNameAndCatCode(String tableName, String catCode) {
-        return attCatMapper.getCatIdByTableNameAndCatCode(tableName, catCode);
+    public Long getCatIdByTableNameAndCatCode(String tableName, String catCode, Long projectId) {
+        // Table identifiers are internal enum values, never client-provided SQL.
+        var table = tech.qiantong.qdata.common.enums.TaskCatEnum.valueOf(tableName);
+        if ((table == tech.qiantong.qdata.common.enums.TaskCatEnum.ATT_TASK_CAT
+                || table == tech.qiantong.qdata.common.enums.TaskCatEnum.ATT_DATA_DEV_CAT)
+                && (projectId == null || projectId <= 0)) {
+            throw new tech.qiantong.qdata.common.exception.ServiceException("请明确类目所属项目");
+        }
+        return attCatMapper.getCatIdByTableNameAndCatCode(table.name(), catCode, projectId);
     }
 }

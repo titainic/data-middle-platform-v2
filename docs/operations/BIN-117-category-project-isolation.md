@@ -1,0 +1,58 @@
+# BIN-117 类目计数与删除链路项目隔离
+
+作者：全栈研发工程师-Forge；来源：BIN-117 / BIN-113。基线：BIN-116候选 e3809c8257f1a539c28641a6a35ce9eb00a30a2e。
+
+## 根因与修改范围
+
+项目内编码唯一，项目间允许同码。原数据集成/数据开发类目按裸code前缀计算任务数与子节点数，导致另一项目的数据阻止本项目删除。按catId计数没有核对任务project_id，历史不一致引用可能串数。任务树用code作为唯一键、列表按code JOIN、任务保存按code查ID同样不满足项目内身份语义。
+
+- DppEtlTaskService 的按code/ID计数接口强制传入projectId；两类目服务所有调用方从数据库读取类目所属项目，不接受客户端替代。缺项目、无效ID、空code明确拒绝；保留原任务类型口径（集成1、开发3），保留软删除过滤。
+- 子类目删除前检查限定projectId；同时检查字面编码后代与直接parentId，保护编码不规则的旧子节点。整批先校验，真正逻辑删除亦带projectId+ID；不递归删除后代。
+- 普通LIKE前缀仍用于缩小扫描，LEFT等值校验使旧code中的%/_按字面值匹配，参数全部绑定；禁用子树采用同样字面前缀规则。无数据修复或编码重写。
+- 同父重名检查显式传projectId。数据开发原parentId编码聚合补项目条件，沿用BIN-116的项目行锁、锁定读取与不透明旧父编码分配策略；两个类目均拒绝外项目父节点。
+- 类目内部响应DTO携带projectId/projectCode；任务树以(projectId,code)挂载与计数，并校验父节点项目相同。
+- Java与XML两条任务列表JOIN均加项目等值，防止重复任务行/错误类目名。任务保存code→ID查找限定项目；编辑写入实际updateObj，并可由已存任务补足省略的type/projectId。禁止通过编辑转移任务项目。
+- 无project_id的资产、模型、文档、标签、质量、清洗等全局类目保持原全局语义；非项目目录不强加project列。任务类型2/4既有全局目录语义不在本次改造。
+
+## 兼容与依赖
+
+REST路径/参数不变。内部Java计数、按code查ID、同父重名与数据开发createCode签名变化，已同步仓库消费者及AI兼容实现，需整体重建相关模块，不能只替换单个class。DTO新增项目字段为向后兼容补充。
+
+仅为跨模块离线测试在dpp-biz增加att-biz、H2的test依赖；无运行时依赖、版本、集群配置或数据库迁移变更。保留共享工作区全部未提交修改，使用独立/private/tmp工作副本；本任务与BIN-116分提交、分PR交付。
+
+## 验证边界
+
+CategoryProjectIsolationTest 使用真实两类目服务、真实DppEtlTaskServiceImpl、Mapper SQL/分页JOIN、Spring事务代理，存储为进程内H2 MySQL模式的合成数据；只有任务树的扩展信息读取返回空夹具，不替代计数、持久化、锁或删除。测试不启动登录/权限过滤器，不连接业务HTTP、数据库、Redis或集群。
+
+覆盖跨项目同名同码、直接/后代任务计数、错误project/catId组合、软删、任务类型隔离、旧父节点/异编码直接子节点、字面通配字符、批量检查无部分删除、缺项目/空code拒绝、空项目分配、跨项目并发计数与删除、同旧父编码并发新增、代码查ID/新增/部分编辑、任务树及两种分页JOIN。合成40条规则快照不变仅证明离线夹具未修改，不能称为95真实40条已核验。
+
+H2不能证明MySQL REPEATABLE READ下的快照/锁行为、多实例行为或95运行验收。实际命令、测试数与构建结果见Paperclip研发报告及证据包。
+
+## 本轮实际研发结果（2026-10-17，Asia/Shanghai）
+
+- JDK 21.0.10，30个相关模块离线package成功；CategoryProjectIsolationTest 31/31、TaskCategoryCodeAllocationTest 16/16、CleanCategoryCodeAllocationTest 20/20、DataXUpdateSaveRegressionTest 14/14，合计81/81，0失败、0异常、0跳过。
+- 新增用例为真实服务/SQL/事务+H2；DataX相邻14例沿用其既有持久化/调度/权限替身，不代表真实DataX运行验收。
+- 初轮附加DataX测试因沙箱阻止Mockito JVM附加而在初始化阶段失败；按本地离线验证授权在沙箱外重跑，81项及package均成功。最初Scala临时目录失败亦已排除。未通过跳过用例掩盖失败。
+- AI兼容类DualServiceImpl以本轮当前接口和测试类路径通过JDK21 javac --release 21 -proc:none；完整AI模块离线Maven因未缓存spring-ai-bom 1.1.2及spring-ai-alibaba-bom 1.1.2.2停止，不能称为AI模块构建通过。完整qdata-server及95未运行。
+- 测试命令（工作目录qdata-work；JAVA_HOME指向既有JDK21，MAVEN_OPTS配置独立java.io.tmpdir）：
+
+```sh
+mvn -o -s /private/tmp/bin98-maven-settings.xml -Dmaven.repo.local=/private/tmp/qdata-bin89-maven \
+  -pl qdata-module-dpp/qdata-module-dpp-biz -am \
+  -Dtest=CategoryProjectIsolationTest,TaskCategoryCodeAllocationTest,CleanCategoryCodeAllocationTest,DataXUpdateSaveRegressionTest \
+  -Dsurefire.failIfNoSpecifiedTests=false package
+```
+
+- 既有警告保留：Scala版本差异、shaded模块描述符、MapStruct未映射字段及Mockito动态agent提示；无依赖升级或代码静默替代。
+
+## 独立验收交接
+
+技术总负责人-Atlas审查后，另行派测试与部署工程师-Sentinel执行：
+
+1. 在获授权隔离测试项目中准备同码/同名类目；一项目有任务/后代、另一项目为空。核对hasTask、直接任务数、删除提示和实际逻辑删除；另一项目行与任务应保持原样。
+2. 核对本项目有任务/直接子节点时仍拦截，批量包含不可删项时无部分删除；不要修改正式数据构造异常。
+3. 多项目任务树计数与任务归属准确；列表返回数量与数据库任务数一致，类目名称来自本项目。新建/编辑任务cat_id属于本项目。
+4. 在实际MySQL隔离级别下验证两个项目并发新建（含空项目及旧父编码）、计数、删除；记录请求、业务码、项目参数和落库证据。不以H2代替此项，也不将跨项目隔离等同于同项目所有写入竞态均已验证。
+5. 不改bin11cat旧编码、不改40条既有规则，不执行BIN-85恢复，不操作Hive/HDFS。部署/测试数据变更须沿用技术总负责人-Atlas确认的独立环境授权，本棒不授予新授权。
+
+版本规划管理工程师-Roadmap按实际提交和后续独立验收分别登记：代码候选、合入、部署、验收与正式发布。

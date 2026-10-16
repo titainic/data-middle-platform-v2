@@ -48,6 +48,8 @@ import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -76,9 +78,11 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
     @Override
     public Long createAttDataDevCat(AttDataDevCatSaveReqVO createReqVO) {
         normalizeAndValidate(createReqVO);
+        if (createReqVO.getParentId() == null) createReqVO.setParentId(0L);
+        String code = createCode(createReqVO.getProjectId(), createReqVO.getParentId(), null);
         checkDuplicate(createReqVO.getId(), createReqVO.getParentId(), createReqVO.getName(),createReqVO.getProjectId());
         AttDataDevCatDO dictType = BeanUtils.toBean(createReqVO, AttDataDevCatDO.class);
-        dictType.setCode(createCode(createReqVO.getParentId(), null));
+        dictType.setCode(code);
         attDataDevCatMapper.insert(dictType);
         return dictType.getId();
     }
@@ -98,6 +102,7 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
         int rows = attDataDevCatMapper.updateById(updateObj);
         if (Boolean.FALSE.equals(updateReqVO.getValidFlag())) {
             this.lambdaUpdate().eq(AttDataDevCatDO::getProjectId,existing.getProjectId()).likeRight(AttDataDevCatDO::getCode, existing.getCode())
+                    .apply("LEFT(code, CHAR_LENGTH({0}))={0}", existing.getCode())
                     .set(AttDataDevCatDO::getValidFlag, false).update();
         }
         return rows;
@@ -110,15 +115,17 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
             throw new ServiceException("att.error.cat.notfound", "类目不存在");
         }
         return dppEtlTaskService.getCountByCatCode(
-                category.getCode(), java.util.Collections.singletonList("3")) > 0;
+                category.getProjectId(), category.getCode(), java.util.Collections.singletonList("3")) > 0;
     }
 
     @Override
-    public boolean isNameUsed(Long id, Long parentId, String name) {
+    public boolean isNameUsed(Long projectId, Long id, Long parentId, String name) {
+        requireProject(projectId);
         if (StringUtils.isBlank(name)) {
             return false;
         }
         return this.lambdaQuery()
+                .eq(AttDataDevCatDO::getProjectId, projectId)
                 .eq(AttDataDevCatDO::getParentId, parentId)
                 .eq(AttDataDevCatDO::getName, name.trim())
                 .ne(id != null, AttDataDevCatDO::getId, id)
@@ -127,11 +134,12 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
 
     @Override
     public long getDataDevelopmentTaskCount(Long id) {
-        if (attDataDevCatMapper.selectById(id) == null) {
+        AttDataDevCatDO category = attDataDevCatMapper.selectById(id);
+        if (category == null) {
             throw new ServiceException("att.error.cat.notfound", "类目不存在");
         }
         return dppEtlTaskService.getCountByCatId(
-                id, java.util.Collections.singletonList("3"));
+                category.getProjectId(), id, java.util.Collections.singletonList("3"));
     }
 
     @Override
@@ -147,16 +155,33 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
 
     @Override
     public int removeAttDataDevCat(Collection<Long> idList) {
-        for (AttDataDevCatDO category : attDataDevCatMapper.selectBatchIds(idList)) {
-            long childCount = this.lambdaQuery().likeRight(AttDataDevCatDO::getCode, category.getCode())
+        List<AttDataDevCatDO> categories = attDataDevCatMapper.selectBatchIds(idList);
+        for (AttDataDevCatDO category : categories) {
+            requireProject(category.getProjectId());
+            if (StringUtils.isBlank(category.getCode())) {
+                throw new ServiceException("类目编码为空，请联系管理员核对后再删除");
+            }
+            long childCount = this.lambdaQuery().eq(AttDataDevCatDO::getProjectId, category.getProjectId())
+                    .and(q -> q.likeRight(AttDataDevCatDO::getCode, category.getCode())
+                            .apply("LEFT(code, CHAR_LENGTH({0}))={0}", category.getCode())
+                            .or().eq(AttDataDevCatDO::getParentId, category.getId()))
                     .ne(AttDataDevCatDO::getId, category.getId()).count();
-            long taskCount = dppEtlTaskService.getCountByCatCode(category.getCode(), java.util.Collections.singletonList("3"));
+            long taskCount = dppEtlTaskService.getCountByCatCode(category.getProjectId(), category.getCode(), java.util.Collections.singletonList("3"));
             if (childCount > 0 || taskCount > 0) {
                 throw new ServiceException("att.error.cat.delete.children.tasks",
                         "该类目包含" + childCount + "个子类目和" + taskCount + "个任务，不能直接删除。", childCount, taskCount);
             }
         }
-        return attDataDevCatMapper.deleteBatchIds(idList);
+        int rows = 0;
+        for (AttDataDevCatDO category : categories) {
+            rows += attDataDevCatMapper.delete(new LambdaQueryWrapper<AttDataDevCatDO>()
+                    .eq(AttDataDevCatDO::getProjectId, category.getProjectId()).eq(AttDataDevCatDO::getId, category.getId()));
+        }
+        return rows;
+    }
+
+    private void requireProject(Long projectId) {
+        if (projectId == null || projectId <= 0) throw new ServiceException("请明确类目所属项目");
     }
 
     private void normalizeAndValidate(AttDataDevCatSaveReqVO reqVO) {
@@ -171,9 +196,11 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
     }
 
     private void checkDuplicate(Long id, Long parentId, String name,Long projectId) {
-        long count = this.lambdaQuery().eq(AttDataDevCatDO::getProjectId,projectId).eq(AttDataDevCatDO::getParentId, parentId)
-                .eq(AttDataDevCatDO::getName, name).ne(id != null, AttDataDevCatDO::getId, id).count();
-        if (count > 0) {
+        var duplicates = attDataDevCatMapper.selectList(new LambdaQueryWrapper<AttDataDevCatDO>()
+                .select(AttDataDevCatDO::getId).eq(AttDataDevCatDO::getProjectId, projectId)
+                .eq(AttDataDevCatDO::getParentId, parentId).eq(AttDataDevCatDO::getName, name)
+                .ne(id != null, AttDataDevCatDO::getId, id).last("FOR UPDATE"));
+        if (!duplicates.isEmpty()) {
             throw new ServiceException("att.error.cat.name.duplicate", "当前上级类目下已存在同名类目，请修改。");
         }
     }
@@ -184,7 +211,7 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
             throw new ServiceException("att.error.cat.parent.cycle", "上级类目不能选择自身或其子级。");
         }
         AttDataDevCatDO parent = attDataDevCatMapper.selectById(parentId);
-        if (parent == null || (parent.getCode() != null && parent.getCode().startsWith(current.getCode()))) {
+        if (parent == null || !java.util.Objects.equals(parent.getProjectId(), current.getProjectId()) || (parent.getCode() != null && parent.getCode().startsWith(current.getCode()))) {
             throw new ServiceException("att.error.cat.parent.cycle", "上级类目不能选择自身或其子级。");
         }
     }
@@ -225,37 +252,46 @@ public class AttDataDevCatServiceImpl extends ServiceImpl<AttDataDevCatMapper, A
     }
 
     @Override
-    public String createCode(Long parentId, String parentCode) {
-        String categoryCode = null;
-        /*
-         * Three cases
-         * 1. No data in database, call YouBianCodeUtil.getNextYouBianCode(null);
-         * 2. Adding child node with no sibling elements: YouBianCodeUtil.getSubYouBianCode(parentCode, null);
-         * 3. Adding child node with sibling elements: YouBianCodeUtil.getNextYouBianCode(lastCode);
-         * */
-        // Find siblings to determine the last largest code value
-        LambdaQueryWrapper<AttDataDevCatDO> query = new LambdaQueryWrapper<AttDataDevCatDO>()
-                .eq(AttDataDevCatDO::getParentId, parentId)
-                .likeRight(StringUtils.isNotBlank(parentCode), AttDataDevCatDO::getCode, parentCode)
-                .isNotNull(AttDataDevCatDO::getCode)
-                .orderByDesc(AttDataDevCatDO::getCode).last("FOR UPDATE");
-        List<AttDataDevCatDO> list = baseMapper.selectList(query);
-        if (list == null || list.size() == 0) {
-            if (parentId == 0) {
-                // Case 1
-                categoryCode = YouBianCodeUtil.getNextYouBianCode(null);
-            } else {
-                // Case 2
-                AttDataDevCatDO parent = baseMapper.selectById(parentId);
-                categoryCode = YouBianCodeUtil.getSubYouBianCode(parent.getCode(), null);
-            }
-        } else {
-            // Case 3
-            categoryCode = YouBianCodeUtil.getNextYouBianCode(list.get(0).getCode());
+    public String createCode(Long projectId, Long parentId, String parentCode) {
+        if (projectId == null || projectId <= 0 || parentId == null || parentId < 0) {
+            throw new ServiceException("请明确类目所属项目和有效上级类目");
         }
-        return categoryCode;
+        if (attDataDevCatMapper.lockProjectForCode(projectId) == null) {
+            throw new ServiceException("类目所属项目不存在，请刷新后重试");
+        }
+        String prefix = "";
+        if (parentId != 0) {
+            AttDataDevCatDO parent = attDataDevCatMapper.selectOne(new LambdaQueryWrapper<AttDataDevCatDO>()
+                    .eq(AttDataDevCatDO::getId, parentId).eq(AttDataDevCatDO::getProjectId, projectId)
+                    .last("FOR UPDATE"));
+            if (parent == null || !Boolean.TRUE.equals(parent.getValidFlag())) {
+                throw new ServiceException("上级类目不存在、未启用或不属于当前项目");
+            }
+            prefix = parent.getCode();
+            if (StringUtils.isBlank(prefix)) {
+                throw new ServiceException("上级类目编码为空，无法生成子类目编码，请联系管理员核对");
+            }
+        }
+        if (StringUtils.isNotBlank(parentCode) && !parentCode.equals(prefix)) {
+            throw new ServiceException("上级类目编码不匹配，请刷新后重试");
+        }
+        int length = prefix.length() + YouBianCodeUtil.ZHANWEI_LENGTH;
+        if (length > 128) {
+            throw new ServiceException("类目编码长度已达上限，无法新增子类目");
+        }
+        var occupied = new HashSet<>(attDataDevCatMapper.selectOccupiedCodePrefixes(projectId, prefix, length));
+        // Only pass generated A01..Z99 segments to the common numeric incrementer.
+        // Historical parent codes (e.g. bin11cat) remain opaque and unchanged.
+        String segment = YouBianCodeUtil.getNextYouBianCode(null);
+        while (true) {
+            String candidate = prefix + segment;
+            if (!occupied.contains(candidate.toUpperCase(Locale.ROOT))) return candidate;
+            if ("Z99".equals(segment)) {
+                throw new ServiceException("当前上级类目编码已用尽，无法新增类目");
+            }
+            segment = YouBianCodeUtil.getNextYouBianCode(segment);
+        }
     }
-
 
     /**
      * Import Data Development Category Management data

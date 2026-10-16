@@ -142,6 +142,18 @@
             <artifactId>qdata-module-dp-api</artifactId>
             <version>${qdata.version}</version>
         </dependency>
+        <!-- Offline cross-module category isolation: real services/SQL, synthetic H2 storage. -->
+        <dependency>
+            <groupId>tech.qiantong</groupId>
+            <artifactId>qdata-module-att-biz</artifactId>
+            <version>${qdata.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

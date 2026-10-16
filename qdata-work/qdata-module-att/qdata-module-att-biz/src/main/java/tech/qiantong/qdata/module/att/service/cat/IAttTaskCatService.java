@@ -67,7 +67,7 @@ public interface IAttTaskCatService extends IService<AttTaskCatDO> {
     /**
      * Check whether a category name is already used under the same parent.
      */
-    boolean isNameUsed(Long id, Long parentId, String name);
+    boolean isNameUsed(Long projectId, Long id, Long parentId, String name);
 
     /**
      * Count data integration tasks directly associated with the category.

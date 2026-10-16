@@ -60,7 +60,10 @@ public interface DppEtlTaskMapper extends BaseMapperX<DppEtlTaskDO> {
 
         MPJLambdaWrapper<DppEtlTaskDO> lambdaWrapper = new MPJLambdaWrapper();
 
-        String leftJoin = TaskCatEnum.findEnumByType(reqVO.getType()) + " t2 on t.CAT_CODE = t2.CODE AND t2.DEL_FLAG = '0'";
+        TaskCatEnum categoryTable = TaskCatEnum.findEnumByType(reqVO.getType());
+        String projectJoin = categoryTable == TaskCatEnum.ATT_TASK_CAT || categoryTable == TaskCatEnum.ATT_DATA_DEV_CAT
+                ? " AND t.PROJECT_ID = t2.PROJECT_ID" : "";
+        String leftJoin = categoryTable + " t2 on t.CAT_CODE = t2.CODE AND t2.DEL_FLAG = '0'" + projectJoin;
 
         lambdaWrapper.selectAll(DppEtlTaskDO.class)
                 .select("t2.NAME AS catName",

@@ -113,6 +113,7 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
         int rows = attTaskCatMapper.updateById(updateObj);
         if (Boolean.FALSE.equals(updateReqVO.getValidFlag())) {
             this.lambdaUpdate().eq(AttTaskCatDO::getProjectId,existing.getProjectId()).likeRight(AttTaskCatDO::getCode, existing.getCode())
+                    .apply("LEFT(code, CHAR_LENGTH({0}))={0}", existing.getCode())
                     .set(AttTaskCatDO::getValidFlag, false).update();
         }
         return rows;
@@ -125,15 +126,17 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
             throw new ServiceException("att.error.cat.notfound", "类目不存在");
         }
         return dppEtlTaskService.getCountByCatCode(
-                category.getCode(), java.util.Collections.singletonList("1")) > 0;
+                category.getProjectId(), category.getCode(), java.util.Collections.singletonList("1")) > 0;
     }
 
     @Override
-    public boolean isNameUsed(Long id, Long parentId, String name) {
+    public boolean isNameUsed(Long projectId, Long id, Long parentId, String name) {
+        requireProject(projectId);
         if (StringUtils.isBlank(name)) {
             return false;
         }
         return this.lambdaQuery()
+                .eq(AttTaskCatDO::getProjectId, projectId)
                 .eq(AttTaskCatDO::getParentId, parentId)
                 .eq(AttTaskCatDO::getName, name.trim())
                 .ne(id != null, AttTaskCatDO::getId, id)
@@ -142,25 +145,43 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
 
     @Override
     public long getIntegrationTaskCount(Long id) {
-        if (attTaskCatMapper.selectById(id) == null) {
+        AttTaskCatDO category = attTaskCatMapper.selectById(id);
+        if (category == null) {
             throw new ServiceException("att.error.cat.notfound", "类目不存在");
         }
         return dppEtlTaskService.getCountByCatId(
-                id, java.util.Collections.singletonList("1"));
+                category.getProjectId(), id, java.util.Collections.singletonList("1"));
     }
 
     @Override
     public int removeAttTaskCat(Collection<Long> idList) {
-        for (AttTaskCatDO category : attTaskCatMapper.selectBatchIds(idList)) {
-            long childCount = this.lambdaQuery().likeRight(AttTaskCatDO::getCode, category.getCode())
+        List<AttTaskCatDO> categories = attTaskCatMapper.selectBatchIds(idList);
+        for (AttTaskCatDO category : categories) {
+            requireProject(category.getProjectId());
+            if (StringUtils.isBlank(category.getCode())) {
+                throw new ServiceException("类目编码为空，请联系管理员核对后再删除");
+            }
+            long childCount = this.lambdaQuery().eq(AttTaskCatDO::getProjectId, category.getProjectId())
+                    .and(q -> q.likeRight(AttTaskCatDO::getCode, category.getCode())
+                            .apply("LEFT(code, CHAR_LENGTH({0}))={0}", category.getCode())
+                            .or().eq(AttTaskCatDO::getParentId, category.getId()))
                     .ne(AttTaskCatDO::getId, category.getId()).count();
-            long taskCount = dppEtlTaskService.getCountByCatCode(category.getCode(), java.util.Collections.singletonList("1"));
+            long taskCount = dppEtlTaskService.getCountByCatCode(category.getProjectId(), category.getCode(), java.util.Collections.singletonList("1"));
             if (childCount > 0 || taskCount > 0) {
                 throw new ServiceException("att.error.cat.delete.children.tasks",
                         "该类目包含" + childCount + "个子类目和" + taskCount + "个任务，不能直接删除。", childCount, taskCount);
             }
         }
-        return attTaskCatMapper.deleteBatchIds(idList);
+        int rows = 0;
+        for (AttTaskCatDO category : categories) {
+            rows += attTaskCatMapper.delete(new LambdaQueryWrapper<AttTaskCatDO>()
+                    .eq(AttTaskCatDO::getProjectId, category.getProjectId()).eq(AttTaskCatDO::getId, category.getId()));
+        }
+        return rows;
+    }
+
+    private void requireProject(Long projectId) {
+        if (projectId == null || projectId <= 0) throw new ServiceException("请明确类目所属项目");
     }
 
     private void normalizeAndValidate(AttTaskCatSaveReqVO reqVO) {
@@ -191,7 +212,7 @@ public class AttTaskCatServiceImpl extends ServiceImpl<AttTaskCatMapper, AttTask
             throw new ServiceException("att.error.cat.parent.cycle", "上级类目不能选择自身或其子级。");
         }
         AttTaskCatDO parent = attTaskCatMapper.selectById(parentId);
-        if (parent == null || (parent.getCode() != null && parent.getCode().startsWith(current.getCode()))) {
+        if (parent == null || !java.util.Objects.equals(parent.getProjectId(), current.getProjectId()) || (parent.getCode() != null && parent.getCode().startsWith(current.getCode()))) {
             throw new ServiceException("att.error.cat.parent.cycle", "上级类目不能选择自身或其子级。");
         }
     }
