@@ -19,6 +19,7 @@
 <template>
   <div class="app-container">
     <CatPage
+      block-enabled-delete
       :list-func="listAttTagCat"
       :get-func="getAttTagCat"
       :del-func="delAttTagCat"

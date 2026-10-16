@@ -42,7 +42,7 @@
         type="danger"
         plain
         icon="Delete"
-        :disabled="!selection.rows.length"
+        :disabled="deleteSelectionDisabled"
         v-hasPermi="[`${permBase}:remove`]"
         @click="handleDeleteSelected"
       >
@@ -115,6 +115,7 @@ const props = defineProps({
   addFunc: { type: Function, required: true },
   updateFunc: { type: Function, required: true },
   batchDelCheckFunc: { type: Function, required: false },
+  blockEnabledDelete: { type: Boolean, default: false },
   nameLabel: { type: String, default: "Category Name" },
   titleBase: { type: String, default: "Category" },
   permBase: { type: String, required: true },
@@ -145,6 +146,9 @@ const isExpandAll = ref(false);
 const tableKey = ref(0);
 const tableRef = ref(null);
 const selection = reactive({ rows: [] });
+const deleteSelectionDisabled = computed(() =>
+  !selection.rows.length || (props.blockEnabledDelete && selection.rows.some(row => row.validFlag))
+);
 
 const treeOptions = ref([]);
 
@@ -371,6 +375,7 @@ function onDialogSubmit(payload) {
 function onDialogCancel() {}
 
 function handleDelete(row) {
+  if (props.blockEnabledDelete && row.validFlag) return;
   const id = row.id;
   const childCount = Array.isArray(row.children) ? row.children.length : 0;
   const confirmText = childCount > 0
@@ -383,6 +388,7 @@ function handleDelete(row) {
       return props.delFunc(id);
     })
     .then(() => {
+      selection.rows = [];
       handleQueryClick();
       proxy.$modal.msgSuccess(td('common.message.deleteSuccess'));
     })
@@ -390,7 +396,7 @@ function handleDelete(row) {
 }
 let loading = ref(false);
 function handleDeleteSelected() {
-  if (!selection.rows.length) return;
+  if (deleteSelectionDisabled.value) return;
   const ids = selection.rows.map((item) => item.id);
   if (props.batchDelCheckFunc) {
     loading.value = true;
@@ -433,9 +439,11 @@ function handleDeleteSelected() {
     )
       .then(() => props.delFunc(ids))
       .then(() => {
+        selection.rows = [];
         ElMessage.success(td('common.message.deleteSuccess'));
         tableRef.value.getList();
-      });
+      })
+      .catch(() => {});
   }
 }
 

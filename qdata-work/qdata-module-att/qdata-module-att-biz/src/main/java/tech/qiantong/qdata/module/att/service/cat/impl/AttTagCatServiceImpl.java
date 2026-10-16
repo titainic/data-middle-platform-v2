@@ -42,6 +42,9 @@ import tech.qiantong.qdata.mybatis.core.query.LambdaQueryWrapperX;
 
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -171,24 +174,46 @@ public class AttTagCatServiceImpl extends ServiceImpl<AttTagCatMapper,AttTagCatD
 
     @Override
     public Integer removeAttTagCat(Long id) {
-        int count = 0;
-        AttTagCatDO cat = attTagCatMapper.selectById(id);
-        // Check if data exists
-        if (attTagService.getCountByCatCode(cat.getCode()) > 0) {
-            throw new ServiceException("att.error.delete.tag", "Tag exists, deletion not allowed");
+        return removeAttTagCats(Collections.singletonList(id));
+    }
+
+    @Override
+    public Integer removeAttTagCats(List<Long> ids) {
+        if (ids == null || ids.isEmpty() || ids.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new ServiceException("att.error.tag.cat.ids", "请选择有效的标签类目ID");
         }
-        if (cat != null) {
-            count += attTagCatMapper.delete(Wrappers.lambdaQuery(AttTagCatDO.class)
-                    .likeRight(AttTagCatDO::getCode, cat.getCode()));
+        Set<Long> distinctIds = new LinkedHashSet<>(ids);
+        List<AttTagCatDO> selected = attTagCatMapper.selectBatchIds(distinctIds);
+        if (selected.size() != distinctIds.size()) {
+            throw new ServiceException("att.error.tag.cat.missing", "标签类目不存在或已删除，请刷新后重试");
+        }
+        // Keep the existing code-prefix subtree and reference semantics. Check every
+        // affected category first, so an enabled child cannot be deleted via its parent.
+        Set<Long> affectedIds = new LinkedHashSet<>();
+        for (AttTagCatDO cat : selected) {
+            if (StringUtils.isBlank(cat.getCode())) {
+                throw new ServiceException("att.error.tag.cat.code", "标签类目编码为空，无法安全删除");
+            }
+            List<AttTagCatDO> subtree = attTagCatMapper.selectList(Wrappers.lambdaQuery(AttTagCatDO.class)
+                    .likeRight(AttTagCatDO::getCode, cat.getCode()).orderByAsc(AttTagCatDO::getId).last("FOR UPDATE"));
+            if (subtree.stream().anyMatch(item -> Boolean.TRUE.equals(item.getValidFlag()))) {
+                throw new ServiceException("att.error.tag.cat.enabled", "所选标签类目或其子类目已启用，不允许删除");
+            }
+            if (attTagService.getCountByCatCode(cat.getCode()) > 0) {
+                throw new ServiceException("att.error.delete.tag", "Tag exists, deletion not allowed");
+            }
+            subtree.forEach(item -> affectedIds.add(item.getId()));
+        }
+        if (affectedIds.isEmpty()) {
+            throw new ServiceException("att.error.tag.cat.missing", "标签类目不存在或已删除，请刷新后重试");
+        }
+        int count = attTagCatMapper.deleteBatchIds(affectedIds);
+        if (count != affectedIds.size()) {
+            // The class transaction rolls back partial writes (including a concurrent change).
+            throw new ServiceException("att.error.tag.cat.changed", "标签类目已变更，本次删除已取消，请刷新后重试");
         }
         return count;
     }
-
-//    @Override
-//    public int removeAttTagCat(Collection<Long> idList) {
-//        // Batch delete Tag Category Management
-//        return attTagCatMapper.deleteBatchIds(idList);
-//    }
 
     @Override
     public AttTagCatDO getAttTagCatById(Long id) {

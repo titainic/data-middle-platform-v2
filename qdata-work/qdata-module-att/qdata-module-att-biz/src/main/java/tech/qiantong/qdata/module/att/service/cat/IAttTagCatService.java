@@ -60,13 +60,6 @@ public interface IAttTagCatService extends IService<AttTagCatDO> {
     int updateAttTagCat(AttTagCatSaveReqVO updateReqVO);
 
     /**
-     * Delete tag category management
-     *
-     * @param idList Tag category management ID
-     */
-//    int removeAttTagCat(Collection<Long> idList);
-
-    /**
      * Get tag category management details
      *
      * @param id Tag category management ID
@@ -123,5 +116,8 @@ public interface IAttTagCatService extends IService<AttTagCatDO> {
     void changeCodeByPid(Long pid, String parentCode);
 
     Integer removeAttTagCat(Long id);
+
+    /** Validate the entire batch before soft deleting any category subtree. */
+    Integer removeAttTagCats(List<Long> ids);
 
 }

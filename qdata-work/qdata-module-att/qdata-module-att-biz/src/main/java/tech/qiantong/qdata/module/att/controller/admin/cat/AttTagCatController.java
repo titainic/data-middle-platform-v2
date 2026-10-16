@@ -44,6 +44,8 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.ArrayList;
+import tech.qiantong.qdata.common.exception.ServiceException;
 
 /**
  * Tag Category Management Controller
@@ -120,21 +122,23 @@ public class AttTagCatController extends BaseController {
         return CommonResult.toAjax(attTagCatService.updateAttTagCat(attTagCat));
     }
 
-//    @Operation(summary = "Delete tag category")
-//    @PreAuthorize("@ss.hasPermi('att:tagCat:remove')")
-//    @Log(title = "log.op.title.att.tag.cat", businessType = BusinessType.DELETE)
-//    @DeleteMapping("/{ids}")
-//    public CommonResult<Integer> remove(@PathVariable Long[] ids) {
-//        return CommonResult.toAjax(attTagCatService.removeAttTagCat(Arrays.asList(ids)));
-//    }
-
-    // Delete
     @Operation(summary = "删除标签类目管理")
     @PreAuthorize("@ss.hasPermi('att:tagCat:remove')")
     @Log(title = "log.op.title.att.tag.cat", businessType = BusinessType.DELETE)
-    @DeleteMapping("/{ID}")
-    public CommonResult<Integer> remove(@PathVariable Long ID) {
-        return CommonResult.toAjax(attTagCatService.removeAttTagCat(ID));
+    @DeleteMapping("/{ids}")
+    public CommonResult<Integer> remove(@PathVariable("ids") String ids) {
+        List<Long> idList = new ArrayList<>();
+        for (String value : ids.split(",", -1)) {
+            try {
+                if (!value.matches("[0-9]+")) {
+                    throw new NumberFormatException();
+                }
+                idList.add(Long.valueOf(value));
+            } catch (NumberFormatException e) {
+                throw new ServiceException("att.error.tag.cat.ids", "请选择有效的标签类目ID");
+            }
+        }
+        return CommonResult.toAjax(attTagCatService.removeAttTagCats(idList));
     }
 
 }

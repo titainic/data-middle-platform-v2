@@ -54,9 +54,18 @@ export function updateAttTagCat(data) {
 }
 
 // Delete tag management category management
-export function delAttTagCat(id) {
+export function delAttTagCat(ids) {
+    const input = Array.isArray(ids) ? ids : [ids];
+    if (input.some(id => typeof id === 'number' && !Number.isSafeInteger(id))) {
+        return Promise.reject(new Error('请选择有效的标签类目ID'));
+    }
+    const values = [...new Set(input.map(String))];
+    if (!values.length || values.some(id => !/^[1-9]\d*$/.test(id) ||
+        BigInt(id) > 9223372036854775807n)) {
+        return Promise.reject(new Error('请选择有效的标签类目ID'));
+    }
     return request({
-        url: '/att/tagCat/' + id,
+        url: '/att/tagCat/' + values.join(','),
         method: 'delete'
     })
 }
