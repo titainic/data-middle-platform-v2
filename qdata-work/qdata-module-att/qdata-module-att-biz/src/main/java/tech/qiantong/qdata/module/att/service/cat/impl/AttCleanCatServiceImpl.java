@@ -19,11 +19,12 @@
 package tech.qiantong.qdata.module.att.service.cat.impl;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.Resource;
@@ -228,33 +229,39 @@ public class AttCleanCatServiceImpl  extends ServiceImpl<AttCleanCatMapper,AttCl
 
     @Override
     public String createCode(Long parentId, String parentCode) {
-        String categoryCode = null;
-        /*
-         * Three cases
-         * 1. No data in database, call YouBianCodeUtil.getNextYouBianCode(null);
-         * 2. Adding child node with no sibling elements: YouBianCodeUtil.getSubYouBianCode(parentCode, null);
-         * 3. Adding child node with sibling elements: YouBianCodeUtil.getNextYouBianCode(lastCode);
-         * */
-        // Find siblings to determine the last largest code value
-        LambdaQueryWrapper<AttCleanCatDO> query = new LambdaQueryWrapper<AttCleanCatDO>()
-                .eq(AttCleanCatDO::getParentId, parentId)
-                .likeRight(StringUtils.isNotBlank(parentCode), AttCleanCatDO::getCode, parentCode)
-                .isNotNull(AttCleanCatDO::getCode)
-                .orderByDesc(AttCleanCatDO::getCode);
-        List<AttCleanCatDO> list = baseMapper.selectList(query);
-        if (list == null || list.size() == 0) {
-            if (parentId == 0) {
-                // Case 1
-                categoryCode = YouBianCodeUtil.getNextYouBianCode(null);
-            } else {
-                // Case 2
-                AttCleanCatDO parent = baseMapper.selectById(parentId);
-                categoryCode = YouBianCodeUtil.getSubYouBianCode(parent.getCode(), null);
-            }
-        } else {
-            // Case 3
-            categoryCode = YouBianCodeUtil.getNextYouBianCode(list.get(0).getCode());
+        if (parentId == null || parentId < 0) {
+            throw new ServiceException("清洗类目父节点无效，请刷新类目树后重试");
         }
-        return categoryCode;
+        String prefix = "";
+        if (parentId != 0) {
+            AttCleanCatDO parent = attCleanCatMapper.selectById(parentId);
+            if (parent == null || !Boolean.TRUE.equals(parent.getValidFlag())) {
+                throw new ServiceException("清洗类目父节点不存在或未启用，请刷新类目树后重试");
+            }
+            prefix = parent.getCode();
+            if (prefix == null || !prefix.matches("(?:[A-Z](?:0[1-9]|[1-9][0-9]))+")) {
+                throw new ServiceException("清洗类目父节点编码异常，请联系管理员核对目录");
+            }
+        }
+        if (StringUtils.isNotBlank(parentCode) && !parentCode.equals(prefix)) {
+            throw new ServiceException("清洗类目父节点编码不匹配，请刷新类目树后重试");
+        }
+        int length = prefix.length() + YouBianCodeUtil.ZHANWEI_LENGTH;
+        if (length > 128) {
+            throw new ServiceException("清洗类目编码长度已达上限，无法分配隔离编码");
+        }
+        Set<String> occupied = new HashSet<>(attCleanCatMapper.selectOccupiedCodePrefixes(prefix, length));
+        String segment = YouBianCodeUtil.getNextYouBianCode(null);
+        // Search only this level's A01..Z99; the common utility adds a level after Z99.
+        while (true) {
+            String candidate = prefix + segment;
+            if (!occupied.contains(candidate)) {
+                return candidate;
+            }
+            if ("Z99".equals(segment)) {
+                throw new ServiceException("清洗类目本层编码已全部占用，无法分配不关联既有规则的隔离编码，请联系管理员");
+            }
+            segment = YouBianCodeUtil.getNextYouBianCode(segment);
+        }
     }
 }

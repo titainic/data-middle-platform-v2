@@ -19,9 +19,11 @@
 package tech.qiantong.qdata.module.att.dal.mapper.cat;
 
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import tech.qiantong.qdata.module.att.dal.dataobject.cat.AttCleanCatDO;
 import java.util.Arrays;
+import java.util.List;
 
 import tech.qiantong.qdata.common.core.page.PageResult;
 import java.util.HashSet;
@@ -55,6 +57,17 @@ public interface AttCleanCatMapper extends BaseMapperX<AttCleanCatDO> {
                 // Sort by createTime in descending order
                 .orderBy(reqVO.getOrderByColumn(), reqVO.getIsAsc(), allowedColumns));
     }
+
+    /**
+     * Reserve the next-level prefix of every stored path, including orphan descendants.
+     * This explicit SQL intentionally includes disabled and logically deleted history:
+     * allocating a new node must never silently inherit a historical rule branch.
+     */
+    @Select("SELECT DISTINCT UPPER(LEFT(code, #{length})) FROM ATT_CLEAN_CAT "
+            + "WHERE UPPER(code) LIKE CONCAT(#{parentCode}, '%') AND CHAR_LENGTH(code) >= #{length} "
+            + "UNION SELECT DISTINCT UPPER(LEFT(cat_code, #{length})) FROM ATT_CLEAN_RULE "
+            + "WHERE UPPER(cat_code) LIKE CONCAT(#{parentCode}, '%') AND CHAR_LENGTH(cat_code) >= #{length}")
+    List<String> selectOccupiedCodePrefixes(@Param("parentCode") String parentCode, @Param("length") int length);
 
     @Update(value = "update ATT_CLEAN_CAT set VALID_FLAG=#{validFlag} where code like concat(#{prefixCode}, '%')")
     int updateValidFlag(@Param("prefixCode") String prefixCode, @Param("validFlag") Boolean validFlag);

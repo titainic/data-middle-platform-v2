@@ -20,6 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import warnings
 from xml.sax.saxutils import escape
 
 
@@ -123,10 +124,16 @@ def checked_database_manifest(directory):
         raise InstallError("Initialization manifest table or seed policy is invalid")
     if any(type(count) is not int or count < 1 for count in seeds.values()):
         raise InstallError("Initialization seed counts must be positive integers")
+    requirements = manifest.get("cross_table_requirements", [])
+    for requirement in requirements:
+        if (requirement.get("source") not in tables or requirement.get("requires") not in tables
+                or requirement.get("severity") != "warning" or not requirement.get("message")):
+            raise InstallError("Invalid initialization cross-table requirement")
+    validate_seed_relationships(seeds, requirements)
     return manifest, tables
 
 
-def validate_seed_counts(rows, schema_tables, seed_rows):
+def validate_seed_counts(rows, schema_tables, seed_rows, requirements=()):
     if set(rows) != schema_tables:
         raise InstallError("Unable to verify every initial database table")
     for name in sorted(schema_tables):
@@ -137,6 +144,16 @@ def validate_seed_counts(rows, schema_tables, seed_rows):
             raise InstallError("Invalid initial row count for table: " + name) from error
         if actual != expected:
             raise InstallError(f"Initial data differs from clean policy: {name} has {actual} rows; expected {expected}")
+
+    validate_seed_relationships(rows, requirements)
+
+
+def validate_seed_relationships(rows, requirements):
+    for requirement in requirements:
+        source, required = requirement["source"], requirement["requires"]
+        if int(rows.get(source, 0)) > 0 and int(rows.get(required, 0)) == 0:
+            warnings.warn(f"Initialization category gap: {source}>0 but {required}=0. "
+                          + requirement["message"], UserWarning, stacklevel=2)
 
 
 def sql_literal(value):
@@ -473,7 +490,8 @@ class Mysql:
         statement = " UNION ALL ".join("SELECT " + sql_literal(name) + ", COUNT(*) FROM `" + name + "`"
                                        for name in sorted(schema_tables)) + ";"
         rows = dict(line.split("\t") for line in self.query(statement, database).splitlines())
-        validate_seed_counts(rows, schema_tables, manifest["fresh_seed_rows"])
+        validate_seed_counts(rows, schema_tables, manifest["fresh_seed_rows"],
+                             manifest.get("cross_table_requirements", []))
         administrator = self.query("SELECT COUNT(*) FROM system_user WHERE user_id=1 AND user_name='admin' "
                                    "AND status='0' AND del_flag='0' AND CHAR_LENGTH(password)=60 "
                                    "AND password REGEXP '^[$]2[aby][$][0-9]{2}[$]';", database)

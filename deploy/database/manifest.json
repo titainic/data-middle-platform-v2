@@ -73,5 +73,13 @@
     "rep_demo_gongsi",
     "rep_demo_jianpiao",
     "rep_demo_xiaoshou"
+  ],
+  "cross_table_requirements": [
+    {
+      "source": "att_clean_rule",
+      "requires": "att_clean_cat",
+      "severity": "warning",
+      "message": "Built-in cleaning rules have no category catalog. Category names and hierarchy are not restored; recover a trusted catalog separately. New categories must not inherit existing rule prefixes."
+    }
   ]
 }
