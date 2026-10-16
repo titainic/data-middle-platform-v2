@@ -313,10 +313,10 @@
 
     <!-- User import dialog -->
     <el-dialog :title="upload.title" v-model="upload.open" width="800px" :append-to="$refs['app-container']" draggable
-      destroy-on-close>
-      <el-upload ref="uploadRef" :limit="1" accept=".xlsx, .xls" :headers="upload.headers"
-        :action="upload.url + '?updateSupport=' + upload.updateSupport" :disabled="upload.isUploading"
-        :on-progress="handleFileUploadProgress" :on-success="handleFileSuccess" :auto-upload="false" drag>
+      destroy-on-close @close="resetImport">
+      <el-upload ref="uploadRef" v-model:file-list="importFiles" :limit="1" accept=".xlsx, .xls" :headers="upload.headers"
+        :action="upload.url + '?updateSupport=' + upload.updateSupport" :disabled="importLoading"
+        :on-progress="handleFileUploadProgress" :on-success="handleFileSuccess" :on-error="handleFileError" :auto-upload="false" drag>
         <el-icon class="el-icon--upload">
           <upload-filled />
         </el-icon>
@@ -324,7 +324,7 @@
         <template #tip>
           <div class="el-upload__tip text-center">
             <div class="el-upload__tip">
-              <el-checkbox v-model="upload.updateSupport" />
+              <el-checkbox v-model="upload.updateSupport" :disabled="importLoading" />
               {{ td('sys.system.user.updateExistingData') }}
             </div>
             <span>{{ td('sys.system.user.importTip') }}</span>
@@ -358,12 +358,12 @@ import {
   deptTreeSelect,
 } from "@/api/system/system/user.js";
 import { computed, nextTick, onActivated, onMounted } from "vue"
+import useImportUpload from "@/composables/useImportUpload";
 import useDefaultLang from "@/composables/useDefaultLang";
 const { td } = useDefaultLang();
 const router = useRouter();
 const { proxy } = getCurrentInstance();
 const submitLoading = ref(false);
-const importLoading = ref(false);
 const { sys_normal_disable, sys_user_sex } = proxy.useDict(
   "sys_normal_disable",
   "sys_user_sex"
@@ -525,6 +525,16 @@ const upload = reactive({
   headers: { Authorization: "Bearer " + getToken() },
   // Upload address
   url: import.meta.env.VITE_APP_BASE_API + "/system/user/importData",
+});
+const {
+  importLoading, importFiles, resetImport, submitFileForm,
+  handleFileUploadProgress, handleFileSuccess, handleFileError,
+} = useImportUpload({
+  upload,
+  getUploadRef: () => proxy.$refs.uploadRef,
+  onEmpty: () => proxy.$modal.msgWarning(td('common.upload.selectFile', '请选择文件')),
+  onError: message => proxy.$modal.msgError(message || td('common.upload.importFailed', '导入失败，请检查文件后重试')),
+  onSuccess: response => handleImportSuccess(response),
 });
 // Show hidden information
 const columns = ref([
@@ -754,6 +764,7 @@ function handleSelectionChange(selection) {
 
 /** Import button actions */
 function handleImport() {
+  resetImport();
   upload.title = td('sys.system.user.userImport');
   upload.open = true;
 }
@@ -767,17 +778,9 @@ function importTemplate() {
   );
 }
 
-/**File upload is being processed */
-const handleFileUploadProgress = (event, file, fileList) => {
-  upload.isUploading = true;
-};
-
 /** File upload successfully processed */
-const handleFileSuccess = (response, file, fileList) => {
+const handleImportSuccess = (response) => {
   upload.open = false;
-  upload.isUploading = false;
-  importLoading.value = false;
-  proxy.$refs["uploadRef"].handleRemove(file);
   proxy.$alert(
     "<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" +
     response.msg +
@@ -787,13 +790,6 @@ const handleFileSuccess = (response, file, fileList) => {
   );
   getList();
 };
-
-/** Submit upload file */
-function submitFileForm() {
-  if (importLoading.value) return;
-  importLoading.value = true;
-  proxy.$refs["uploadRef"].submit();
-}
 
 /** Reset action form */
 function reset() {

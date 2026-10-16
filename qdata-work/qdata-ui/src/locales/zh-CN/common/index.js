@@ -187,6 +187,7 @@ export default {
   noHistory: '暂无历史记录',
   noPermission: '暂无权限',
   upload: {
+    importFailed: '导入失败，请检查文件后重试',
     dragOrClick: '将文件拖到此处，或点击上传',
     updateExistingData: '是否更新已经存在的数据',
     fileFormat: '仅允许导入xls、xlsx格式文件。',

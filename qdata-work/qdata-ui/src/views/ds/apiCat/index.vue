@@ -262,16 +262,16 @@
 
         <!-- User import dialog -->
         <el-dialog :title="upload.title" v-model="upload.open" width="800px" :append-to="$refs['app-container']"
-            draggable destroy-on-close>
-            <el-upload ref="uploadRef" :limit="1" accept=".xlsx, .xls" :headers="upload.headers"
-                :action="upload.url + '?updateSupport=' + upload.updateSupport" :disabled="upload.isUploading"
-                :on-progress="handleFileUploadProgress" :on-success="handleFileSuccess" :auto-upload="false" drag>
+            draggable destroy-on-close @close="resetImport">
+            <el-upload ref="uploadRef" v-model:file-list="importFiles" :limit="1" accept=".xlsx, .xls" :headers="upload.headers"
+                :action="upload.url + '?updateSupport=' + upload.updateSupport" :disabled="importLoading"
+                :on-progress="handleFileUploadProgress" :on-success="handleFileSuccess" :on-error="handleFileError" :auto-upload="false" drag>
                 <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                 <div class="el-upload__text" v-html="td('common.upload.dragOrClick')"></div>
                 <template #tip>
                     <div class="el-upload__tip text-center">
                             <div class="el-upload__tip">
-                                <el-checkbox v-model="upload.updateSupport" />{{td('ds.apiCat.importTip')}}
+                                <el-checkbox v-model="upload.updateSupport" :disabled="importLoading" />{{td('ds.apiCat.importTip')}}
                             </div>
                             <span>{{td('ds.apiCat.uploadFormat')}}</span>
                         <el-link type="primary" :underline="false" style="font-size: 12px; vertical-align: baseline"
@@ -282,7 +282,7 @@
             <template #footer>
                 <div class="dialog-footer">
                     <el-button @click="upload.open = false">{{ td('common.button.cancel') }}</el-button>
-                    <el-button type="primary" :loading="submitLoading" @click="submitFileForm">{{ td('common.button.confirm') }}</el-button>
+                    <el-button type="primary" :loading="importLoading" @click="submitFileForm">{{ td('common.button.confirm') }}</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -298,6 +298,7 @@ import {
     updateAttApiCat
 } from '@/api/ds/apiCat/apiCat';
 import { getToken } from '@/utils/auth.js';
+import useImportUpload from "@/composables/useImportUpload";
 import useDefaultLang from "@/composables/useDefaultLang";
 
 const { td } = useDefaultLang();
@@ -353,6 +354,16 @@ const upload = reactive({
     headers: { Authorization: 'Bearer ' + getToken() },
     // Upload address
     url: import.meta.env.VITE_APP_BASE_API + '/att/AttApiCat/importData'
+});
+const {
+  importLoading, importFiles, resetImport, submitFileForm,
+  handleFileUploadProgress, handleFileSuccess, handleFileError,
+} = useImportUpload({
+  upload,
+  getUploadRef: () => proxy.$refs.uploadRef,
+  onEmpty: () => proxy.$modal.msgWarning(td('common.upload.selectFile', '请选择文件')),
+  onError: message => proxy.$modal.msgError(message || td('common.upload.importFailed', '导入失败，请检查文件后重试')),
+  onSuccess: response => handleImportSuccess(response),
 });
 
 const data = reactive({
@@ -564,6 +575,7 @@ function handleExport() {
 /** ---------------- Import related operations ------------------**/
 /** Import button actions */
 function handleImport() {
+  resetImport();
     upload.title = td('ds.apiCat.importTitle');
     upload.open = true;
 }
@@ -577,24 +589,9 @@ function importTemplate() {
     );
 }
 
-/** Submit upload file */
-function submitFileForm() {
-    if (submitLoading.value) return;
-    submitLoading.value = true;
-    proxy.$refs['uploadRef'].submit();
-}
-
-/**File upload is being processed */
-const handleFileUploadProgress = (event, file, fileList) => {
-    upload.isUploading = true;
-};
-
 /** File upload successfully processed */
-const handleFileSuccess = (response, file, fileList) => {
+const handleImportSuccess = (response) => {
     upload.open = false;
-    upload.isUploading = false;
-    submitLoading.value = false;
-    proxy.$refs['uploadRef'].handleRemove(file);
     proxy.$alert(
         "<div style='overflow: auto;overflow-x: hidden;max-height: 70vh;padding: 10px 20px 0;'>" +
         response.msg +

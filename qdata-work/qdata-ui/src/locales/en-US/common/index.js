@@ -170,6 +170,7 @@ export default {
   noHistory: 'No history',
   noPermission: 'No permission',
   upload: {
+    importFailed: 'Import failed. Check the file and try again.',
     dragOrClick: 'Drag file here, or click to upload',
     updateExistingData: 'Update existing data',
     fileFormat: 'Only xls, xlsx format files are allowed.',
