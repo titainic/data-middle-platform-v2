@@ -832,11 +832,15 @@ onBeforeUnmount(() => {
 // Get the current instance
 const instance = getCurrentInstance();
 
+function handleSidebarStatus() {
+  window.addEventListener("resize", chartIntancesResize);
+}
+
 // Remove event listener when component is destroyed
 onBeforeUnmount(() => {
   instance.appContext.config.globalProperties.$bus.off(
     "getsidebarStatus",
-    callback
+    handleSidebarStatus
   );
 });
 
@@ -845,9 +849,7 @@ onMounted(() => {
   getxljtcont();
   instance.appContext.config.globalProperties.$bus.on(
     "getsidebarStatus",
-    () => {
-      window.addEventListener("resize", chartIntancesResize);
-    }
+    handleSidebarStatus
   );
 });
 </script>
