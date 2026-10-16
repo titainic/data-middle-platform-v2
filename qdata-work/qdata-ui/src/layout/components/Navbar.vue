@@ -444,7 +444,20 @@ const showProjectSelector = computed(() => width.value >= 1200 && isFlag.value);
 const open = ref(false);
 const title = ref(null);
 const form = ref({});
-const { projectOptions, projectOptionsLoading, refreshProjectOptions } = useProjectOptions(userStore, permissionStore);
+// Both project selection and the initial/options refresh share one menu commit guard.
+let dppMenuRevision = 0;
+const isDppPath = path => /^\/(?:redirect\/)?dpp(?:\/|$)/.test(path || "");
+watch(() => userStore.projectId, () => { dppMenuRevision++; }, { flush: "sync" });
+watch(() => route.path, path => {
+  if (!isDppPath(path)) dppMenuRevision++;
+}, { flush: "sync" });
+watch(() => isDppPath(route.path) && isFlag.value, (active, previous) => {
+  if (active && !previous && userStore.projectId) refreshDppMenus();
+}, { flush: "post" });
+onBeforeUnmount(() => { dppMenuRevision++; });
+const { projectOptions, projectOptionsLoading, refreshProjectOptions } = useProjectOptions(
+  userStore, permissionStore, beginDppMenuUpdate
+);
 
 const tableData = ref([{ projectId: null, duration: null }]);
 
@@ -480,11 +493,9 @@ function offFromWork() {
 }
 
 function getRouter(data) {
-  if (data.includes("/dpp")) {
-    isFlag.value = true;
-  } else {
-    isFlag.value = false;
-  }
+  isFlag.value = isDppPath(data);
+  // TopNav emits selection before the new route finishes navigating.
+  if (!isFlag.value) dppMenuRevision++;
 }
 
 /** submit button */
@@ -612,82 +623,70 @@ function reportingForWork() {
   router.push({ path: "/project/report" });
 }
 
-function projectIdChange(row, newValue) {
-  // Get project code from projectOptions
-  const project = projectOptions.value.find(
-    (item) => item.id === userStore.projectId
-  );
-  if (project) {
-    userStore.projectCode = project.code;
+function menuQuery(value) {
+  try {
+    const query = typeof value === "string" ? JSON.parse(value) : value;
+    return query && typeof query === "object" && !Array.isArray(query) ? query : {};
+  } catch {
+    return {};
   }
+}
+
+function dppMenuPages(menu, parent = "") {
+  if (!menu) return [];
+  const path = menu.path.startsWith("/") ? menu.path : `${parent}/${menu.path}`;
+  if (menu.children?.length) return menu.children.flatMap(child => dppMenuPages(child, path));
+  return [{ ...menu, path, query: menuQuery(menu.query) }];
+}
+
+function beginDppMenuUpdate() {
+  const requestedProjectId = userStore.projectId;
+  const revision = ++dppMenuRevision;
+  const startedInDpp = isDppPath(route.path) && isFlag.value;
+  const isCurrent = () => startedInDpp && revision === dppMenuRevision &&
+    String(requestedProjectId) === String(userStore.projectId) &&
+    isDppPath(route.path) && isFlag.value;
+  return async (routes, resetPage = true) => {
+    if (!isCurrent()) return;
+    if (!Array.isArray(routes)) throw new Error("Invalid project routes");
+    permissionStore.updateTopbarRoutes(routes);
+    const menu = routers.value.find(menu => menu.path === "/dpp");
+    // Rebuild the sidebar from the same updated topbar tree, only in DPP.
+    if (!menu?.children?.length) {
+      permissionStore.setSidebarRouters([]);
+      appStore.toggleSideBarHide(true);
+      return;
+    }
+    proxy.$refs.topNavRef?.handleSelect("/dpp", null, false);
+    if (!resetPage) return;
+    const pages = dppMenuPages(menu);
+    const currentPath = route.path.replace(/^\/redirect(?=\/dpp(?:\/|$))/, "");
+    if (!pages.length || pages.some(page => page.path === currentPath)) return;
+    const target = pages.find(page => !page.hidden);
+    if (!target) return;
+    const previousFullPath = route.fullPath;
+    await proxy.$tab.closeAllPage();
+    // Tab/cache work yields: a later user navigation must still win.
+    if (!isCurrent() || route.fullPath !== previousFullPath) return;
+    return router.replace({ path: target.path, query: target.query });
+  };
+}
+
+function refreshDppMenus(resetPage = true) {
+  const commitRoutes = beginDppMenuUpdate();
+  return getRoutersDpp(userStore.projectId)
+    .then(res => commitRoutes(res.data, resetPage))
+    .catch(error => { console.error("Failed to refresh project menus", error?.message); });
+}
+
+function projectIdChange(row, newValue) {
+  const project = projectOptions.value.find(
+    (item) => String(item.id) === String(userStore.projectId)
+  );
+  if (project) userStore.projectCode = project.code;
   if (userStore.projectId) {
     localStorage.setItem("qdataProjectId", userStore.projectId);
-    const requestedProjectId = userStore.projectId;
-    getRoutersDpp(requestedProjectId).then((res) => {
-      if (String(requestedProjectId) !== String(userStore.projectId)) return;
-      // Update routing data in the store
-      permissionStore.updateTopbarRoutes(res.data);
-      let topMenus = [];
-      routers.value.map((menu) => {
-        if (menu.path === "/dpp") {
-          topMenus = menu;
-        }
-      });
-      const currentPath = router.currentRoute.value.path.split("/"); // Get the current routing address
-      const menuPaths = topMenus.children.flatMap((child) =>
-        child.children
-          ? child.children.map((subChild) => subChild.path)
-          : child.path
-      ); // Get the path in the menu permissions. If there are sub-nodes, get the path of the sub-nodes.
-      console.log("---------currentPath-------------", currentPath);
-      console.log("---------menuPaths-------------", menuPaths);
-
-      if (!menuPaths.includes(currentPath[currentPath.length - 1])) {
-        //Clear tab
-        proxy.$tab.closeAllPage();
-        console.log("1");
-        // If it does not exist, jump to the first menu
-        if (
-          topMenus.children[0].children &&
-          topMenus.children[0].children.length > 0
-        ) {
-          console.log("11");
-
-          const lastChild = JSON.parse(
-            JSON.stringify(topMenus.children[0].children[0])
-          );
-          const fullPath = `${topMenus.path}/${topMenus.children[0].path}/${lastChild.path}`;
-          lastChild.path = fullPath;
-          proxy.$tab.refreshPage(lastChild);
-        } else if (topMenus.query != null) {
-          console.log("12");
-          const lastChild = JSON.parse(JSON.stringify(topMenus));
-          const query = JSON.parse(topMenus.query);
-          lastChild.query = query;
-          proxy.$tab.refreshPage(lastChild);
-        } else {
-          console.log("13");
-          proxy.$tab.refreshPage(topMenus.children[0]);
-        }
-      } else {
-        // If the current routing address exists in the menu permissions, refresh the page
-        console.log("2");
-
-        const currentPageData = {
-          path: router.currentRoute.value.path,
-          query: router.currentRoute.value.query,
-          params: router.currentRoute.value.params,
-          fullPath: router.currentRoute.value.fullPath,
-          meta: router.currentRoute.value.meta,
-        };
-        console.log(currentPageData, "123123");
-        if (currentPageData.path !== currentPath.join("/")) {
-          proxy.$tab.refreshPage(currentPageData);
-        }
-      }
-      // Refresh current page
-      proxy.$refs["topNavRef"].handleSelect("/dpp", null, false);
-    });
+    return refreshDppMenus(true);
   }
 }
 
