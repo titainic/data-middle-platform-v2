@@ -253,6 +253,7 @@ function convertAssetToTask(asset) {
   return [
     {
       datasourceId: asset.datasourceId,
+      databaseName: asset.databaseName,
       name: asset.tableComment,
       datasourceType: asset.datasourceType,
       tableName: asset.tableName,
@@ -425,7 +426,9 @@ async function selectInspectionRule() {
         const res = await getColumnByAssetId({
           withRule: 1,
           id: item.datasourceId,
-          tableName: item.tableName,
+          tableName: String(item.datasourceType).toLowerCase() === "hive" && item.databaseName && !item.tableName.includes(".")
+            ? `${item.databaseName}.${item.tableName}`
+            : item.tableName,
         });
 
         if (res?.data?.length) {

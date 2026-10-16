@@ -241,6 +241,7 @@ export default {
   },
   // Asset details
   asset: {
+    previewFailed: '预览加载失败，当前结果未更新，请重试',
     dataType: '数据类型',
     dataTag: '数据标签',
     contactNumber: '联系方式',
@@ -679,6 +680,7 @@ export default {
     },
   },
   column: {
+    bindTermUnavailable: '当前版本暂不支持字段绑定术语',
     chineseName: '中文名称',
     englishName: '英文名称',
     fieldType: '字段类型',

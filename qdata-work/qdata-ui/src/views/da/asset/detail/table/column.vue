@@ -69,9 +69,13 @@
           v-hasPermi="['da:assetColumn:edit']"
           >{{ td('common.button.update') }}</el-button
         >
-        <el-button link type="primary" icon="Pointer" :disabled="!row.writeCapabilities?.edit" @click="openBindTerm(row)">
-          {{ td('dpp.column.bindTerm', 'Bind Term') }}
-        </el-button>
+        <el-tooltip :content="td('dpp.column.bindTermUnavailable')" placement="top">
+          <span>
+            <el-button link type="primary" icon="Pointer" disabled>
+              {{ td('dpp.column.bindTerm', 'Bind Term') }}
+            </el-button>
+          </span>
+        </el-tooltip>
       </template>
     </qt-table>
   </qt-wrap>
@@ -897,30 +901,6 @@ function getCodeTableList() {
       item.id = item.id.toString();
     });
   });
-}
-
-function openBindTerm(row) {
-  if (!row.writeCapabilities?.edit) return;
-  proxy.$modal.msgWarning(td('common.message.msgOpFailed', 'Operation failed'));
-
-  // currentColumnId.value = row.id;
-  // Promise.all([getDaAssetColumn(row.id), getTermList()]).then(([detailRes]) => {
-  //   const detail = detailRes?.data || {};
-  //   let termId = ""; // Use a single value for single selection
-  //
-  //   if (Array.isArray(detail.termIds)) {
-  //     termId = detail.termIds[0] || ""; // Take the first one
-  //   } else if (typeof detail.termIds === "string") {
-  //     termId = detail.termIds.split(",")[0] || "";
-  //   } else if (Array.isArray(row.termIds)) {
-  //     termId = row.termIds[0] || "";
-  //   } else if (typeof row.termIds === "string") {
-  //     termId = row.termIds.split(",")[0] || "";
-  //   }
-  //
-  //   termForm.termIds = termId; // Directly assign a single value
-  //   termDialogVisible.value = true;
-  // });
 }
 
 function getTermList() {

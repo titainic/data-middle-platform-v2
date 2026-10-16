@@ -28,13 +28,13 @@
     />
   </el-form-item>
   <el-form-item
-      :label="td('dpp.asset.add.api.developerName')"
+      :label="td('dpp.asset.add.api.developer')"
       prop="daAssetApi.developerName"
-      :rules="[{ required: true, message: td('dpp.asset.add.api.developerNameRequired'), trigger: 'blur' }]"
+      :rules="[{ required: true, message: td('dpp.asset.add.api.developerRequired'), trigger: 'blur' }]"
   >
     <el-input
         v-model="localForm.daAssetApi.developerName"
-        :placeholder="td('dpp.asset.add.api.developerNamePlaceholder')"
+        :placeholder="td('dpp.asset.add.api.developerPlaceholder')"
     />
   </el-form-item>
 
@@ -46,13 +46,13 @@
     <el-input v-model="localForm.daAssetApi.url" :placeholder="td('dpp.asset.add.api.serviceUrlPlaceholder')" />
   </el-form-item>
   <el-form-item
-      :label="td('dpp.asset.add.api.httpMethod')"
+      :label="td('dpp.asset.add.api.requestType')"
       prop="daAssetApi.httpMethod"
-      :rules="[{ required: true, message: td('dpp.asset.add.api.httpMethodRequired'), trigger: 'blur' }]"
+      :rules="[{ required: true, message: td('dpp.asset.add.api.requestTypeRequired'), trigger: 'blur' }]"
   >
     <el-select
         v-model="localForm.daAssetApi.httpMethod"
-        :placeholder="td('dpp.asset.add.api.httpMethodPlaceholder')"
+        :placeholder="td('dpp.asset.add.api.requestTypePlaceholder')"
     >
       <el-option
           v-for="dict in da_asset_api_method"

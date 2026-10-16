@@ -218,6 +218,7 @@ export default {
     }
   },
   asset: {
+    previewFailed: 'プレビューに失敗しました。結果は更新されていません。再試行してください',
     dataType: 'データタイプ',
     dataTag: 'データタグ',
     contactNumber: '連絡先',
@@ -656,6 +657,7 @@ export default {
     },
   },
   column: {
+    bindTermUnavailable: 'このバージョンはフィールドへの用語の紐付けに対応していません',
     chineseName: '中国語名',
     englishName: '英語名',
     fieldType: 'フィールドタイプ',

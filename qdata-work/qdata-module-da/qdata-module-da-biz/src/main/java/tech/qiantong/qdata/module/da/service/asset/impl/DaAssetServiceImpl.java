@@ -1554,23 +1554,33 @@ public class DaAssetServiceImpl extends ServiceImpl<DaAssetMapper, DaAssetDO> im
     public AjaxResult startDaAssetDatasourceTask(Long id) {
         if (id != null) {
             DaAssetRespVO daAssetById = this.getDaAssetById(id);
-            if (StringUtils.equals("1", daAssetById.getType())) {
-                // For special handling, fill in logic here
+            if (daAssetById == null) {
+                throw new ServiceException("da.error.asset.notfound", "Asset information was not found; refresh and try again");
             }
-
+            if (!StringUtils.equals("1", daAssetById.getType())) {
+                throw new ServiceException("da.error.asset.refresh.unsupported", "Only database table assets support statistics refresh");
+            }
+            if (daAssetById.getDatasourceId() == null || daAssetById.getDatasourceId() <= 0) {
+                throw new ServiceException("da.error.datasource.notfound", "Data source information was not found; refresh and try again");
+            }
             DaDatasourceDO daDatasourceById = iDaDatasourceService.getDaDatasourceById(daAssetById.getDatasourceId());
+            if (daDatasourceById == null) {
+                throw new ServiceException("da.error.datasource.notfound", "Data source information was not found; refresh and try again");
+            }
             DbQueryProperty dbQueryProperty = new DbQueryProperty(daDatasourceById.getDatasourceType(), daDatasourceById.getIp(), daDatasourceById.getPort(), daDatasourceById.getDatasourceConfig());
             if (!isCountSupported(dbQueryProperty.getDbType())) {
                 throw new DataQueryException("db.error.datasource.type.unsupported", "This datasource type is currently not supported, please contact the administrator!");
             }
 
             DbQuery dbQuery = dataSourceFactory.createDbQuery(dbQueryProperty);
-            if (!dbQuery.valid()) {
-                throw new DataQueryException("db.error.connection.fail", "Database connection failed");
+            try {
+                if (!dbQuery.valid()) {
+                    throw new DataQueryException("db.error.connection.fail", "Database connection failed");
+                }
+                updateAssetFieldAndDataCount(dbQuery, dbQueryProperty, daAssetById);
+            } finally {
+                dbQuery.close();
             }
-
-            updateAssetFieldAndDataCount(dbQuery, dbQueryProperty, daAssetById);
-            dbQuery.close();
 
         } else {
             DaAssetPageReqVO daAsset = new DaAssetPageReqVO();

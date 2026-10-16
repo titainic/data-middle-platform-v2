@@ -425,7 +425,7 @@
                               </el-text>
                             </el-dropdown-item>
                             <el-dropdown-item
-                              v-if="unregistered(item) && item.type != 1 && item.writeCapabilities?.edit"
+                              v-if="unregistered(item) && item.type == 1 && item.writeCapabilities?.edit && item.readCapabilities?.query"
                             >
                               <el-text
                                 type="primary"
@@ -959,7 +959,7 @@ function addAttTagData(row) {
   tagMultiple.value = true;
 }
 function handleRefresh(row) {
-  if (!row.writeCapabilities?.edit) return;
+  if (String(row.type) !== "1" || !row.writeCapabilities?.edit || !row.readCapabilities?.query) return;
   const _id = row.id;
   loading.value = true;
   startDaDiscoveryTask({ id: _id })

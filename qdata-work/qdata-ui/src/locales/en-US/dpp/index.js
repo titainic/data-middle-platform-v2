@@ -219,6 +219,7 @@ export default {
     }
   },
   asset: {
+    previewFailed: 'Preview failed. Results have not been updated; please retry.',
     dataType: 'Data Type',
     dataTag: 'Data Tags',
     contactNumber: 'Contact Info',
@@ -657,6 +658,7 @@ export default {
     },
   },
   column: {
+    bindTermUnavailable: 'Field term binding is not available in this version',
     chineseName: 'Chinese Name',
     englishName: 'English Name',
     fieldType: 'Field Type',

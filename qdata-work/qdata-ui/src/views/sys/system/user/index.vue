@@ -541,7 +541,7 @@ const {
 const columns = ref([
   { key: 0, label: td('sys.system.user.columnVisibility.userNo'), visible: true },
   { key: 1, label: td('sys.system.user.columnVisibility.userName'), visible: true },
-  { key: 2, label: td('sys.system.user.columnVisibility.userName'), visible: true },
+  { key: 2, label: td('sys.system.user.userNickName'), visible: true },
   { key: 3, label: td('sys.system.user.columnVisibility.dept'), visible: true },
   { key: 4, label: td('sys.system.user.columnVisibility.phone'), visible: true },
   { key: 5, label: td('common.display.status'), visible: true },

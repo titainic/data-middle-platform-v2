@@ -172,7 +172,8 @@
       </el-form>
     </div>
   </div>
-  <qt-table v-bind="tableStore" ref="tableRef">
+  <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" class="mb10" />
+  <qt-table :key="route.query.id" v-bind="tableStore" ref="tableRef">
     <template #cellText="{ row, column_data }">
       {{ row?.[column_data?.prop] ?? "-" }}
     </template>
@@ -223,6 +224,7 @@ const props = defineProps({
   },
 });
 let tableRef = ref(null);
+const previewError = ref("");
 const route = useRoute();
 let assetId = route.query.id || 1;
 const { proxy } = getCurrentInstance();
@@ -240,7 +242,9 @@ watch(
   (newId) => {
     if (route.path == "/da/asset/detail") {
       assetId = newId || 1;
-      tableRef.value?.getList();
+      tableColumns.value = [];
+      previewError.value = "";
+      // The keyed table starts a fresh request and cannot retain another asset's rows.
     }
   },
   { immediate: true }
@@ -366,6 +370,12 @@ const tableStore = reactive({
     };
     return preview(payload)
       .then((response) => {
+        if (payload.id !== assetId) {
+          const error = new Error("Asset changed during preview");
+          error.isStalePreview = true;
+          throw error;
+        }
+        previewError.value = "";
         tableColumns.value = response.data.columns || [];
         const dynamicCols = (response.data.columns || []).map((c) => ({
           label: `${c.en || "-"}（${c.cn || "-"})`,
@@ -394,15 +404,18 @@ const tableStore = reactive({
           },
         };
       })
-      .catch(() => {
+      .catch((error) => {
+        if (!error?.isRepeatSubmit && !error?.isStalePreview) {
+          previewError.value = td("dpp.asset.previewFailed");
+        }
+        // QtTable keeps the last successful rows/total when the request rejects.
+        throw error;
+      })
+      .finally(() => {
         loading.value = false;
-        return { data: { rows: [], total: 0 } };
       });
   },
-  params: {
-    pageNum: 1,
-    pageSize: 10,
-  },
+  params: {},
   events: {
     formatParams(params) {
       if (params.isAsc === "descending") params.isAsc = "desc";
