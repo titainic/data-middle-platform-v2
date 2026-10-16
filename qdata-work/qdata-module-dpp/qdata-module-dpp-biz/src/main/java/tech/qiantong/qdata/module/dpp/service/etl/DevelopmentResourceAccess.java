@@ -42,8 +42,15 @@ public class DevelopmentResourceAccess implements tech.qiantong.qdata.module.dpp
         project(number(row.get("project_id")),Objects.toString(row.get("project_code"),null));operation(number(row.get("project_id")),String.valueOf(row.get("type")),action);return row;
     }
     public Map<String,Object> taskCode(String code,String projectCode){
+        return taskCode(code,projectCode,null);
+    }
+    private Map<String,Object> taskCode(String code,String projectCode,Long projectId){
         if(code==null || code.isBlank())throw denied();
-        var ids=projectCode==null || projectCode.isBlank()?jdbc.queryForList("SELECT id FROM dpp_etl_task WHERE code=? AND del_flag='0'",Long.class,code):jdbc.queryForList("SELECT id FROM dpp_etl_task WHERE code=? AND project_code=? AND del_flag='0'",Long.class,code,projectCode);
+        // A subprocess belongs to the already-authorized request project, even when projectCode was omitted.
+        List<Long> ids;
+        if(projectId!=null)ids=jdbc.queryForList("SELECT id FROM dpp_etl_task WHERE code=? AND project_id=? AND del_flag='0'",Long.class,code,projectId);
+        else if(projectCode==null || projectCode.isBlank())ids=jdbc.queryForList("SELECT id FROM dpp_etl_task WHERE code=? AND del_flag='0'",Long.class,code);
+        else ids=jdbc.queryForList("SELECT id FROM dpp_etl_task WHERE code=? AND project_code=? AND del_flag='0'",Long.class,code,projectCode);
         if(ids.size()!=1)throw denied();return task(ids.get(0));
     }
     public void request(DppEtlNewNodeSaveReqVO request,String action){
@@ -58,7 +65,7 @@ public class DevelopmentResourceAccess implements tech.qiantong.qdata.module.dpp
         project(request.getProjectId(),request.getProjectCode()==null?null:request.getProjectCode().toString());operation(request.getProjectId(),request.getType()==null?"1":request.getType(),action);
         if(request.getCatCode()!=null && !request.getCatCode().isBlank()){
             String table=("3".equals(request.getType())||"4".equals(request.getType()))?"att_data_dev_cat":"att_task_cat";
-            var owners=jdbc.queryForList("SELECT project_id FROM "+table+" WHERE code=? AND del_flag='0'",Long.class,request.getCatCode());
+            var owners=jdbc.queryForList("SELECT project_id FROM "+table+" WHERE code=? AND project_id=? AND del_flag='0'",Long.class,request.getCatCode(),request.getProjectId());
             if(owners.size()!=1 || !Objects.equals(owners.get(0),request.getProjectId()))throw new AccessDeniedException("任务类目不属于所选项目");
         }
         if("DOLPHINSCHEDULER".equalsIgnoreCase(request.getScheduler()) && "QUARTZ".equals(jdbc.queryForObject("SELECT scheduler_type FROM att_project WHERE id=?",String.class,request.getProjectId())))throw new IllegalArgumentException("当前项目使用本地调度，不能向外部调度提交未登记的项目编码");
@@ -71,11 +78,12 @@ public class DevelopmentResourceAccess implements tech.qiantong.qdata.module.dpp
         if(nodes==null)throw new IllegalArgumentException("节点定义必须是JSON数组");
         for(var node:nodes){
             String code=node.getString("code");if(code==null || code.isBlank())throw new IllegalArgumentException("节点缺少编码");
+            // Node codes remain global: version saving/removal and node lookups still consume code alone.
             var owners=jdbc.queryForList("SELECT project_id FROM dpp_etl_node WHERE code=? UNION SELECT project_id FROM dpp_etl_node_log WHERE code=?",Long.class,code,code);
             if(owners.stream().anyMatch(owner->!Objects.equals(owner,request.getProjectId())))throw new AccessDeniedException("节点编码已属于另一个项目，请为当前项目创建新节点");
             var params=node.getJSONObject("taskParams");String subtask=params==null?null:params.getString("processDefinitionCode");
             if(subtask!=null && !subtask.isBlank() && !"0".equals(subtask)){
-                var child=taskCode(subtask,null);if(!Objects.equals(number(child.get("project_id")),request.getProjectId()))throw denied();
+                var child=taskCode(subtask,null,request.getProjectId());if(!Objects.equals(number(child.get("project_id")),request.getProjectId()))throw denied();
             }
         }
         if(developmentFiles!=null)developmentFiles.definitions(request.getProjectId(),request.getTaskDefinitionList());
