@@ -11,6 +11,7 @@ export default {
   relogin: '重新登录',
   remember: '记住密码',
   forgetPassword: '忘记密码',
+  selfServiceResetUnavailable: '暂不支持自助重置，请联系管理员',
   resetPassword: '重置密码',
   getCode: '获取验证码',
   newPassword: '新密码',

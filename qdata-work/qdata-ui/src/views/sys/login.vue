@@ -53,46 +53,19 @@
 
                     <div class="form-actions">
                         <el-checkbox v-model="loginForm.rememberMe">{{ td('login.remember') }}</el-checkbox>
-                        <el-text type="primary" @click="dialogVisible = true">{{ td('login.forgetPassword') }}</el-text>
+                        <el-button link type="primary" @click="dialogVisible = true">{{ td('login.forgetPassword') }}</el-button>
                     </div>
                 </el-form>
             </div>
         </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="td('login.forgetPassword')" class="fp-form-dialog" width="650px"
+    <el-dialog v-model="dialogVisible" :title="td('login.forgetPassword')" width="420px"
         :append-to="$refs['app-container']" draggable destroy-on-close>
-        <el-form :model="fpForm" label-width="auto" style="padding: 10px 60px 0" :label-position="labelPosition">
-            <el-row :gutter="20">
-                <el-col :span="24">
-                    <el-form-item :label="td('login.username')" :label-position="labelPosition">
-                        <el-input v-model="fpForm.name" :placeholder="td('login.usernameInputPlaceholder')" />
-                    </el-form-item>
-                </el-col>
-                <el-col :span="24">
-                    <el-form-item :label="td('login.code')" :label-position="labelPosition">
-                        <div class="wrapper">
-                            <el-input v-model="fpForm.code" :placeholder="td('login.codePlaceholder')" />
-                            <el-button type="primary" :disabled="codeFlag" style="margin-left: 10px"
-                                @click="handleFPCodeClick">{{ codeFlag ? `${codeTime}s` : td('login.getCode') }}</el-button>
-                        </div>
-                    </el-form-item>
-                </el-col>
-                <el-col :span="24">
-                    <el-form-item :label="td('login.newPassword')" :label-position="labelPosition">
-                        <el-input v-model="fpForm.password" :placeholder="td('login.newPasswordPlaceholder')" />
-                    </el-form-item>
-                </el-col>
-                <el-col :span="24">
-                    <el-form-item :label="td('login.confirmPassword')" :label-position="labelPosition">
-                        <el-input v-model="fpForm.password2" :placeholder="td('login.confirmPasswordPlaceholder')" />
-                    </el-form-item>
-                </el-col>
-            </el-row>
-        </el-form>
+        <p>{{ td('login.selfServiceResetUnavailable') }}</p>
         <template #footer>
             <div class="dialog-footer">
-                <el-button type="primary" @click="dialogVisible = false"> {{ td('login.resetPassword') }} </el-button>
+                <el-button type="primary" @click="dialogVisible = false">{{ td('common.button.close') }}</el-button>
             </div>
         </template>
     </el-dialog>
@@ -113,17 +86,10 @@ const dialogVisible = ref(false);
 const { proxy } = getCurrentInstance();
 const loading = ref(false);
 
-const codeFlag = ref(false);
 const loginForm = ref({
     username: 'admin',
     password: '',
     rememberMe: false
-});
-const fpForm = ref({
-    username: '',
-    password: '',
-    password2: '',
-    code: ''
 });
 
 const loginRules = computed(() => ({
@@ -173,48 +139,7 @@ function handleLogin() {
         }
     });
 }
-const timeValue = 3;
-const codeTime = ref(timeValue);
-function handleFPCodeClick() {
-    if (codeFlag.value) return;
-    codeFlag.value = !codeFlag.value;
-    setInterval(() => {
-        if (codeTime.value > 1) {
-            codeTime.value--;
-        } else {
-            clearInterval();
-            codeTime.value = timeValue;
-            codeFlag.value = false;
-        }
-    }, 1000);
-}
 </script>
-
-<style lang="scss">
-.fp-form-dialog {
-    .wrapper {
-        width: 100%;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-
-        .el-button {
-            width: 102px;
-            min-width: 102px;
-        }
-    }
-
-    .el-dialog__body {
-        height: 316px !important;
-    }
-
-    .el-button {
-        background: #2666fb;
-        border-radius: 2px 2px 2px 2px;
-        border: 1px solid #2666fb;
-    }
-}
-</style>
 
 <style scoped lang="scss">
 .login-minimal {

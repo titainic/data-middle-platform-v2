@@ -11,6 +11,7 @@ export default {
   relogin: 'Re-login',
   remember: 'Remember Password',
   forgetPassword: 'Forgot Password',
+  selfServiceResetUnavailable: 'Self-service password reset is currently unavailable. Please contact your administrator.',
   resetPassword: 'Reset Password',
   getCode: 'Get Code',
   newPassword: 'New Password',
