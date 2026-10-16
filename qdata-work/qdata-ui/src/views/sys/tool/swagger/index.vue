@@ -22,9 +22,10 @@
 
 <script setup>
 import iFrame from '@/components/iFrame/index.vue'
+import { joinApiPath } from '@/utils/apiUrl.js'
 const { proxy } = getCurrentInstance();
 
-const url = ref(import.meta.env.VITE_APP_BASE_API + "/doc.html")
+const url = ref(joinApiPath(import.meta.env.VITE_APP_BASE_API, "/doc.html"))
 
 // Open the external link URL in a new tab
 window.open(url.value, "_blank");
