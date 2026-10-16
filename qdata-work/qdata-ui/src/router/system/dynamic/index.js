@@ -31,7 +31,7 @@ export default [
         path: 'role/:userId(\\d+)',
         component: () => import('@/views/sys/system/user/authRole.vue'),
         name: 'AuthRole',
-        meta: { title: 'Assign Roles', activeMenu: '/system/user', lang: 'public.assignRole' }
+        meta: { title: 'Assign Roles', activeMenu: '/sys/user', lang: 'public.assignRole' }
       }
     ]
   },
@@ -45,7 +45,7 @@ export default [
         path: 'user/:roleId(\\d+)',
         component: () => import('@/views/sys/system/role/authUser.vue'),
         name: 'AuthUser',
-        meta: { title: 'Assign Users', activeMenu: '/system/role', lang: 'public.assignUser' }
+        meta: { title: 'Assign Users', activeMenu: '/sys/role', lang: 'public.assignUser' }
       }
     ]
   },
@@ -59,7 +59,7 @@ export default [
         path: 'index/:dictId(\\d+)',
         component: () => import('@/views/sys/system/dict/data.vue'),
         name: 'Data',
-        meta: { title: 'Dictionary Data', activeMenu: '/system/dict', lang: 'public.dictionaryData' }
+        meta: { title: 'Dictionary Data', activeMenu: '/sys/dict', lang: 'public.dictionaryData' }
       }
     ]
   },

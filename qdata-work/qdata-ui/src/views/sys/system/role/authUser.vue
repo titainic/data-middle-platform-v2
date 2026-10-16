@@ -119,7 +119,7 @@ function getList() {
 
 /** back button */
 function handleClose() {
-  const obj = { path: "/system/role" };
+  const obj = { name: "Role" };
   proxy.$tab.closeOpenPage(obj);
 }
 

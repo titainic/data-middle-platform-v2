@@ -326,7 +326,7 @@ function handleQuery() {
 
 /** Back button action */
 function handleClose() {
-  const obj = { path: "/system/dict" };
+  const obj = { name: "Dict" };
   proxy.$tab.closeOpenPage(obj);
 }
 

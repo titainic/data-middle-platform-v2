@@ -274,9 +274,9 @@
             </el-icon>
             <span>
               {{ td("dpp.setting.projectUserRel.addUserHint")
-              }}<a href="/system/user" style="color: #2a7bfd">{{
+              }}<router-link :to="{ name: 'User' }" style="color: #2a7bfd">{{
                 td("dpp.setting.projectUserRel.userManagement")
-              }}</a
+              }}</router-link
               >{{ td("dpp.setting.projectUserRel.addUserHintEnd") }}
             </span>
           </div>

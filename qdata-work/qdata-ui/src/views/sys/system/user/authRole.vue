@@ -105,7 +105,7 @@ function getRowKey(row) {
 
 /** close button */
 function close() {
-  const obj = { path: "/system/user" };
+  const obj = { name: "User" };
   proxy.$tab.closeOpenPage(obj);
 }
 
