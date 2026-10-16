@@ -282,7 +282,7 @@ function submitForm() {
 
 /** Delete button action */
 function handleDelete(row) {
-   proxy.$modal.confirm(td('sys.system.dept.confirmDelete', { name: row.deptName })).then(function () {
+   proxy.$modal.confirm(td('sys.system.dept.confirmDelete', undefined, { name: row.deptName })).then(function () {
       return delDept(row.deptId);
    }).then(() => {
       getList();
