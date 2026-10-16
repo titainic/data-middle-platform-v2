@@ -17,7 +17,7 @@
           type="danger"
           plain
           icon="Delete"
-          :disabled="!store.rows.length"
+          :disabled="deleteLoading || !store.rows.length"
           @click="handleDelete"
         >
           {{ td('common.button.delete') }}
@@ -50,7 +50,7 @@
             type="danger"
             icon="Delete"
             @click="handleDelete(row)"
-            :disabled="row.validFlag"
+            :disabled="deleteLoading || row.validFlag"
             >{{ td('common.button.delete') }}</el-button
           >
           <el-button link type="primary" icon="view" @click="handleDetail(row)"
@@ -258,10 +258,6 @@
       </template>
     </el-dialog>
 
-    <DeleteConfirmDialog
-      ref="deleteConfirmDialog"
-      @confirm-delete="handleDelete"
-    />
   </div>
 </template>
 
@@ -277,13 +273,13 @@ import {
 } from "@/api/att/sourceSystem/sourceSystem.js";
 import { deptUserTree } from "@/api/system/system/user.js";
 import { getToken } from "@/utils/auth.js";
-import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 import { reactive, ref, toRefs, getCurrentInstance, onMounted } from "vue";
 
 const { t } = useI18n();
 const { td } = useDefaultLang();
 const { proxy } = getCurrentInstance();
 const submitLoading = ref(false);
+const deleteLoading = ref(false);
 const { sys_source_system_type } = proxy.useDict("sys_source_system_type");
 
 // Get user list options
@@ -594,22 +590,21 @@ function submitForm() {
 }
 /** Delete button action */
 function handleDelete(row) {
-  const invalidIds = [];
-  let _ids = null;
-  if (row?.id) {
-    _ids = row.id;
-  } else {
-    // _ids = store.rows.map((item) => item.id).join(",");
-    store.rows.forEach((item) => {
-      // When validFlag is false, record id
-      if (item.validFlag === false) {
-        invalidIds.push(item.id);
-      }
-    });
+  if (deleteLoading.value) return;
+  const rows = row?.id != null ? [row] : store.rows;
+  const invalidIds = rows
+    .filter((item) => item.validFlag === false && item.id != null && item.id !== "")
+    .map((item) => item.id);
+  if (!invalidIds.length) {
+    proxy.$modal.msgWarning(
+      td('att.sourceSystem.message.noDeletable', '当前没有可删除的来源系统，请选择已禁用的来源系统。')
+    );
+    return;
   }
-  proxy.$modal
+  deleteLoading.value = true;
+  return proxy.$modal
     .confirm(
-      td('att.sourceSystem.message.deleteConfirm', '', { deletable: invalidIds.length, undeletable: store.rows.length - invalidIds.length })
+      td('att.sourceSystem.message.deleteConfirm', '', { deletable: invalidIds.length, undeletable: rows.length - invalidIds.length })
     )
     .then(function () {
       return delSourceSystem(invalidIds);
@@ -619,7 +614,10 @@ function handleDelete(row) {
       proxy.$modal.msgSuccess(td('common.message.deleteSuccess'));
     })
     .catch(() => {
-      // User cancels deletion operation
+      // Cancellation is silent; request errors are reported by the HTTP interceptor.
+    })
+    .finally(() => {
+      deleteLoading.value = false;
     });
 }
 
