@@ -115,7 +115,7 @@ public class DppEtlTaskController extends BaseController {
     @Operation(summary = "新增节点")
     @PostMapping("/createProcessDefinitionEx")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommonResult createProcessDefinition(@Valid @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+    public CommonResult createProcessDefinition(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         if (StringUtils.isBlank(dppEtlNewNodeSaveReqVO.getType())) {
             dppEtlNewNodeSaveReqVO.setType("1");// Default offline data integration
         }
@@ -190,7 +190,7 @@ public class DppEtlTaskController extends BaseController {
     @Operation(summary = "修改节点")
     @PostMapping("/updateProcessDefinition")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommonResult updateProcessDefinition(@Valid @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+    public CommonResult updateProcessDefinition(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         resourceAccess.request(dppEtlNewNodeSaveReqVO,"edit");
         DppEtlTaskSaveReqVO result = dppEtlTaskService.updateProcessDefinition(dppEtlNewNodeSaveReqVO);
         return CommonResult.success(result);
@@ -225,7 +225,7 @@ public class DppEtlTaskController extends BaseController {
     @Operation(summary = "新增数据汇聚任务")
     @PostMapping("/createEtlTask")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommonResult createEtlTask(@Valid @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+    public CommonResult createEtlTask(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         dppEtlNewNodeSaveReqVO.setType("1");// Default offline data integration
         resourceAccess.request(dppEtlNewNodeSaveReqVO,"add");
         DppEtlTaskSaveReqVO result = dppEtlTaskService.createEtlTask(dppEtlNewNodeSaveReqVO);
@@ -235,7 +235,7 @@ public class DppEtlTaskController extends BaseController {
     @Operation(summary = "修改数据汇聚任务")
     @PostMapping("/updateEtlTask")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommonResult updateEtlTask(@Valid @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+    public CommonResult updateEtlTask(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         dppEtlNewNodeSaveReqVO.setType("1");// Default offline data integration
         resourceAccess.request(dppEtlNewNodeSaveReqVO,"edit");
         DppEtlTaskSaveReqVO result = dppEtlTaskService.updateEtlTask(dppEtlNewNodeSaveReqVO);
@@ -245,7 +245,7 @@ public class DppEtlTaskController extends BaseController {
     @Operation(summary = "新增数据汇聚任务")
     @PostMapping("/createEtlTaskFront")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommonResult createEtlTaskFront(@Valid @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+    public CommonResult createEtlTaskFront(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         if (StringUtils.isBlank(dppEtlNewNodeSaveReqVO.getType())) {
             dppEtlNewNodeSaveReqVO.setType("1");// Default offline data integration
         }
@@ -257,7 +257,7 @@ public class DppEtlTaskController extends BaseController {
     @Operation(summary = "新增数据汇聚任务")
     @PostMapping("/createEtlTaskFrontPostposition")
     @ResponseStatus(HttpStatus.CREATED)
-    public CommonResult createEtlTaskFrontPostposition(@Valid @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+    public CommonResult createEtlTaskFrontPostposition(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         if (StringUtils.isBlank(dppEtlNewNodeSaveReqVO.getType())) {
             dppEtlNewNodeSaveReqVO.setType("1");// Default offline data integration
         }
