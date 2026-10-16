@@ -886,6 +886,8 @@ async function validateTaskCatName(_rule, value, callback) {
     const response = await isTaskCatNameUsed({
       parentId: form.value.parentId,
       name,
+      projectId: userStore.projectId,
+      projectCode: userStore.projectCode,
     }, warningRequestOptions);
     if (response.data === true) {
       const message = td("dpp.setting.taskCat.nameUsed", "名称已被使用");
