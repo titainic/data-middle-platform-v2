@@ -124,6 +124,10 @@ public class SysUserController extends BaseController
         if (StringUtils.isNotNull(userId))
         {
             SysUser sysUser = userService.getByUserIdAndProjectId(userId,0L);
+            if (sysUser == null)
+            {
+                return error(MessageUtils.message("user.not.exists"));
+            }
             ajax.put(AjaxResult.DATA_TAG, sysUser);
             ajax.put("postIds", postService.selectPostListByUserId(userId));
             ajax.put("roleIds", sysUser.getRoles().stream().map(SysRole::getRoleId).collect(Collectors.toList()));
