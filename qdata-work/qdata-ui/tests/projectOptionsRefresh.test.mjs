@@ -293,9 +293,9 @@ test('旧项目菜单请求失败不会清除后来手工选中的项目', async
 
 test('Navbar 复用单一生命周期链路并在展开时刷新，无旧挂载请求', () => {
   const page = parse(readFileSync(new URL('../src/layout/components/Navbar.vue', import.meta.url), 'utf8')).descriptor;
-  assert.match(page.scriptSetup.content, /useProjectOptions\(userStore, permissionStore\)/);
+  assert.match(page.scriptSetup.content, /useProjectOptions\(\s*userStore, permissionStore, beginDppMenuUpdate\s*\)/);
   assert.doesNotMatch(page.scriptSetup.content, /const listProject|listProject\(\)/);
   assert.match(page.template.content, /:loading="projectOptionsLoading"/);
   assert.match(page.template.content, /@visible-change="visible => visible && refreshProjectOptions\(\)"/);
-  assert.match(page.scriptSetup.content, /String\(requestedProjectId\) !== String\(userStore.projectId\)/);
+  assert.match(page.scriptSetup.content, /String\(requestedProjectId\) === String\(userStore.projectId\)/);
 });

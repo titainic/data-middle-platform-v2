@@ -4,7 +4,8 @@ import { getRoutersDpp } from '@/api/system/menu.js';
 import bus from '@/utils/bus.js';
 import { PROJECT_OPTIONS_CHANGED } from '@/utils/projectOptions.js';
 
-export default function useProjectOptions(userStore, permissionStore) {
+export default function useProjectOptions(userStore, permissionStore,
+  beginMenuUpdate = () => routes => permissionStore.updateTopbarRoutes(routes)) {
   const projectOptions = ref([]);
   const projectOptionsLoading = ref(false);
   let revision = 0;
@@ -13,7 +14,7 @@ export default function useProjectOptions(userStore, permissionStore) {
   const sameId = (left, right) => left != null && right != null && String(left) === String(right);
 
   function clearProjectRoutes() {
-    permissionStore.updateTopbarRoutes(permissionStore.topbarRouters.map(route =>
+    beginMenuUpdate()(permissionStore.topbarRouters.map(route =>
       route.path === '/dpp' ? { ...route, children: [] } : route));
   }
 
@@ -60,11 +61,12 @@ export default function useProjectOptions(userStore, permissionStore) {
           localStorage.setItem('qdataProjectId', selected.id);
           if (changed) clearProjectRoutes();
           requestedProjectId = selected.id;
+          const commitRoutes = beginMenuUpdate();
           const routes = await getRoutersDpp(selected.id);
           if (!disposed && requestedRevision === revision && sameId(userId, userStore.id) &&
               sameId(selected.id, userStore.projectId)) {
             if (routes.code !== 200 || !Array.isArray(routes.data)) throw new Error('Invalid project routes');
-            permissionStore.updateTopbarRoutes(routes.data);
+            await commitRoutes(routes.data);
           }
         } catch {
           // The request interceptor reports HTTP/business errors. Do not retain unverified IDs.
