@@ -173,7 +173,7 @@ python3 deploy/tools/make_dependency_kit.py --maven-repo "$(dirname "$QDATA_BUIL
 
 输出目录必须不存在。由目标 CPU 架构相同的 Linux 构建生成，再传入内网机器。
 
-离线安装前将对应版本 / 架构镜像导入目标 Linux Engine，或连接已有基础服务。DataX 和 Spark client 使用第 6 节的匹配发行物；离线命令需追加 `--datax-archive /opt/packages/datax.tar.gz --datax-mysql-driver /opt/packages/mysql-connector-j-9.7.0.jar`（或指向已有 `--datax-home`），不能依赖默认联网下载。
+离线安装前将对应版本 / 架构镜像导入目标 Linux Engine，或连接已有基础服务。DataX 和 Spark client 使用第 6 节的匹配发行物；离线命令需追加 `--datax-archive /opt/packages/datax.tar.gz --datax-mysql-driver /opt/packages/mysql-connector-j-9.7.0.jar --datax-hive-driver /opt/packages/hive-jdbc-4.2.0-standalone.jar`（或指向已有 `--datax-home`），不能依赖默认联网下载。
 
 没有系统字体且需要保持现有 OS 包不变时，安装器支持 `--font-runtime /opt/qdata-fonts`。该运行时需由已校验、匹配发行版和 CPU 架构的官方 Fontconfig / DejaVu 包解出，结构包括：
 
@@ -365,17 +365,26 @@ Doris 是 ADS 服务副本。API、release、client 的 ID 由本部署生成，
 | 文件 / OSS | 默认本地目录；外部存储用 `dromara.x-file-storage.*` 填实际私有桶配置 |
 | 审批 / 报表外部入口 | 配置部署方流程 / 报表服务与 `flyflow.url`、`VITE_APP_FLOW_API`、`VITE_RP_VIEW_URL` |
 
-安装器默认调用 `prepare-datax.sh`，安装到实例 `tools/datax/`。离线同时提供 `--datax-archive /opt/packages/datax.tar.gz --datax-mysql-driver /opt/packages/mysql-connector-j-9.7.0.jar`，可追加 `--datax-sha256 <已审核的SHA256>`；已安装发行物用 `--datax-home /opt/qdata-datax`。`--skip-datax` 是显式精简选项，此时 DataX 任务尚不具备运行条件。
+安装器默认调用 `prepare-datax.sh`，安装到实例 `tools/datax/`。离线同时提供 `--datax-archive /opt/packages/datax.tar.gz --datax-mysql-driver /opt/packages/mysql-connector-j-9.7.0.jar --datax-hive-driver /opt/packages/hive-jdbc-4.2.0-standalone.jar`，可追加 `--datax-sha256 <已审核的SHA256>`；已安装发行物用 `--datax-home /opt/qdata-datax`。`--skip-datax` 是显式精简选项，此时 DataX 任务尚不具备运行条件。
 
 也可独立准备 DataX（在 Linux 执行）：
 
 ```bash
 bash deploy/prepare-datax.sh --dest /opt/qdata-datax
 # 离线：使用本地发行包和与主项目一致的 JDBC 驱动
-bash deploy/prepare-datax.sh --dest /opt/qdata-datax-offline --archive /opt/packages/datax.tar.gz --mysql-driver-jar /opt/packages/mysql-connector-j-9.7.0.jar
+bash deploy/prepare-datax.sh --dest /opt/qdata-datax-offline --archive /opt/packages/datax.tar.gz --mysql-driver-jar /opt/packages/mysql-connector-j-9.7.0.jar --hive-driver-jar /opt/packages/hive-jdbc-4.2.0-standalone.jar
 ```
 
-准备脚本将 Connector/J 9.7.0 安装到 `rdbmsreader`、`rdbmswriter` 各自的 `libs/` 并在两份 `plugin.json` 注册 `com.mysql.cj.jdbc.Driver`。驱动固定 SHA-256 为 `0353648eaa1c91e0f4020c959abf756bc866ffd583df22ae6b6f6e0cbd43eb44`；离线缺少驱动或摘要不一致会拒绝发布新工具目录。已有目录不会被覆盖；现场 DataX 的升级由部署负责人备份后另行执行。
+准备脚本向 `rdbmsreader`、`rdbmswriter` 各自的 `libs/` 安装并在两份 `plugin.json` 显式注册以下驱动（不能只放在 Web JAR、DataX 全局或其他插件目录）：
+
+| 制品 | 驱动类 | SHA-256 |
+|---|---|---|
+| MySQL Connector/J 9.7.0 | `com.mysql.cj.jdbc.Driver` | `0353648eaa1c91e0f4020c959abf756bc866ffd583df22ae6b6f6e0cbd43eb44` |
+| Hive JDBC 4.2.0 **standalone** | `org.apache.hive.jdbc.HiveDriver` | `c89c6224df9d465ddf96060bc3e289522f1f6e64b01a28e01f94413edeb3d43a` |
+
+Hive 制品来自 [Maven Central](https://repo.maven.apache.org/maven2/org/apache/hive/hive-jdbc/4.2.0/hive-jdbc-4.2.0-standalone.jar)，版本与项目现有 Hive 4.2.0 / Kyuubi 1.11 客户端约定一致；普通 `hive-jdbc-4.2.0.jar` 不包含完整依赖，不能替代 standalone。离线必须同时提供两个驱动，缺失或摘要不一致即拒绝发布新工具目录。已有发行物若自带同类驱动，需先人工评审，脚本拒绝叠加。清单记录两个驱动摘要与 Hive 来源。新安装在 Linux/JDK21 上运行；插件加载离线通过仍不等于真实 Hive/Kyuubi 连接、认证、SQL 和数据链路验收。
+
+已有目录不会被覆盖，`--datax-home` 复用既有目录也不会自动补驱动；现场修复须由部署负责人在单独授权下备份并实施。备份、插件隔离检查、恢复和零行回归要求见 [BIN-104 实施交接](operations/BIN-104-datax-hive-jdbc.md)。
 
 Spark 的 CSV/Excel 解析会将派生文件新增至 HDFS `/tmp/etl/`。部署须在私有 `runtime.env` 设置 `QDATA_HDFS_URL=hdfs://实际NameNode:端口` 或 HA nameservice，并用 `--hadoop-conf-dir` 提供匹配的 `core-site.xml`、`hdfs-site.xml`。留空地址时解析器读取该配置目录的 `fs.defaultFS`；没有有效 HDFS 配置时，解析接口明确拒绝且保留原始上传文件。HA 地址还需匹配 nameservice、NameNode RPC 地址及 failover provider 配置，且部署机能访问 NameNode/DataNode。地址由环境负责人核实，不把 `hdfs://` 当作可用默认值。
 

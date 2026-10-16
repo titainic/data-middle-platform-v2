@@ -34,13 +34,25 @@ class InstallationSafetyTest(unittest.TestCase):
                 installer.prepare_datax(arguments, Path("/unused"))
             run.assert_not_called()
 
-    def test_datax_preparation_receives_the_offline_mysql_driver(self):
+    def test_datax_preparation_receives_both_offline_drivers(self):
         arguments = installer.argument_parser().parse_args(["--offline", "--datax-archive", "/unused/datax.tar.gz",
-                                                           "--datax-mysql-driver", "/unused/mysql.jar"])
+                                                           "--datax-mysql-driver", "/unused/mysql.jar",
+                                                           "--datax-hive-driver", "/unused/hive.jar"])
         with mock.patch.object(installer.subprocess, "run", return_value=mock.Mock(returncode=0)) as run:
             installer.prepare_datax(arguments, Path("/unused"))
             self.assertIn("--mysql-driver-jar", run.call_args.args[0])
             self.assertIn("/unused/mysql.jar", run.call_args.args[0])
+            self.assertIn("--hive-driver-jar", run.call_args.args[0])
+            self.assertIn("/unused/hive.jar", run.call_args.args[0])
+
+    def test_offline_datax_requires_hive_driver_without_network(self):
+        arguments = installer.argument_parser().parse_args([
+            "--offline", "--datax-archive", "/unused/datax.tar.gz",
+            "--datax-mysql-driver", "/unused/mysql.jar"])
+        with mock.patch.object(installer.subprocess, "run") as run:
+            with self.assertRaisesRegex(installer.InstallError, "datax-hive-driver"):
+                installer.prepare_datax(arguments, Path("/unused"))
+            run.assert_not_called()
 
     def test_existing_eight_character_login_password_is_accepted(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -353,8 +353,8 @@ def prepare_datax(arguments, root):
         return
     if arguments.skip_datax:
         return
-    if arguments.offline and (not arguments.datax_archive or not arguments.datax_mysql_driver):
-        raise InstallError("Offline DataX preparation requires --datax-archive and --datax-mysql-driver, or an existing --datax-home")
+    if arguments.offline and (not arguments.datax_archive or not arguments.datax_mysql_driver or not arguments.datax_hive_driver):
+        raise InstallError("Offline DataX preparation requires --datax-archive and --datax-mysql-driver and --datax-hive-driver, or an existing --datax-home")
     directory = root / "tools/datax"
     command = ["bash", str(REPOSITORY / "deploy/prepare-datax.sh"), "--dest", str(directory)]
     if arguments.datax_archive:
@@ -363,9 +363,11 @@ def prepare_datax(arguments, root):
         command.extend(["--sha256", arguments.datax_sha256])
     if arguments.datax_mysql_driver:
         command.extend(["--mysql-driver-jar", str(arguments.datax_mysql_driver.resolve())])
+    if arguments.datax_hive_driver:
+        command.extend(["--hive-driver-jar", str(arguments.datax_hive_driver.resolve())])
     result = subprocess.run(command)
     if result.returncode:
-        raise InstallError("DataX preparation failed; provide --datax-home or an offline --datax-archive with --datax-mysql-driver")
+        raise InstallError("DataX preparation failed; provide --datax-home or an offline --datax-archive with --datax-mysql-driver and --datax-hive-driver")
     arguments.datax_home = directory
 
 
@@ -860,6 +862,7 @@ def argument_parser():
     parser.add_argument("--datax-archive", type=Path)
     parser.add_argument("--datax-sha256")
     parser.add_argument("--datax-mysql-driver", type=Path, help="Offline MySQL Connector/J 9.7.0 JAR for DataX")
+    parser.add_argument("--datax-hive-driver", type=Path, help="Offline Hive JDBC 4.2.0 standalone JAR for DataX")
     parser.add_argument("--skip-datax", action="store_true")
     parser.add_argument("--hadoop-conf-dir", type=Path)
     parser.add_argument("--spark-home", type=Path)
