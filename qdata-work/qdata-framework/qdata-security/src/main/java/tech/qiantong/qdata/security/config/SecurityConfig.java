@@ -130,6 +130,8 @@ public class SecurityConfig
                     permitAllUrl.getUrls().forEach(url -> requests.requestMatchers(url).permitAll());
                     // For login login registration register verification code captchaImage allows anonymous access
                     requests.requestMatchers("/login","/register", "/captchaImage", "/flyflow/**","/services/**","/jmreport/**", "/rp/**", "/drag/**", "/jimubi/**").permitAll()
+                            // Display avatars only; other uploaded files still require authentication.
+                            .requestMatchers(HttpMethod.GET, "/profile/avatar/**").permitAll()
                             // Static resources, accessible anonymously
                             .requestMatchers(HttpMethod.GET, "/",
                                     "/*.html",

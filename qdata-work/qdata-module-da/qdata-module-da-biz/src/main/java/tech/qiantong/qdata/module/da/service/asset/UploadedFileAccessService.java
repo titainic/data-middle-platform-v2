@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import tech.qiantong.qdata.common.core.domain.model.LoginUser;
 import tech.qiantong.qdata.common.file.UploadedFileAccess;
 import tech.qiantong.qdata.common.file.UploadedFileKey;
 import tech.qiantong.qdata.common.utils.SecurityUtils;
@@ -47,9 +48,12 @@ public class UploadedFileAccessService implements UploadedFileAccess {
     private boolean personal(Map<String,Object> record) {return !record.isEmpty() && !bound(record) && Objects.equals(number(record.get("owner_user_id")),SecurityUtils.getUserId());}
     private static boolean bound(Map<String,Object> record){return "1".equals(Objects.toString(record.get("bound_flag"),"0")) || Boolean.TRUE.equals(record.get("bound_flag"));}
     @Override public void read(String resource) {
-        String key=key(resource);SecurityUtils.getUserId();if(permissions.isAdministrator())return;
+        String key=key(resource);
         String extension=key.substring(key.lastIndexOf('.')+1).toLowerCase(Locale.ROOT);
+        // Only a real image currently referenced by an active user is a public display resource.
         if(key.startsWith("/profile/avatar/") && Set.of("png","jpg","jpeg","gif","bmp","webp","avif").contains(extension) && jdbc.queryForObject("SELECT COUNT(*) FROM system_user WHERE BINARY avatar=BINARY ? AND del_flag='0'",Long.class,key)>0)return;
+        if(SecurityUtils.getAuthentication()==null || !(SecurityUtils.getAuthentication().getPrincipal() instanceof LoginUser))throw denied();
+        SecurityUtils.getUserId();if(permissions.isAdministrator())return;
         var record=record(key,false);var refs=references(key);
         if(!refs.isEmpty()) {
             String capability=DISPLAY.contains(extension)?"da:asset:query":"da:asset:export";

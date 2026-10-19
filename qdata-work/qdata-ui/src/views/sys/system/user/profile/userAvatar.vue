@@ -82,6 +82,7 @@ import "vue-cropper/dist/index.css";
 import { VueCropper } from "vue-cropper";
 import { uploadAvatar } from "@/api/system/system/user.js";
 import useUserStore from "@/store/system/user.js";
+import { resolveAvatarUrl } from "@/utils/avatar.mjs";
 
 const { td } = useDefaultLang();
 const userStore = useUserStore();
@@ -153,10 +154,12 @@ function uploadImg() {
     formData.append("avatarfile", data, options.filename);
     uploadAvatar(formData).then(response => {
       open.value = false;
-      options.img = import.meta.env.VITE_APP_BASE_API + response.imgUrl;
+      options.img = resolveAvatarUrl(response.imgUrl, import.meta.env.VITE_APP_BASE_API);
       userStore.avatar = options.img;
       proxy.$modal.msgSuccess(td('common.message.editSuccess'));
       visible.value = false;
+    }).catch(() => {
+      proxy.$modal.msgError(td('common.upload.uploadFailedAdmin'));
     });
   });
 }
@@ -169,7 +172,7 @@ function realTime(data) {
 /** close window */
 function closeDialog() {
   options.img = userStore.avatar;
-  options.visible = false;
+  visible.value = false;
 }
 </script>
 
