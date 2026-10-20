@@ -1,6 +1,7 @@
 import importlib.util
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +11,98 @@ from unittest import mock
 MODULE_SPEC = importlib.util.spec_from_file_location("qdata_install", Path(__file__).parents[1] / "install.py")
 installer = importlib.util.module_from_spec(MODULE_SPEC)
 MODULE_SPEC.loader.exec_module(installer)
+
+
+class GatewayTemporaryPathsTest(unittest.TestCase):
+    def test_native_gateway_prepares_private_worker_owned_paths_before_starting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "qdata"
+            (root / "runtime").mkdir(parents=True, mode=0o750)
+            arguments = installer.argument_parser().parse_args(["--instance", "qdata"])
+            with mock.patch.object(installer.shutil, "which", side_effect=lambda name: "/usr/sbin/nginx" if name == "nginx" else None), \
+                 mock.patch.object(installer.pwd, "getpwnam", return_value=mock.Mock(pw_gid=1234)), \
+                 mock.patch.object(installer.grp, "getgrgid", return_value=mock.Mock(gr_name="worker-group")) as group, \
+                 mock.patch.object(installer, "assert_toolchain_access") as access, \
+                 mock.patch.object(installer, "write_protected") as write, \
+                 mock.patch.object(installer, "run") as run:
+                old_umask = os.umask(0o077)
+                try:
+                    installer.install_gateway(arguments, root)
+                finally:
+                    os.umask(old_umask)
+            group.assert_called_once_with(1234)
+            access.assert_called_once_with(root.parent)
+            configuration = write.call_args_list[0].args[1]
+            self.assertIn("user nobody worker-group;", configuration)
+            temporary_root = root.parent / "qdata-nginx-tmp"
+            self.assertEqual(temporary_root.stat().st_mode & 0o777, 0o755)
+            paths = [temporary_root / name for name in ("proxy", "client_body", "fastcgi", "uwsgi", "scgi")]
+            for path in paths:
+                self.assertIn(f"{path.name}_temp_path {path};", configuration)
+                self.assertEqual(path.stat().st_mode & 0o777, 0o700)
+                self.assertFalse(path.is_relative_to(root))
+            self.assertEqual(run.call_args_list[0], mock.call(["chown", "nobody:worker-group", *map(str, paths)]))
+            self.assertEqual(run.call_args_list[-1], mock.call(["systemctl", "enable", "--now", "qdata-gateway.service"]))
+
+    def test_existing_native_temporary_directory_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "qdata"
+            temporary_root = root.parent / "qdata-nginx-tmp"
+            temporary_root.mkdir(mode=0o750)
+            marker = temporary_root / "keep"
+            marker.write_text("existing data")
+            arguments = installer.argument_parser().parse_args(["--instance", "qdata"])
+            with mock.patch.object(installer.shutil, "which", side_effect=lambda name: "/usr/sbin/nginx" if name == "nginx" else None), \
+                 mock.patch.object(installer, "assert_toolchain_access"), \
+                 mock.patch.object(installer, "write_protected") as write, \
+                 mock.patch.object(installer, "run") as run:
+                with self.assertRaisesRegex(installer.InstallError, "temporary directory already exists"):
+                    installer.install_gateway(arguments, root)
+            self.assertEqual(marker.read_text(), "existing data")
+            self.assertEqual(temporary_root.stat().st_mode & 0o777, 0o750)
+            run.assert_not_called()
+            write.assert_not_called()
+
+    def test_native_gateway_rejects_private_parent_before_creating_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "qdata"
+            arguments = installer.argument_parser().parse_args(["--instance", "qdata"])
+            with mock.patch.object(installer.shutil, "which", side_effect=lambda name: "/usr/sbin/nginx" if name == "nginx" else None), \
+                 mock.patch.object(installer, "assert_toolchain_access", side_effect=installer.InstallError("private directory")), \
+                 mock.patch.object(installer, "write_protected") as write, \
+                 mock.patch.object(installer, "run") as run:
+                with self.assertRaisesRegex(installer.InstallError, "private directory"):
+                    installer.install_gateway(arguments, root)
+            self.assertFalse((root.parent / "qdata-nginx-tmp").exists())
+            run.assert_not_called()
+            write.assert_not_called()
+
+    def test_docker_gateway_initializes_paths_inside_container_with_matching_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "qdata"
+            (root / "runtime").mkdir(parents=True)
+            arguments = installer.argument_parser().parse_args(["--instance", "unit-test"])
+            with mock.patch.object(installer.shutil, "which", return_value="/usr/bin/docker"), \
+                 mock.patch.object(installer.subprocess, "run", return_value=mock.Mock(returncode=1)), \
+                 mock.patch.object(installer.pwd, "getpwnam") as account, \
+                 mock.patch.object(installer, "run") as run:
+                self.assertEqual(installer.install_gateway(arguments, root), "docker:unit-test-gateway")
+            account.assert_not_called()
+            configuration = (root / "runtime/nginx.conf").read_text()
+            self.assertIn("user nginx nginx;", configuration)
+            temporary_root = root.parent / "unit-test-nginx-tmp"
+            self.assertFalse(temporary_root.exists())
+            command = run.call_args.args[0]
+            self.assertEqual(command[-3:-1], ["sh", "-c"])
+            script = command[-1]
+            for name in ("proxy", "client_body", "fastcgi", "uwsgi", "scgi"):
+                path = temporary_root / name
+                self.assertIn(f"{name}_temp_path {path};", configuration)
+                self.assertIn(str(path), script)
+            self.assertIn("chown nginx:nginx", script)
+            self.assertIn("chmod 700", script)
+            self.assertTrue(script.endswith("&& exec nginx -g 'daemon off;'"))
+            installer.subprocess.run(["sh", "-n", "-c", script], check=True)
 
 
 class InstallationSafetyTest(unittest.TestCase):
