@@ -19,6 +19,7 @@
 import { login, logout, getInfo } from '@/api/system/login.js';
 import { getToken, setToken, removeToken } from '@/utils/auth';
 import defAva from '@/assets/images/avatar-default.png';
+import { resolveAvatarUrl } from '@/utils/avatar.mjs';
 import { logoutAndClear } from './logoutFlow.mjs';
 
 const useUserStore = defineStore('user', {
@@ -56,14 +57,7 @@ const useUserStore = defineStore('user', {
                 getInfo()
                     .then((res) => {
                         const user = res.user;
-                        const rawAvatar = user.avatar;
-                        const base = (import.meta.env.VITE_APP_BASE_API || '').replace(/\/+$/, '');
-                        const avatar =
-                            user.avatar == '' || user.avatar == null
-                                ? defAva
-                                : rawAvatar.startsWith('http')
-                                  ? rawAvatar
-                                  : base + (rawAvatar.startsWith('/') ? rawAvatar : '/' + rawAvatar);
+                        const avatar = resolveAvatarUrl(user.avatar, import.meta.env.VITE_APP_BASE_API) || defAva;
 
                         if (res.roles && res.roles.length > 0) {
                             this.roles = res.roles;

@@ -52,7 +52,9 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint, S
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException e)
             throws IOException, ServletException
     {
-        if (spaNavigation.matches(request)) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        boolean uploadedResource = path.equals("/profile") || path.startsWith("/profile/");
+        if (!uploadedResource && spaNavigation.matches(request)) {
             // Serve only the static application shell. The originally denied API is never invoked.
             request.getRequestDispatcher(SpaPageController.ENTRY_PATH).forward(request, response);
             return;
@@ -61,6 +63,15 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint, S
         String msg = MessageUtils.messageWithFallback("sys.error.authentication.fail",
                 "Authentication failed for request {0}; access to system resources is denied",
                 request.getRequestURI());
-        ServletUtils.renderString(response, JSON.toJSONString(AjaxResult.error(code, msg)));
+        String body = JSON.toJSONString(AjaxResult.error(code, msg));
+        if (uploadedResource) {
+            // Images/files must receive an HTTP error, never an HTML shell or a 200 JSON envelope.
+            response.setStatus(code);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().print(body);
+        } else {
+            // Preserve the existing business API login-expiry contract.
+            ServletUtils.renderString(response, body);
+        }
     }
 }
