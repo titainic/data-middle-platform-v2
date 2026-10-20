@@ -3,11 +3,13 @@
 
 import argparse
 import getpass
+import grp
 import hashlib
 from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import secrets
 import shutil
@@ -689,17 +691,46 @@ WantedBy=multi-user.target
 def install_gateway(arguments, root):
     runtime = root / "runtime"
     gateway_configuration = runtime / "nginx.conf"
+    docker = shutil.which("docker")
+    nginx = None if docker else shutil.which("nginx")
+    if not docker and not nginx:
+        raise InstallError("Install Nginx or Docker for the same-origin frontend/API gateway")
+    # Keep temporary files outside runtime: its 0750 service group excludes Nginx workers.
+    temporary_root = root.parent / f"{arguments.instance}-nginx-tmp"
+    temporary_paths = [temporary_root / name for name in ("proxy", "client_body", "fastcgi", "uwsgi", "scgi")]
+    worker = "nginx" if docker else "nobody"
+    worker_group = worker
+    if not docker:
+        try:
+            worker_group = grp.getgrgid(pwd.getpwnam(worker).pw_gid).gr_name
+        except KeyError as exception:
+            raise InstallError("Nginx gateway requires the nobody system account and its primary group") from exception
+        assert_toolchain_access(root.parent)
+        if temporary_root.exists() or temporary_root.is_symlink():
+            raise InstallError("Gateway temporary directory already exists; choose a new instance name")
+        temporary_root.mkdir(mode=0o755)
+        temporary_root.chmod(0o755)
+        for path in temporary_paths:
+            path.mkdir(mode=0o700)
+            path.chmod(0o700)
+        run(["chown", f"{worker}:{worker_group}", *map(str, temporary_paths)])
     ai_location = (f"location /prod-ai/ {{ proxy_pass http://127.0.0.1:{arguments.ai_port}/; "
                    + "proxy_http_version 1.1; proxy_set_header Host $http_host; proxy_set_header X-Real-IP $remote_addr; "
                    + "proxy_set_header X-Forwarded-Proto $scheme; proxy_set_header X-Forwarded-Port $server_port; "
                    + "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_buffering off; proxy_read_timeout 600s; }")
     if not arguments.with_ai:
         ai_location = "location /prod-ai/ { return 503; }"
-    configuration = f"""worker_processes auto;
+    configuration = f"""user {worker} {worker_group};
+worker_processes auto;
 pid /tmp/{arguments.instance}-nginx.pid;
 error_log stderr warn;
 events {{ worker_connections 1024; }}
 http {{
+    proxy_temp_path {temporary_root}/proxy;
+    client_body_temp_path {temporary_root}/client_body;
+    fastcgi_temp_path {temporary_root}/fastcgi;
+    uwsgi_temp_path {temporary_root}/uwsgi;
+    scgi_temp_path {temporary_root}/scgi;
     access_log off;
     client_max_body_size 3000m;
     map $http_upgrade $connection_upgrade {{
@@ -737,17 +768,18 @@ http {{
 }}
 """
     write_protected(gateway_configuration, configuration, 0o600)
-    if shutil.which("docker"):
+    if docker:
         name = arguments.instance + "-gateway"
         if subprocess.run(["docker", "inspect", name], capture_output=True).returncode == 0:
             raise InstallError("Gateway container already exists; choose a new instance name")
         run(["docker", "run", "-d", "--name", name, "--restart", "unless-stopped", "--network", "host",
              "--mount", f"type=bind,src={gateway_configuration},dst=/etc/nginx/nginx.conf,readonly",
-             "nginx:1.28-alpine"], private=True)
+             "nginx:1.28-alpine", "sh", "-c",
+             "umask 022 && mkdir -p " + " ".join(map(str, temporary_paths))
+             + " && chown nginx:nginx " + " ".join(map(str, temporary_paths))
+             + " && chmod 700 " + " ".join(map(str, temporary_paths))
+             + " && exec nginx -g 'daemon off;'"], private=True)
         return "docker:" + name
-    nginx = shutil.which("nginx")
-    if not nginx:
-        raise InstallError("Install Nginx or Docker for the same-origin frontend/API gateway")
     name = arguments.instance + "-gateway.service"
     write_protected(Path("/etc/systemd/system") / name, f"""[Unit]
 Description=qData frontend gateway ({arguments.instance})
