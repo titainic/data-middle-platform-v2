@@ -271,7 +271,8 @@ export default {
       contact: 'Contact',
       scheduler: 'Project Scheduler',
       quartz: 'Local Scheduler (Quartz)',
-      dolphinScheduler: 'DolphinScheduler'
+      dolphinScheduler: 'DolphinScheduler',
+      dolphinSchedulerHint: 'Before using DolphinScheduler, confirm that an administrator has configured and connected the service. Otherwise, select Local Scheduler (Quartz).'
     },
     title: {
       add: 'Add Project',
