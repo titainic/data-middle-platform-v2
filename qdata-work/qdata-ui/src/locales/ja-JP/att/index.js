@@ -271,7 +271,8 @@ export default {
       contact: '連絡先',
       scheduler: 'プロジェクトスケジューラ',
       quartz: 'ローカルスケジューラ（Quartz）',
-      dolphinScheduler: 'DolphinScheduler'
+      dolphinScheduler: 'DolphinScheduler',
+      dolphinSchedulerHint: 'DolphinScheduler を使用する前に、管理者がサービスを設定して接続済みであることを確認してください。未接続の場合はローカルスケジューラ（Quartz）を選択してください。'
     },
     title: {
       add: 'プロジェクト追加',

@@ -293,7 +293,8 @@ export default {
       contact: '联系方式',
       scheduler: '项目调度器',
       quartz: '本地调度（Quartz）',
-      dolphinScheduler: 'DolphinScheduler'
+      dolphinScheduler: 'DolphinScheduler',
+      dolphinSchedulerHint: '使用 DolphinScheduler 前，请确认管理员已配置并接通海豚调度服务。未接通时请选择本地调度（Quartz）。'
     },
     validations: {
       nameRequired: '项目名称不能为空',

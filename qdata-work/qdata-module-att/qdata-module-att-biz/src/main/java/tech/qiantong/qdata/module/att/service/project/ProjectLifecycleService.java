@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.qiantong.qdata.api.ds.api.project.*;
 import tech.qiantong.qdata.api.ds.api.service.project.IDsProjectService;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.httpClient.DsRequestUtils;
 import tech.qiantong.qdata.common.utils.SecurityUtils;
 import tech.qiantong.qdata.module.att.controller.admin.project.vo.AttProjectSaveReqVO;
 import tech.qiantong.qdata.redis.service.IRedisService;
@@ -38,9 +40,10 @@ public class ProjectLifecycleService {
         String code;
         if("QUARTZ".equals(scheduler)) code=String.valueOf(sequences.nextSequence("qdata:project:code",Math.multiplyExact(System.currentTimeMillis(),1000L)));
         else {
+            DsRequestUtils.validateConfiguration();
             var input=new DsProjectCreateReqDTO();input.setProjectName(request.getName());input.setDescription(request.getDescription());
             var response=external.saveProject(input);
-            if(response==null || response.getCode()!=0 || response.getData()==null || response.getData().getCode()==null)throw new IllegalStateException("外部调度项目创建未确认成功，请核对调度服务");
+            if(response==null || !Objects.equals(response.getCode(),0) || response.getData()==null || response.getData().getCode()==null)throw new ServiceException("海豚调度项目创建未确认成功，请核对调度端项目名称、访问权限和创建结果后重试，或改用本地调度（Quartz）",400);
             code=String.valueOf(response.getData().getCode());
         }
         if(jdbc.queryForObject("SELECT COUNT(*) FROM att_project WHERE code=?",Long.class,code)>0)throw new IllegalStateException("项目编码已存在，请核对创建结果");

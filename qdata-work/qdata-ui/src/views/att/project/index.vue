@@ -364,6 +364,14 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-alert
+          v-if="form.id == null && form.schedulerType === 'DOLPHINSCHEDULER'"
+          :title="td('att.project.texts.dolphinSchedulerHint')"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="mb20"
+        />
         <el-row>
           <el-col :span="24">
             <el-form-item :label="td('common.texts.description')" prop="description" :label-position="labelPosition">

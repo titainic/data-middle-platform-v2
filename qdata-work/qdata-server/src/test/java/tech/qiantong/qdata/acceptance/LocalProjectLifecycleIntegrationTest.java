@@ -17,6 +17,8 @@ import tech.qiantong.qdata.security.web.service.ProjectPermissionService;
 import tech.qiantong.qdata.redis.service.IRedisService;
 import tech.qiantong.qdata.api.ds.api.project.*;
 import tech.qiantong.qdata.api.ds.api.service.project.IDsProjectService;
+import tech.qiantong.qdata.common.exception.ServiceException;
+import tech.qiantong.qdata.common.httpClient.DsRequestUtils;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,6 +27,9 @@ import static org.mockito.ArgumentMatchers.*;
 
 @EnabledIfEnvironmentVariable(named="QDATA_NAMESPACE_INTEGRATION",matches="true")
 class LocalProjectLifecycleIntegrationTest {
+    String previousDsBaseUrl;
+    @BeforeEach void configureMockScheduler(){previousDsBaseUrl=(String)ReflectionTestUtils.getField(DsRequestUtils.class,"baseUrl");new DsRequestUtils().setBaseUrl("http://scheduler.invalid");}
+    @AfterEach void restoreMockScheduler(){new DsRequestUtils().setBaseUrl(previousDsBaseUrl);}
     SingleConnectionDataSource fixture;JdbcTemplate jdbc;TransactionTemplate tx;
     ProjectPermissionService permissions;ProjectAuthority authority;ProjectLifecycleService lifecycle;IRedisService sequence;IDsProjectService external;
     @BeforeEach void setup(){
@@ -44,7 +49,7 @@ class LocalProjectLifecycleIntegrationTest {
     @Test void inactiveExistingMemberIsRestoredWithoutDuplicateMembership(){tx.executeWithoutResult(status->{long id=lifecycle.create(request());jdbc.update("INSERT INTO att_project_user_rel(project_id,user_id,valid_flag,del_flag) VALUES(?,926,'0','0')",id);var input=request();input.setId(id);input.setManagerId(926L);lifecycle.update(input);assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM att_project_user_rel WHERE project_id=? AND user_id=926 AND del_flag='0'",Integer.class,id));assertEquals("1",jdbc.queryForObject("SELECT valid_flag FROM att_project_user_rel WHERE project_id=? AND user_id=926 AND del_flag='0'",String.class,id));status.setRollbackOnly();});}
     @Test void callerCannotEditAnotherProjectOrReplaceItsCode(){actor(926);var input=request();input.setId(1L);assertThrows(AccessDeniedException.class,()->lifecycle.update(input));actor(925);input.setCode("wrong-code");assertThrows(AccessDeniedException.class,()->lifecycle.update(input));verifyNoInteractions(external);}
     @Test void invalidDefaultSchedulerFailsBeforeAnyExternalSideEffect(){ReflectionTestUtils.setField(lifecycle,"defaultScheduler","unknown");assertThrows(IllegalStateException.class,()->lifecycle.create(request()));verifyNoInteractions(sequence,external);}
-    @Test void externalCreateFailureNeverCreatesLocalProject(){ReflectionTestUtils.setField(lifecycle,"defaultScheduler","DOLPHINSCHEDULER");when(external.saveProject(any())).thenReturn(externalResponse(1));long before=jdbc.queryForObject("SELECT COUNT(*) FROM att_project",Long.class);assertThrows(IllegalStateException.class,()->tx.execute(status->lifecycle.create(request())));assertEquals(before,jdbc.queryForObject("SELECT COUNT(*) FROM att_project",Long.class));verify(external,never()).deleteProject(anyLong());}
+    @Test void externalCreateFailureNeverCreatesLocalProject(){ReflectionTestUtils.setField(lifecycle,"defaultScheduler","DOLPHINSCHEDULER");when(external.saveProject(any())).thenReturn(externalResponse(1));long before=jdbc.queryForObject("SELECT COUNT(*) FROM att_project",Long.class);assertThrows(ServiceException.class,()->tx.execute(status->lifecycle.create(request())));assertEquals(before,jdbc.queryForObject("SELECT COUNT(*) FROM att_project",Long.class));verify(external,never()).deleteProject(anyLong());}
     @Test void externalCreateAndLocalOwnershipAreExplicit(){ReflectionTestUtils.setField(lifecycle,"defaultScheduler","DOLPHINSCHEDULER");when(external.saveProject(any())).thenReturn(externalResponse(0));tx.executeWithoutResult(status->{long id=lifecycle.create(request());assertEquals("DOLPHINSCHEDULER",jdbc.queryForObject("SELECT scheduler_type FROM att_project WHERE id=?",String.class,id));assertEquals("900900",jdbc.queryForObject("SELECT code FROM att_project WHERE id=?",String.class,id));verifyNoInteractions(sequence);status.setRollbackOnly();});}
     @Test void explicitExternalSchedulerCreatesMatchingProject(){when(external.saveProject(any())).thenReturn(externalResponse(0));tx.executeWithoutResult(status->{var input=request();input.setSchedulerType("DOLPHINSCHEDULER");long id=lifecycle.create(input);assertEquals("DOLPHINSCHEDULER",jdbc.queryForObject("SELECT scheduler_type FROM att_project WHERE id=?",String.class,id));assertEquals("900900",jdbc.queryForObject("SELECT code FROM att_project WHERE id=?",String.class,id));verify(external).saveProject(argThat(value->input.getName().equals(value.getProjectName())));verifyNoInteractions(sequence);status.setRollbackOnly();});}
     @Test void invalidRequestedSchedulerStopsBeforeExternalCall(){var input=request();input.setSchedulerType("unknown");assertThrows(IllegalArgumentException.class,()->lifecycle.create(input));verifyNoInteractions(sequence,external);}
