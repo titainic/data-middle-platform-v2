@@ -4,6 +4,10 @@
 /analysis/
 /implementation/
 /deliverables/
+/evidence/
+/.worktrees/
+/.claude/
+/.paperclip/
 /qdata-work/docs/
 /qdata-work/redme.md
 **/.codex-backups/
