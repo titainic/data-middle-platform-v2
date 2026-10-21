@@ -248,7 +248,14 @@ public class DaDatasourceServiceImpl extends ServiceImpl<DaDatasourceMapper, DaD
 
     @Override
     public PageResult<DaDatasourceDO> getDaDatasourcePage(DaDatasourcePageReqVO pageReqVO) {
-        return daDatasourceMapper.selectPage(pageReqVO);
+        var page = daDatasourceMapper.selectPage(pageReqVO);
+        if (page != null && page.getRows() != null && !page.getRows().isEmpty()) {
+            var bindings = daDatasourceProjectRelService.getProjectBindings(page.getRows().stream()
+                    .map(DaDatasourceDO::getId).toList()).stream()
+                    .collect(Collectors.groupingBy(DaDatasourceProjectRelDO::getDatasourceId));
+            page.getRows().forEach(source -> source.setProjectList(bindings.getOrDefault(source.getId(), List.of())));
+        }
+        return page;
     }
 
     @Override
@@ -299,7 +306,7 @@ public class DaDatasourceServiceImpl extends ServiceImpl<DaDatasourceMapper, DaD
 
         DaDatasourceDO dictType = BeanUtils.toBean(createReqVO, DaDatasourceDO.class);
         daDatasourceMapper.insert(dictType);
-        delAndSaveDaDataSourceProject(dictType);
+        saveDatasourceProjects(dictType);
 
         stageDatasourceCacheRefresh(this.getDaDatasourceById(dictType.getId()));
 
@@ -525,12 +532,18 @@ public class DaDatasourceServiceImpl extends ServiceImpl<DaDatasourceMapper, DaD
         QueryWrapper<DaDatasourceProjectRelDO> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("DATASOURCE_ID", daDatasourceDO.getId());
         daDatasourceProjectRelService.remove(queryWrapper);
-        if (!daDatasourceDO.getProjectList().isEmpty()) {
+        saveDatasourceProjects(daDatasourceDO);
+    }
+
+    private void saveDatasourceProjects(DaDatasourceDO daDatasourceDO) {
+        if (daDatasourceDO.getProjectList() != null && !daDatasourceDO.getProjectList().isEmpty()) {
             for (DaDatasourceProjectRelDO daDatasourceProjectRelDO : daDatasourceDO.getProjectList()) {
                 daDatasourceProjectRelDO.setDatasourceId(daDatasourceDO.getId());
                 daDatasourceProjectRelDO.setId(null);
             }
-            daDatasourceProjectRelService.saveBatch(daDatasourceDO.getProjectList());
+            if (!daDatasourceProjectRelService.saveBatch(daDatasourceDO.getProjectList())) {
+                throw new ServiceException("数据源项目关联保存失败，请重试");
+            }
         }
     }
 

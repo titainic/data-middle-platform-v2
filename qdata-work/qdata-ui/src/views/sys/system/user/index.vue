@@ -651,7 +651,7 @@ function resetQuery() {
 function handleDelete(row) {
   const userIds = row.userId || ids.value;
   proxy.$modal
-    .confirm(td('sys.system.user.confirmDelete', { id: userIds }))
+    .confirm(td('sys.system.user.confirmDelete', '是否确认删除用户编号为"{id}"的数据项？', { id: Array.isArray(userIds) ? userIds.join(',') : userIds }))
     .then(function () {
       return delUser(userIds);
     })
@@ -677,7 +677,7 @@ function handleExport() {
 function handleStatusChange(row) {
   let text = row.status === "0" ? td('sys.system.user.enable') : td('sys.system.user.disable');
   proxy.$modal
-    .confirm(td('sys.system.user.confirmStatusChange', { text, name: row.userName }))
+    .confirm(td('sys.system.user.confirmStatusChange', '确认要"{text}"用户"{name}"（编号：{id}）吗？', { text, name: row.userName, id: row.userId }))
     .then(function () {
       return changeUserStatus(row.userId, row.status);
     })

@@ -263,7 +263,7 @@
                     link
                     type="primary"
                     icon="VideoPlay"
-                    :disabled="!row.canExecute || row.status != 1"
+                    :disabled="!row.canExecute || !['0', '1'].includes(String(row.status))"
                     :loading="executeOnceLoading"
                     @click="handleExecuteOnce(row)"
                     >{{

@@ -198,6 +198,7 @@ function getList() {
       managedTask.value=null;
       // Task configuration
       nodeData.value = {
+        ...response.data,
         ...response.data.taskConfig,
         draftJson: response.data.draftJson,
         status: response.data.status,
@@ -290,6 +291,7 @@ const handleRun = async () => {
 // Run instance save
 const handletaskConfig = (obj) => {
   nodeData.value = {
+    ...nodeData.value,
     ...obj,
   };
 };
@@ -346,11 +348,14 @@ const dataJson = () => {
     code: form.value.code,
     projectCode: form.value.projectCode,
     projectId: form.value.projectId,
+    personCharge: String(nodeData.value.personCharge ?? form.value.personCharge ?? ''),
+    crontab: nodeData.value.crontab ?? form.value.crontab,
     type: form.value.type || "3",
   };
 };
 // Great save
 const handleExportData = async () => {
+  if (loading.value) return;
   loading.value = true;
   try {
     if (!form.value.sql) {
@@ -379,7 +384,7 @@ const handleExportData = async () => {
     if (res.code == "200") {
       handleSuccess();
     } else {
-      proxy.$modal.msgWarning(td('dpp.integratioTask.operationFailed', 'Operation failed, please contact administrator'));
+      proxy.$modal.msgWarning(res.msg || td('dpp.integratioTask.operationFailed', 'Operation failed, please contact administrator'));
     }
   } catch (error) {
     handleError(error);

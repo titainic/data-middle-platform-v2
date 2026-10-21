@@ -82,7 +82,7 @@ public class DaDatasourceController extends BaseController {
     }
 
     @jakarta.annotation.Resource private tech.qiantong.qdata.module.da.api.service.DataResourceAccess resourceAccess;
-    private void scope(DaDatasourcePageReqVO request){request.setAccessibleDatasourceIds(projectAccess.visible("list",true,request.getProjectCode()));}
+    private void scope(DaDatasourcePageReqVO request){request.setProjectCode(projectAccess.resolveProjectCode(request.getProjectId(),request.getProjectCode()));request.setAccessibleDatasourceIds(projectAccess.visible("list",true,request.getProjectCode()));}
     private DaDatasourceRespVO presented(DaDatasourceDO source){var result=BeanUtils.toBean(source,DaDatasourceRespVO.class);if(result!=null){result.setDatasourceConfig(tech.qiantong.qdata.common.database.core.ConnectionDisplayConfig.sanitize(result.getDatasourceConfig()));result.setCapabilities(projectAccess.capabilities(source.getId()));if(result.getProjectList()!=null)result.setProjectList(result.getProjectList().stream().filter(p->resourceAccess.visibleProjectIds().contains(p.getProjectId())).toList());}return result;}
     private List<DaDatasourceRespVO> presented(List<DaDatasourceDO> values){return presented(values,new HashSet<>(projectAccess.visible("list",true,null)));}
     private List<DaDatasourceRespVO> presented(List<DaDatasourceDO> values,java.util.Set<Long> allowed){return values.stream().filter(value->allowed.contains(value.getId())).map(this::presented).collect(java.util.stream.Collectors.toList());}
@@ -101,6 +101,7 @@ public class DaDatasourceController extends BaseController {
     @GetMapping("/list")
     public CommonResult<PageResult<DaDatasourceRespVO>> list(DaDatasourcePageReqVO daDatasource) {
         rejectSecretFilter(daDatasource);
+        daDatasource.setProjectCode(projectAccess.resolveProjectCode(daDatasource.getProjectId(),daDatasource.getProjectCode()));
         daDatasource.setAccessibleDatasourceIds(projectAccess.visible("list",false,daDatasource.getProjectCode()));
         PageResult<DaDatasourceDO> page = daDatasourceService.getDaDatasourcePage(daDatasource);
         return CommonResult.success(presented(page));

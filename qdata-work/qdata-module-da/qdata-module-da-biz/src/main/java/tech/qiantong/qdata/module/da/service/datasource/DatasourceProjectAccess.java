@@ -83,6 +83,13 @@ public class DatasourceProjectAccess {
             request.setListCount(number(row.get("list_count")));request.setSyncCount(number(row.get("sync_count")));request.setDataSize(number(row.get("data_size")));
         }
     }
+    public String resolveProjectCode(Long projectId, String projectCode) {
+        if (projectId == null) return projectCode;
+        if (!projects("list").contains(projectId)) throw denied();
+        var codes = jdbc.queryForList("SELECT code FROM att_project WHERE id=? AND valid_flag='1' AND del_flag='0'", String.class, projectId);
+        if (codes.size() != 1 || projectCode != null && !projectCode.isBlank() && !projectCode.equals(codes.get(0))) throw denied();
+        return codes.get(0);
+    }
     public Map<String,Object> relation(Long id,boolean write){
         if(id==null)throw denied();var rows=jdbc.queryForList("SELECT * FROM da_datasource_project_rel WHERE id=?",id);if(rows.size()!=1)throw denied();var row=rows.get(0);
         Long source=number(row.get("datasource_id")),project=number(row.get("project_id"));

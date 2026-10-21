@@ -228,6 +228,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
 
     @Override
     public Long createDppEtlTask(DppEtlTaskSaveReqVO createReqVO) {
+        createReqVO.setName(requireUniqueTaskName(createReqVO.getProjectId(), createReqVO.getName(), null));
         DppEtlTaskDO dppEtlTaskDO = BeanUtils.toBean(createReqVO, DppEtlTaskDO.class);
         if (StringUtils.isNotEmpty(dppEtlTaskDO.getCatCode()) && StringUtils.isNotEmpty(createReqVO.getType())) {
             dppEtlTaskDO.setCatId(attCatService.getCatIdByTableNameAndCatCode(TaskCatEnum.findEnumByType(createReqVO.getType()).toString(), dppEtlTaskDO.getCatCode(), dppEtlTaskDO.getProjectId()));
@@ -244,6 +245,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         if (existing != null && updateReqVO.getProjectId() != null
                 && !Objects.equals(existing.getProjectId(), updateReqVO.getProjectId())) {
             throw new ServiceException("任务不能转移到其他项目");
+        }
+        if (existing != null && updateReqVO.getName() != null) {
+            updateReqVO.setName(requireUniqueTaskName(existing.getProjectId(), updateReqVO.getName(), existing.getId()));
         }
 
         // Update data integration task
@@ -622,6 +626,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
      */
     @Override
     public DppEtlTaskSaveReqVO createEtlTask(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+        validateTaskName(dppEtlNewNodeSaveReqVO);
         if (ScheduleConstants.QUARTZ.equals(dppEtlNewNodeSaveReqVO.getScheduler())) {
             return createLocalDataXEtlTask(dppEtlNewNodeSaveReqVO);
         }
@@ -915,6 +920,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
 
     @Override
     public DppEtlTaskSaveReqVO updateEtlTask(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+        validateTaskName(dppEtlNewNodeSaveReqVO);
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
         if (StringUtils.equals("1", dppEtlTaskDO.getStatus()) || StringUtils.equals("-3", dppEtlTaskDO.getStatus())) {
             throw new ServiceException("dpp.error.task.online.modify",
@@ -1372,9 +1378,11 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     @Override
     @Transactional
     public DppEtlTaskSaveReqVO createProcessDefinition(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
+        validateTaskName(dppEtlNewNodeSaveReqVO);
         if(StringUtils.isNotEmpty(dppEtlNewNodeSaveReqVO.getId())) {
             var existing=dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
             if(existing!=null && existing.getWarehouseBatchId()!=null)throw new IllegalArgumentException("受管批次任务不能重新定义，请创建新批次");
+            if (existing != null && !"-1".equals(existing.getStatus())) return updateProcessDefinition(dppEtlNewNodeSaveReqVO);
         }
         if (ScheduleConstants.QUARTZ.equals(dppEtlNewNodeSaveReqVO.getScheduler())) {
             return createProcessDefinitionQuartz(dppEtlNewNodeSaveReqVO);
@@ -1448,8 +1456,18 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         boolean isUpdate = StringUtils.isNotEmpty(saveReqVOId);
         // Create the scheduler.
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(Long.valueOf(saveReqVOId));
+        if (dppEtlTaskDO == null) throw new ServiceException("任务不存在，请刷新后重试");
+        // 首次完整保存校验完整依赖图，任务及节点版本由服务端生成。
+        quartzDefinitionVersioning.initialize(dppEtlNewNodeSaveReqVO, dppEtlTaskDO);
         dppEtlTaskDO.setCronExpression(dppEtlNewNodeSaveReqVO.getCrontab());
-        Long quartzId = dppTaskQuartzService.create(dppEtlTaskDO, "dppQuartzJob.dataDevelopment(%sL)");
+        dppEtlTaskDO.setName(dppEtlNewNodeSaveReqVO.getName());
+        dppEtlTaskDO.setExecutionType(dppEtlNewNodeSaveReqVO.getExecutionType());
+        Long quartzId = dppEtlTaskDO.getQuartzId();
+        if (quartzId == null || quartzId < 1) {
+            quartzId = dppTaskQuartzService.create(dppEtlTaskDO, "dppQuartzJob.dataDevelopment(%sL)");
+        } else {
+            dppTaskQuartzService.update(quartzId, dppEtlNewNodeSaveReqVO.getCrontab());
+        }
 
         // Create or update scheduler information.
         Long taskId = JSONUtils.convertToLong(saveReqVOId);
@@ -1514,6 +1532,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     @Override
     public DppEtlTaskSaveReqVO updateProcessDefinition(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
+        if (dppEtlTaskDO == null) throw new ServiceException("任务不存在，请刷新后重试");
+        if ("-1".equals(dppEtlTaskDO.getStatus())) return createProcessDefinition(dppEtlNewNodeSaveReqVO);
+        validateTaskName(dppEtlNewNodeSaveReqVO);
         if (dppEtlTaskDO.getWarehouseBatchId()!=null) throw new IllegalArgumentException("受管批次任务已冻结，请修改模型模板并创建新批次");
         if (StringUtils.equals("1", dppEtlTaskDO.getStatus()) || StringUtils.equals("-3", dppEtlTaskDO.getStatus())) {
             throw new ServiceException("dpp.error.task.online.modify",
@@ -1591,8 +1612,22 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         quartzDefinitionVersioning.advance(dppEtlNewNodeSaveReqVO,dppEtlTaskDO);
         this.releaseTaskCrontab(dppEtlNewNodeSaveReqVO);
 
+        Long quartzId = dppEtlTaskDO.getQuartzId();
+        if (quartzId == null || quartzId < 1) {
+            dppEtlTaskDO.setCronExpression(dppEtlNewNodeSaveReqVO.getCrontab());
+            dppEtlTaskDO.setName(dppEtlNewNodeSaveReqVO.getName());
+            dppEtlTaskDO.setExecutionType(dppEtlNewNodeSaveReqVO.getExecutionType());
+            quartzId = dppTaskQuartzService.create(dppEtlTaskDO, "dppQuartzJob.dataDevelopment(%sL)");
+            var schedule = getDppEtlScheduler(dppEtlTaskDO.getCode(), dppEtlTaskDO.getId());
+            var binding = new DppEtlSchedulerSaveReqVO();
+            binding.setId(schedule.getId());
+            binding.setQuartzId(quartzId);
+            iDppEtlSchedulerService.updateDppEtlScheduler(binding);
+        }
+
         DppEtlTaskSaveReqVO dppEtlTaskSaveReqVO = BeanUtil.copyProperties(dppEtlNewNodeSaveReqVO, DppEtlTaskSaveReqVO.class);
         dppEtlTaskSaveReqVO.setId(dppEtlTaskDO.getId());
+        dppEtlTaskSaveReqVO.setQuartzId(quartzId);
         dppEtlTaskSaveReqVO.setLocations(JSONUtils.toJson(dppEtlNewNodeSaveReqVO.getLocations()));
         this.updateDppEtlTask(dppEtlTaskSaveReqVO);
 
@@ -1905,6 +1940,13 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         if (dppEtlTaskDO == null) {
             return error(MessageUtils.messageWithFallback(
                     "dpp.error.task.notfound.refresh", "Task does not exist; refresh and try again"));
+        }
+        if ("-1".equals(dppEtlTaskDO.getStatus())) {
+            throw new ServiceException("请先完成任务保存，再执行一次");
+        }
+        if (ScheduleConstants.QUARTZ.equals(dppEtlTaskDO.getScheduler())
+                && (dppEtlTaskDO.getQuartzId() == null || dppEtlTaskDO.getQuartzId() < 1)) {
+            throw new ServiceException("任务尚未注册Quartz调度，请重新保存任务后执行");
         }
         if(developmentFiles!=null)developmentFiles.task(id);
         if(dppEtlTaskDO.getWarehouseBatchId()!=null)warehouseBatches.authorizeTask(id);
@@ -2380,7 +2422,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
 
     @Override
     public DppEtlNewNodeSaveReqVO createEtlTaskFront(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
-
+        validateTaskName(dppEtlNewNodeSaveReqVO);
         // Generate task code
         String taskCode = String.valueOf(schedulerAdapter.generateTaskCode(dppEtlNewNodeSaveReqVO.getProjectCode()));
         if (ScheduleConstants.DOLPHINSCHEDULER.equals(dppEtlNewNodeSaveReqVO.getScheduler())) {
@@ -2431,6 +2473,22 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         dppEtlNewNodeSaveReqVO.setStatus("-1");
         dppEtlNewNodeSaveReqVO.setCode(taskCode);
         return dppEtlNewNodeSaveReqVO;
+    }
+
+    private void validateTaskName(DppEtlNewNodeSaveReqVO request) {
+        Long id = StringUtils.isBlank(request.getId()) ? null : Long.valueOf(request.getId());
+        request.setName(requireUniqueTaskName(request.getProjectId(), request.getName(), id));
+    }
+
+    private String requireUniqueTaskName(Long projectId, String name, Long excludedId) {
+        if (projectId == null) throw new ServiceException("项目ID不能为空");
+        if (StringUtils.isBlank(name)) throw new ServiceException("任务名称不能为空");
+        String normalized = name.trim();
+        dppEtlTaskMapper.lockTaskProject(projectId);
+        if (dppEtlTaskMapper.findTaskNameConflict(projectId, normalized, excludedId) != null) {
+            throw new ServiceException("当前项目已存在同名任务，请使用其他名称");
+        }
+        return normalized;
     }
 
     /**

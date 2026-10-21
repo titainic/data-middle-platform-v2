@@ -1096,6 +1096,9 @@ const data = reactive({
     createTime: null,
   },
   rules: {
+    projectNameList: [
+      { type: 'array', required: true, min: 1, message: '请选择至少一个所属项目', trigger: 'change' },
+    ],
     datasourceName: [
       { required: true, message: td('da.datasource.datasourceNameRequired'), trigger: "blur" },
     ],

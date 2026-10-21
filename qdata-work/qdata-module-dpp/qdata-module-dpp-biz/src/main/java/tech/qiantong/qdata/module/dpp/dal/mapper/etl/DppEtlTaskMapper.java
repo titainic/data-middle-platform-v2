@@ -45,6 +45,16 @@ import java.util.Set;
  */
 public interface DppEtlTaskMapper extends BaseMapperX<DppEtlTaskDO> {
 
+    // 按项目串行校验，避免并发请求在查询后同时插入同名任务。
+    @org.apache.ibatis.annotations.Select("SELECT id FROM att_project WHERE id=#{projectId} FOR UPDATE")
+    Long lockTaskProject(@Param("projectId") Long projectId);
+
+    @org.apache.ibatis.annotations.Select("<script>SELECT id FROM dpp_etl_task WHERE project_id=#{projectId}"
+            + " AND name=#{name} AND del_flag='0'"
+            + "<if test='excludedId != null'> AND id != #{excludedId}</if> LIMIT 1 FOR UPDATE</script>")
+    Long findTaskNameConflict(@Param("projectId") Long projectId, @Param("name") String name,
+                              @Param("excludedId") Long excludedId);
+
     IPage<DppEtlTaskRespVO> getDppEtlTaskPage(Page page, @Param("params") DppEtlTaskPageReqVO reqVO);
 
     DppEtlTaskStatisticsRespVO getDppEtlTaskStatistics(

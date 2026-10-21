@@ -774,7 +774,7 @@ export default {
       confirmDelete: 'Are you sure to delete user with ID "{id}"?',
       enable: 'Enable',
       disable: 'Disable',
-      confirmStatusChange: 'Are you sure to "{text}" user "{name}"?',
+      confirmStatusChange: 'Are you sure to "{text}" user "{name}" (ID: {id})?',
       resetPasswordPrompt: 'Please enter new password for "{name}"',
       resetPasswordInputError: 'Password length must be between 8 and 20 characters',
       resetPasswordSuccess: 'Updated successfully, new password is: {password}',

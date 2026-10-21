@@ -648,7 +648,7 @@ public class TaskConverter {
             taskNodeRelSaveReqVO.setPreNodeVersion(taskRelation.getPreTaskVersion()); // Pre-node version
 
             // Post-node related fields
-            taskNodeRelSaveReqVO.setPostNodeId(getIdByCode(dppEtlNodeBatch, code, taskRelation.getPreTaskVersion())); // Post-node ID
+            taskNodeRelSaveReqVO.setPostNodeId(getIdByCode(dppEtlNodeBatch, String.valueOf(taskRelation.getPostTaskCode()), taskRelation.getPostTaskVersion())); // 后置节点按自己的编码和版本绑定
             taskNodeRelSaveReqVO.setPostNodeCode(String.valueOf(taskRelation.getPostTaskCode())); // Post-node code
             taskNodeRelSaveReqVO.setPostNodeVersion(taskRelation.getPostTaskVersion()); // Post-node version
 

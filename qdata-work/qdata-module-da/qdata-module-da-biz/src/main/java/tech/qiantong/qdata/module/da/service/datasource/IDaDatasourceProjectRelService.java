@@ -36,6 +36,8 @@ import java.util.Map;
  */
 public interface IDaDatasourceProjectRelService extends IService<DaDatasourceProjectRelDO> {
 
+    List<DaDatasourceProjectRelDO> getProjectBindings(Collection<Long> datasourceIds);
+
     /**
      * Get datasource-project relation page list
      *

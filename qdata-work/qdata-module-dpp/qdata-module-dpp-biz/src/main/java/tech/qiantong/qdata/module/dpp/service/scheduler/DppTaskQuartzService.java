@@ -32,17 +32,18 @@ public class DppTaskQuartzService {
     public Long create(DppEtlTaskDO dppEtlTaskDO, String invokeTarget) {
         ScheduleCommand build = ScheduleCommand.builder().jobName(dppEtlTaskDO.getName())
                 .jobGroup(dppEtlTaskDO.getName()).remark(dppEtlTaskDO.getRemark()).invokeTarget(String.format(invokeTarget, dppEtlTaskDO.getId()))
-                .cronExpression(dppEtlTaskDO.getCronExpression()).executionType(dppEtlTaskDO.getExecutionType()).build();
-        Long schedule = 0L;
+                .cronExpression(dppEtlTaskDO.getCronExpression()).executionType(dppEtlTaskDO.getExecutionType())
+                .status("1").build();
         try {
-            schedule = schedulerAdapter.createSchedule(build);
+            Long schedule = schedulerAdapter.createSchedule(build);
+            if (schedule == null || schedule < 1) throw new ServiceException("创建Quartz调度失败，请检查调度配置");
+            return schedule;
+        } catch (ServiceException e) {
+            throw e;
         } catch (Exception e) {
-            ScheduleRespDTO scheduleRespDTO = schedulerAdapter.selectScheduleById(build);
-            if (scheduleRespDTO == null) {
-                throw new ServiceException("dpp.error.scheduler.create", "Failed to create scheduler!");
-            }
+            log.error("创建Quartz调度失败，taskId={}", dppEtlTaskDO.getId(), e);
+            throw new ServiceException("dpp.error.scheduler.create", "Failed to create scheduler!");
         }
-        return schedule;
     }
 
     /**

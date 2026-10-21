@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as Vue from 'vue';
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
+import * as yearPolicy from '../src/components/Crontab/yearPolicy.mjs';
 
 // Real SFC scripts/templates and Vue mount/watch ordering; only Element Plus
 // controls and the rendering host are substitutes. No browser or business API.
@@ -26,7 +27,9 @@ function loadSfc(file) {
   const descriptor = parse(readFileSync(file, 'utf8'), { filename: file }).descriptor;
   const compiled = compileScript(descriptor, { id: file, genDefaultAs: '__component' });
   const dependencies = { Vue, ref: Vue.ref, computed: Vue.computed, watch: Vue.watch, onMounted: Vue.onMounted, getCurrentInstance: Vue.getCurrentInstance, useDefaultLang: () => ({ td: key => key }) };
-  let code = vueImports(compiled.content).replace(/import\s+(\w+)\s+from\s+["']([^"']+)["'];?/g,
+  Object.assign(dependencies, yearPolicy);
+  let code = vueImports(compiled.content).replace(/import\s*\{[^}]+\}\s*from\s*['"]\.\/yearPolicy\.mjs['"];?/g, '')
+    .replace(/import\s+(\w+)\s+from\s+["']([^"']+)["'];?/g,
     (_, name, source) => {
       if (source.endsWith('.vue')) dependencies[name] = loadSfc(resolve(dirname(file), source));
       else assert.equal(name, 'useDefaultLang');
@@ -148,12 +151,12 @@ test('props再次同步与对象替换不emit，年份步长不倒置、不限�
   } finally { h.app.unmount(); }
 });
 
-test('主动切换不填/每年/周期/间隔/指定及清空选择仍有效', async () => {
+test('主动切换不填/每年/周期/间隔/指定及清空选择仍有效，新的周期和间隔收敛到五年窗口', async () => {
   const h = mount(loadSfc(resolve(componentDir, 'index.vue')), { expression: '0 0 0 1 1 ? 2099' });
   try {
     await settle();
     const year = child(h, 'year.vue');
-    for (const [radio, expected] of [[1, ''], [2, '*'], [3, '2090-2099'], [4, '2080/15'], [5, '2099']]) {
+    for (const [radio, expected] of [[1, ''], [2, '*'], [3, '2030-2031'], [4, '2031/5'], [5, '2099']]) {
       year.cycle01 = 2090; year.cycle02 = 2099;
       year.average01 = 2080; year.average02 = 15;
       year.checkboxList = [2099]; year.radioValue = radio;
@@ -183,6 +186,26 @@ test('已挂载组件接收替换的cron对象时只同步显示', async () => {
   } finally { h.app.unmount(); }
 });
 
+test('新输入2099不能确认回填，调整至2031后可以确认；取消不修改原表达式', async () => {
+  const fills = [];
+  const h = mount(loadSfc(resolve(componentDir, 'index.vue')), {
+    expression: '0 0 0 1 1 ?', onFill: value => fills.push(value),
+  });
+  try {
+    await settle();
+    h.state.updateCrontabValue('year', '2099');
+    await settle();
+    assert.throws(() => h.state.submitFill(), /2031/);
+    assert.deepEqual(fills, []);
+    h.state.hidePopup();
+    assert.deepEqual(fills, []);
+    h.state.updateCrontabValue('year', '2031');
+    await settle();
+    h.state.submitFill();
+    assert.deepEqual(fills, ['0 0 0 1 1 ? 2031']);
+  } finally { h.app.unmount(); }
+});
+
 test('模板控件真实model/change事件可编辑年份，不依赖响应式watch回写', async () => {
   const h = mount(loadSfc(resolve(componentDir, 'index.vue')), { expression: '0 0 0 1 1 ? 2099' });
   try {
@@ -198,7 +221,7 @@ test('模板控件真实model/change事件可编辑年份，不依赖响应式wa
     const numbers = controls().filter(p => p['onUpdate:modelValue'] && p.value === undefined && p.onChange && p.min !== undefined);
     await change(numbers[2], 2080);
     await change(controls().filter(p => p['onUpdate:modelValue'] && p.onChange && p.min !== undefined)[3], 15);
-    assert.equal(h.state.crontabValueObj.year, '2080/15');
+    assert.equal(h.state.crontabValueObj.year, '2031/5');
     await change(controls().find(p => p.value === 5 && p.onChange), 5);
     await change(controls().find(p => p.multiple !== undefined && p.onChange), [2048, 2099]);
     assert.equal(h.state.crontabValueObj.year, '2048,2099');

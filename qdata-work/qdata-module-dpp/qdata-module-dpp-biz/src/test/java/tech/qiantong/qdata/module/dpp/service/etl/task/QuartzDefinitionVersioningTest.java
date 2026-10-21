@@ -6,6 +6,13 @@ import tech.qiantong.qdata.module.dpp.controller.admin.etl.vo.DppEtlNewNodeSaveR
 import static org.junit.jupiter.api.Assertions.*;
 
 class QuartzDefinitionVersioningTest {
+    @Test void firstSaveCreatesVersionOneEvenWhenDraftNodesHaveNoVersion() {
+        var r = request(); r.setVersion(0);
+        QuartzDefinitionVersioning.prepare(r, 0L, code -> 0);
+        assertEquals(1, r.getVersion());
+        assertTrue(JSON.parseArray(r.getTaskDefinitionList()).stream()
+                .allMatch(node -> ((com.alibaba.fastjson2.JSONObject) node).getIntValue("version") == 1));
+    }
     DppEtlNewNodeSaveReqVO request() {
         var r=new DppEtlNewNodeSaveReqVO();r.setVersion(3);
         r.setTaskDefinitionList("[{\"code\":\"100\",\"version\":1},{\"code\":\"200\",\"version\":2}]");
