@@ -183,14 +183,12 @@ public class AttProjectController extends BaseController {
     public CommonResult<Integer> remove(@PathVariable Long[] ids) {
         for(Long id:Arrays.stream(ids).sorted().toList())authority.manage(id,"att:project:remove");
         int project = attProjectService.removeAttProject(Arrays.asList(ids));
-        if (project == -1) {
+        if (project == -2) {
+            // 控制器是外层事务边界，显式回滚以保留 -2 对应的业务响应。
+            org.springframework.transaction.interceptor.TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             return CommonResult.error(500,
-                    MessageUtils.messageWithFallback("att.error.project.delete.member.exists",
-                            "删除失败，项目有人员存在!"));
-        } else if (project == -2) {
-            return CommonResult.error(500,
-                    MessageUtils.messageWithFallback("att.error.project.delete.scheduler.down",
-                            "删除失败，检查海豚调度器是否宕机!"));
+                    MessageUtils.messageWithFallback("att.error.project.delete.scheduler.fail",
+                            "删除项目失败，DolphinScheduler 未确认删除成功，本地变更已回滚；请检查调度服务、项目状态及权限"));
         }
         return CommonResult.toAjax(project);
     }

@@ -55,6 +55,7 @@ import tech.qiantong.qdata.module.att.dal.dataobject.project.AttProjectDO;
 import tech.qiantong.qdata.module.att.dal.dataobject.project.AttProjectUserRelDO;
 import tech.qiantong.qdata.module.att.dal.mapper.project.AttProjectMapper;
 import tech.qiantong.qdata.module.att.dal.mapper.project.AttProjectUserRelMapper;
+import tech.qiantong.qdata.module.att.dal.mapper.project.AttProjectDeletionMapper;
 import tech.qiantong.qdata.module.att.service.project.IAttProjectService;
 import tech.qiantong.qdata.module.system.domain.SysRoleMenu;
 import tech.qiantong.qdata.module.system.domain.SysUserRole;
@@ -87,6 +88,8 @@ public class IAttProjectServiceImpl extends ServiceImpl<AttProjectMapper, AttPro
     private AttProjectMapper attProjectMapper;
     @Resource
     private AttProjectUserRelMapper attProjectUserRelMapper;
+    @Resource
+    private AttProjectDeletionMapper attProjectDeletionMapper;
     @Resource
     private SysUserMapper sysUserMapper;
     @Resource
@@ -127,18 +130,27 @@ public class IAttProjectServiceImpl extends ServiceImpl<AttProjectMapper, AttPro
 
     @Override
     public int removeAttProject(Collection<Long> idList) {
-        QueryWrapper<AttProjectUserRelDO> projectWrapper = new QueryWrapper<>();
-        projectWrapper.in(!CollectionUtils.isEmpty(idList), "project_id", idList);
-        List<AttProjectUserRelDO> attProjectUserRelDOList = attProjectUserRelMapper.selectList(projectWrapper);
-        if (attProjectUserRelDOList.size() > 0) {
-            return -1;
+        if (CollectionUtils.isEmpty(idList)) {
+            return 0;
         }
-        List<AttProjectDO> projectDOList = attProjectMapper.selectList(new QueryWrapper<AttProjectDO>().in(!CollectionUtils.isEmpty(idList), "id", idList));
-        int i = attProjectMapper.deleteBatchIds(idList);
+        List<AttProjectDO> projectDOList = attProjectMapper.selectList(
+                new QueryWrapper<AttProjectDO>().in("id", idList));
+        if (projectDOList.isEmpty()) {
+            return 0;
+        }
+        // 仅清理本次实际存在的项目，所有本地变更由同一事务提交或回滚。
+        List<Long> projectIds = projectDOList.stream().map(AttProjectDO::getId).toList();
+        attProjectUserRelMapper.delete(new QueryWrapper<AttProjectUserRelDO>().in("project_id", projectIds));
+        attProjectDeletionMapper.deleteProjectUserRoles(projectIds);
+        attProjectDeletionMapper.deleteProjectRoles(projectIds);
+        int i = attProjectMapper.deleteBatchIds(projectIds);
         for (AttProjectDO attProjectDO : projectDOList) {
-            if("QUARTZ".equals(attProjectDO.getSchedulerType()))continue;
+            if ("QUARTZ".equals(attProjectDO.getSchedulerType())) {
+                continue;
+            }
             DsProjectDeleteRespDTO dsProjectDeleteRespDTO = dsProjectService.deleteProject(Long.valueOf(attProjectDO.getCode()));
-            if (dsProjectDeleteRespDTO.getCode() != 0) {
+            if (dsProjectDeleteRespDTO == null || dsProjectDeleteRespDTO.getCode() == null
+                    || dsProjectDeleteRespDTO.getCode() != 0) {
                 // Manual transaction rollback
                 TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
                 return -2;
