@@ -236,7 +236,6 @@ public class DppEtlTaskController extends BaseController {
     @PostMapping("/updateEtlTask")
     @ResponseStatus(HttpStatus.CREATED)
     public CommonResult updateEtlTask(@Validated(DppEtlNewNodeSaveReqVO.TaskSave.class) @RequestBody DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
-        dppEtlNewNodeSaveReqVO.setType("1");// Default offline data integration
         resourceAccess.request(dppEtlNewNodeSaveReqVO,"edit");
         DppEtlTaskSaveReqVO result = dppEtlTaskService.updateEtlTask(dppEtlNewNodeSaveReqVO);
         return CommonResult.success(result);

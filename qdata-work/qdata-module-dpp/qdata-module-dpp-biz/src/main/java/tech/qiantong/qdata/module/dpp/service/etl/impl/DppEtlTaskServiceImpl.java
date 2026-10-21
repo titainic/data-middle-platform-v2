@@ -454,6 +454,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         //1: Offline task 2: Real-time task 3: Data development task 4: Job task
         String type = dppEtlTaskDO.getType();
         DppEtlSchedulerDO dppEtlSchedulerById = iDppEtlSchedulerService.getDppEtlSchedulerById(dppEtlSchedulerPageReqVO);
+        if (dppEtlSchedulerById == null) {
+            throw new ServiceException("dpp.error.template.scheduler.missing", "Task template error, scheduler info not found!");
+        }
         // If task status has not changed, return directly
         if (StringUtils.equals(dppEtlTaskDO.getStatus(), dppEtlNewNodeSaveReqVO.getReleaseState())) {
             return new HashMap<>();
@@ -520,7 +523,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         if (!StringUtils.equals("-2", dppEtlTaskDO.getStatus()) && !StringUtils.equals("-3", dppEtlTaskDO.getStatus())) {
             updateTaskStatus(dppEtlTaskDO.getId(), dppEtlNewNodeSaveReqVO.getReleaseState());
         } else {
-            updateTaskStatus(dppEtlTaskDO.getId(), "-3");
+            updateTaskStatus(dppEtlTaskDO.getId(), "0".equals(dppEtlNewNodeSaveReqVO.getReleaseState()) ? "-2" : "-3");
         }
 
         return null;
@@ -922,6 +925,11 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     public DppEtlTaskSaveReqVO updateEtlTask(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         validateTaskName(dppEtlNewNodeSaveReqVO);
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
+        // 更新以持久化类型为准，开发/作业任务不走数据集成扩展表链路。
+        dppEtlNewNodeSaveReqVO.setType(dppEtlTaskDO.getType());
+        if ("3".equals(dppEtlTaskDO.getType()) || "4".equals(dppEtlTaskDO.getType())) {
+            return updateProcessDefinition(dppEtlNewNodeSaveReqVO);
+        }
         if (StringUtils.equals("1", dppEtlTaskDO.getStatus()) || StringUtils.equals("-3", dppEtlTaskDO.getStatus())) {
             throw new ServiceException("dpp.error.task.online.modify",
                     "Online tasks cannot be modified; take the task offline first");
@@ -1173,6 +1181,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
     @Override
     public Map<String, Object> updateReleaseTask(DppEtlNewNodeSaveReqVO dppEtlNewNodeSaveReqVO) {
         DppEtlTaskDO dppEtlTaskDO = dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
+        if (ScheduleConstants.QUARTZ.equals(dppEtlTaskDO.getScheduler())) {
+            return updateReleaseJobTask(dppEtlNewNodeSaveReqVO);
+        }
         DppEtlSchedulerPageReqVO dppEtlSchedulerPageReqVO = new DppEtlSchedulerPageReqVO();
         dppEtlSchedulerPageReqVO.setTaskId(dppEtlTaskDO.getId());
         dppEtlSchedulerPageReqVO.setTaskCode(dppEtlTaskDO.getCode());
@@ -1233,6 +1244,7 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
             } else {
                 updateTaskStatus(dppEtlTaskDO.getId(), "-2");
             }
+            return;
         }
 
         // Online operation
@@ -1382,7 +1394,9 @@ public class DppEtlTaskServiceImpl extends ServiceImpl<DppEtlTaskMapper, DppEtlT
         if(StringUtils.isNotEmpty(dppEtlNewNodeSaveReqVO.getId())) {
             var existing=dppEtlTaskMapper.selectById(dppEtlNewNodeSaveReqVO.getId());
             if(existing!=null && existing.getWarehouseBatchId()!=null)throw new IllegalArgumentException("受管批次任务不能重新定义，请创建新批次");
-            if (existing != null && !"-1".equals(existing.getStatus())) return updateProcessDefinition(dppEtlNewNodeSaveReqVO);
+            if (existing != null && !"-1".equals(existing.getStatus())) {
+                throw new IllegalArgumentException("任务已完成首次保存，请刷新后重试");
+            }
         }
         if (ScheduleConstants.QUARTZ.equals(dppEtlNewNodeSaveReqVO.getScheduler())) {
             return createProcessDefinitionQuartz(dppEtlNewNodeSaveReqVO);

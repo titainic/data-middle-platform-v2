@@ -62,6 +62,7 @@ class TaskCreationValidationTest {
                 + "valid_flag VARCHAR(1) DEFAULT '1',del_flag VARCHAR(1) DEFAULT '0')");
         jdbc.update("INSERT INTO ATT_PROJECT(id,code,scheduler_type) VALUES (5,'5005','QUARTZ'),(6,'6006','QUARTZ'),(7,'7007','QUARTZ'),(8,'8008','QUARTZ')");
         jdbc.execute("CREATE TABLE SYSTEM_USER_ROLE(user_id BIGINT,role_id BIGINT)");
+        jdbc.execute("CREATE TABLE dpp_etl_task_instance(task_id BIGINT,status VARCHAR(8),del_flag CHAR(1) DEFAULT '0')");
         jdbc.execute("CREATE TABLE SYSTEM_USER(user_id BIGINT,nick_name VARCHAR(128),del_flag CHAR(1) DEFAULT '0')");
         jdbc.execute("CREATE TABLE SYSTEM_ROLE(role_id BIGINT,project_id BIGINT,role_key VARCHAR(64),status VARCHAR(1),del_flag VARCHAR(1))");
         jdbc.execute("CREATE TABLE SYSTEM_ROLE_MENU(role_id BIGINT,menu_id BIGINT)");
@@ -72,6 +73,7 @@ class TaskCreationValidationTest {
         jdbc.update("INSERT INTO SYSTEM_MENU VALUES (1,'dpp:*','0'),(2,'dpp:developTask:list','0')");
         login();
         var config = new MybatisConfiguration(); config.setMapUnderscoreToCamelCase(true);
+        config.getTypeAliasRegistry().registerAlias(DppEtlNodeDO.class);
         var global = com.baomidou.mybatisplus.core.toolkit.GlobalConfigUtils.defaults();
         global.setSqlInjector(new com.github.yulichang.injector.MPJSqlInjector());
         com.baomidou.mybatisplus.core.toolkit.GlobalConfigUtils.setGlobalConfig(config, global);
@@ -81,8 +83,9 @@ class TaskCreationValidationTest {
         var factory = new MybatisSqlSessionFactoryBean(); factory.setDataSource(ds); factory.setConfiguration(config);
         factory.setGlobalConfig(global);
         factory.setPlugins(new com.github.yulichang.interceptor.MPJInterceptor());
-        // Match the existing offline category fixture: execute the real category code-to-ID XML.
-        factory.setMapperLocations(new org.springframework.core.io.ClassPathResource("mapper/att/cat/AttCatMapper.xml"));
+        // 加载真实类目查询和二次保存替换节点使用的 XML。
+        factory.setMapperLocations(new org.springframework.core.io.ClassPathResource("mapper/att/cat/AttCatMapper.xml"),
+                new org.springframework.core.io.ClassPathResource("mapper/dpp/etl/DppEtlNodeMapper.xml"));
         session = new SqlSessionTemplate(factory.getObject());
         for (var entity : List.of(AttTaskCatDO.class, AttDataDevCatDO.class, DppEtlTaskDO.class, DppEtlSchedulerDO.class,
                 DppEtlNodeDO.class, DppEtlNodeLogDO.class, DppEtlTaskLogDO.class, DppEtlTaskNodeRelDO.class, DppEtlTaskNodeRelLogDO.class)) {
@@ -351,6 +354,49 @@ class TaskCreationValidationTest {
         assertEquals(List.of(42L), triggered);
         assertEquals("0", jdbc.queryForObject("SELECT status FROM dpp_etl_scheduler WHERE task_id=?", String.class, id));
     }
+    private Map<String,Object> developmentDefinition(String type) throws Exception {
+        var body = draft(); body.put("type", type);
+        byte[] created = post("createEtlTaskFront", body).andReturn().getResponse().getContentAsByteArray();
+        String id = json.readTree(created).path("data").path("id").asText();
+        String code = json.readTree(created).path("data").path("code").asText();
+        body.put("id", id); body.put("code", code);
+        body.put("taskDefinitionList", "[{\"code\":\"" + code + "\",\"name\":\"fix_sql\",\"taskType\":\"SQL\",\"componentType\":\"51\",\"taskParams\":{\"sql\":\"select 1\"}}]");
+        body.put("taskRelationJson", "[{\"preTaskCode\":0,\"preTaskVersion\":0,\"postTaskCode\":\"" + code + "\"}]");
+        return body;
+    }
+
+    @ParameterizedTest @org.junit.jupiter.params.provider.CsvSource({"3,true", "3,false", "4,true", "4,false"})
+    void updateEtlTaskKeepsPersistedDevelopmentTypeAndUsesDefinitionSave(String type, boolean sendType) throws Exception {
+        var body = developmentDefinition(type);
+        if (!sendType) body.remove("type");
+        for (int version = 1; version <= 2; version++) {
+            if (version > 1) body.put("version", version - 1);
+            post("updateEtlTask", body)
+                    .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value(200));
+            assertEquals(type, jdbc.queryForObject("SELECT type FROM dpp_etl_task WHERE id=?", String.class, body.get("id")));
+            assertEquals((long)version, jdbc.queryForObject("SELECT version FROM dpp_etl_task WHERE id=?", Long.class, body.get("id")));
+            assertEquals(type, jdbc.queryForObject("SELECT task_type FROM dpp_etl_node WHERE code=?", String.class, body.get("code")));
+        }
+        assertEquals(1, registered.size());
+    }
+
+    @Test void repeatedInitializationIsRejectedWithoutCreatingNewVersionsAndUpdateStillWorks() throws Exception {
+        var body = developmentDefinition("3");
+        post("createProcessDefinitionEx", body)
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value(200));
+        body.put("version", 1);
+        post("createProcessDefinitionEx", body)
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value(500))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.msg").value("任务已完成首次保存，请刷新后重试"));
+        assertEquals(1L, jdbc.queryForObject("SELECT version FROM dpp_etl_task WHERE id=?", Long.class, body.get("id")));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM dpp_etl_task_log", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM dpp_etl_node_log", Integer.class));
+        assertEquals(1, registered.size());
+        post("updateProcessDefinition", body)
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value(200));
+        assertEquals(2L, jdbc.queryForObject("SELECT version FROM dpp_etl_task WHERE id=?", Long.class, body.get("id")));
+    }
+
     @ParameterizedTest @ValueSource(strings={"copyCreateEtl","updateReleaseTask","updateReleaseJobTask","updateReleaseSchedule","releaseTaskCrontab"})
     void lightweightEndpointsDoNotRequireFullTaskFields(String route) throws Exception {
         byte[] response=post("createEtlTaskFront",draft()).andReturn().getResponse().getContentAsByteArray();

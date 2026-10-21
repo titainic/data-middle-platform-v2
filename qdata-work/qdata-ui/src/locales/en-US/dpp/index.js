@@ -887,6 +887,8 @@ export default {
     noTaskId: 'Invalid task ID, please refresh and retry',
     saveFailedInputSql: 'Save failed, please enter SQL statement',
     saveFailedCheckAttr: 'Save failed, please check attribute config required fields',
+    taskNameRequired: 'Task name is required',
+    saveFailedNoReason: 'Save failed: the service returned no error details. Please retry.',
     editTaskConfig: 'Edit Task Config',
     logConsole: 'Log Console',
     queryResult: 'Query Result',

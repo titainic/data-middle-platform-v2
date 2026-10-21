@@ -45,9 +45,24 @@ class DatasourceProjectBindingRegressionTest {
         request.setIp("127.0.0.1"); request.setPort(3306L); request.setValidFlag(false);
         request.setDatasourceConfig("{\"username\":\"fix_reader\",\"dbname\":\"fix_database\"}");
         var project = new DaDatasourceProjectRelDO(); project.setProjectId(5L);
-        project.setProjectCode("forged"); project.setDppAssigned(true);
+        project.setProjectCode("5005"); project.setDppAssigned(true);
         request.setProjectList(List.of(project));
         return request;
+    }
+
+    @Test void explicitProjectCodeMismatchIsRejectedWithoutSilentlyRewritingRequest() {
+        var request = request();
+        request.getProjectList().getFirst().setProjectCode("forged");
+        assertEquals("项目ID与项目编码不一致，请重新选择所属项目", assertThrows(IllegalArgumentException.class,
+                () -> access().validateSave(request, true, "add")).getMessage());
+        assertNull(request.getId());
+        assertEquals("forged", request.getProjectList().getFirst().getProjectCode());
+    }
+
+    @Test void omittedProjectCodeStillResolvesFromAuthorizedProjectId() {
+        var request = request(); request.getProjectList().getFirst().setProjectCode(null);
+        access().validateSave(request, true, "add");
+        assertEquals("5005", request.getProjectList().getFirst().getProjectCode());
     }
 
     @Test void createWithoutProjectOrWithForeignProjectFailsBeforePersistence() {
@@ -60,6 +75,8 @@ class DatasourceProjectBindingRegressionTest {
     }
 
     private DaDatasourceServiceImpl service(DaDatasourceMapper mapper, IDaDatasourceProjectRelService relations) {
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(new org.apache.ibatis.session.Configuration(), "fix_project_binding"), DaDatasourceDO.class);
         var service = spy(new DaDatasourceServiceImpl());
         ReflectionTestUtils.setField(service, "daDatasourceMapper", mapper);
         ReflectionTestUtils.setField(service, "daDatasourceProjectRelService", relations);

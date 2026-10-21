@@ -72,6 +72,7 @@ public class DatasourceProjectAccess {
             if(rel==null || rel.getProjectId()==null || !seen.add(rel.getProjectId()))throw new IllegalArgumentException("请选择不重复的有效项目");
             Long project=rel.getProjectId();if((create || !before.contains(project)) && !addProjects.contains(project))throw denied();if(create && !actionProjects.contains(project))throw denied();
             var codes=jdbc.queryForList("SELECT code FROM att_project WHERE id=? AND valid_flag='1' AND del_flag='0'",String.class,project);if(codes.size()!=1)throw denied();
+            if(rel.getProjectCode()!=null && !rel.getProjectCode().isBlank() && !rel.getProjectCode().equals(codes.get(0)))throw new IllegalArgumentException("项目ID与项目编码不一致，请重新选择所属项目");
             var saved=new DaDatasourceProjectRelDO();saved.setProjectId(project);saved.setProjectCode(codes.get(0));saved.setDatasourceId(create?null:request.getId());saved.setValidFlag(true);
             saved.setDppAssigned(existing.stream().filter(x->project.equals(x.getProjectId())).anyMatch(x->Boolean.TRUE.equals(x.getDppAssigned())));normalized.add(saved);
         }
