@@ -355,8 +355,7 @@
       :visible="taskConfigDialogVisible"
       :title="td('dpp.developTask.addTask', 'Add Task')"
       @update:visible="taskConfigDialogVisible = $event"
-      @save="handleSave"
-      @confirm="handleConfirm"
+      :submit-task="submitTask"
       :data="taskForm"
       :deptOptions="deptOptions"
       :userList="userList"
@@ -486,38 +485,33 @@ let taskForm = ref({});
 const handleAdd = () => {
   taskConfigDialogVisible.value = true;
 };
-// Save and close
-const handleSave = (form) => {
+const saveLoading = ref(false);
+const submitTask = async (form, action) => {
+  if (saveLoading.value) return false;
+  saveLoading.value = true;
   const parms = {
     ...form,
     projectId: userStore.projectId,
     projectCode: userStore.projectCode,
     type: "3", //New identifier for data development
   };
-  createEtlTaskFront(parms).then((res) => {
-    if (res.code == 200) {
-      proxy.$modal.msgSuccess(td("common.message.msgOpSuccess", "Operation successful"));
-      handleQuery();
+  try {
+    const res = await createEtlTaskFront(parms);
+    if (res?.code != 200) {
+      proxy.$modal.msgWarning(res?.msg || td("dpp.developTaskDetail.saveFailedNoReason", "Save failed: the service returned no error details. Please retry."));
+      return false;
     }
-  });
-};
-// Save and improve
-const handleConfirm = (form) => {
-  const parms = {
-    ...form,
-    projectId: userStore.projectId,
-    projectCode: userStore.projectCode,
-    type: "3", //New identifier for data development
-  };
-  createEtlTaskFront(parms).then((res) => {
-    if (res.code == 200) {
-      proxy.$modal.msgSuccess(td("common.message.msgOpSuccess", "Operation successful"));
-      handleQuery();
+    proxy.$modal.msgSuccess(td("common.message.msgOpSuccess", "Operation successful"));
+    handleQuery();
+    if (action === "confirm") {
       routeTo("/dpp/task/developTask/edit", {
         ...res.data,
       });
     }
-  });
+    return true;
+  } finally {
+    saveLoading.value = false;
+  }
 };
 
 const leftWidth = ref(300); // Initial left width
