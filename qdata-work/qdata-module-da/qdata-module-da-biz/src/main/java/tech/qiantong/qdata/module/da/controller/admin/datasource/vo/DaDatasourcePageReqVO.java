@@ -73,6 +73,9 @@ public class DaDatasourcePageReqVO extends PageParam {
     @Schema(description = "项目编码", example = "")
     private String projectCode;
 
+    @Schema(description = "项目ID，与项目编码同时传入时必须指向同一项目")
+    private Long projectId;
+
     @Schema(description = "数据源id集合", example = "")
     private List<Long> idList;
 

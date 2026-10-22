@@ -78,6 +78,8 @@ class DataXUpdateSaveRegressionTest {
         existing.setProjectId(1L); existing.setProjectCode("123"); existing.setType("1");
         existing.setVersion(1L); existing.setStatus("0"); existing.setScheduler(ScheduleConstants.QUARTZ);
         when(tasks.selectById(any())).thenReturn(existing);
+        // 名称无冲突时 SQL 返回 null；Mockito 对 Long 的默认 0 会误报冲突。
+        when(tasks.findTaskNameConflict(anyLong(), anyString(), nullable(Long.class))).thenReturn(null);
         when(tasks.updateById(any(DppEtlTaskDO.class))).thenReturn(1);
         var ext = new DppEtlTaskExtDO(); ext.setEtlTaskCode(existing.getCode());
         ext.setEtlNodeCode("9003"); ext.setEtlNodeName("existing integration");

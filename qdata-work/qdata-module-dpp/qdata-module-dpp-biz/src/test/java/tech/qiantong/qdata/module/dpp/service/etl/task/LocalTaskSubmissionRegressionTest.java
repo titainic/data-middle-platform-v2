@@ -53,6 +53,24 @@ class LocalTaskSubmissionRegressionTest {
         assertThrows(ServiceException.class, () -> service.startDppEtlTask(31L));
     }
 
+    @Test void incompleteDraftIsRejectedBeforePublishingOrTriggeringQuartzZero() {
+        setup();
+        var mapper = (DppEtlTaskMapper) ReflectionTestUtils.getField(service, "dppEtlTaskMapper");
+        var task = mapper.selectById(31L); task.setStatus("-1"); task.setQuartzId(0L);
+        assertEquals("请先完成任务保存，再执行一次", assertThrows(ServiceException.class,
+                () -> service.startDppEtlTask(31L)).getMessage());
+        verifyNoInteractions(scheduler);
+    }
+
+    @Test void legacySavedTaskWithNoBindingHasARecoverableMessage() {
+        setup();
+        var mapper = (DppEtlTaskMapper) ReflectionTestUtils.getField(service, "dppEtlTaskMapper");
+        var task = mapper.selectById(31L); task.setStatus("0"); task.setQuartzId(0L);
+        assertEquals("任务尚未注册Quartz调度，请重新保存任务后执行", assertThrows(ServiceException.class,
+                () -> service.startDppEtlTask(31L)).getMessage());
+        verifyNoInteractions(scheduler);
+    }
+
     @Test void sparkPreflightRejectsInvalidAssetsBeforeQuartzSubmission() throws Exception {
         setup();
         var mapper = (DppEtlTaskMapper) ReflectionTestUtils.getField(service, "dppEtlTaskMapper");

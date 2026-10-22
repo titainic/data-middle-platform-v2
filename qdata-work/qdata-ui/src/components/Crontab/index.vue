@@ -163,6 +163,9 @@
                     </tbody>
                 </table>
             </div>
+            <p v-if="!yearWithinHorizon" role="alert">
+                显式年份仅支持至 {{ maxYear }} 年。历史表达式可原样保留；修改后请选择范围内年份。长期周期调度请使用“每年”或不填年份。
+            </p>
             <CrontabResult :ex="crontabValueString" v-if="Crontab"></CrontabResult>
             <div class="pop_btn" v-if="btn">
                 <el-button type="primary" @click="submitFill">{{ td('common.button.confirm') }}</el-button>
@@ -183,6 +186,7 @@ import CrontabMonth from './month.vue';
 import CrontabWeek from './week.vue';
 import CrontabYear from './year.vue';
 import CrontabResult from './result.vue';
+import { isYearWithinHorizon, MAX_YEAR_AHEAD } from './yearPolicy.mjs';
 
 const {td} = useDefaultLang();
     const { proxy } = getCurrentInstance();
@@ -243,6 +247,8 @@ const {td} = useDefaultLang();
             (obj.year === '' ? '' : ' ' + obj.year)
         );
     });
+    const maxYear = new Date().getFullYear() + MAX_YEAR_AHEAD;
+    const yearWithinHorizon = computed(() => isYearWithinHorizon(crontabValueObj.value.year));
     watch(expression, () => resolveExp());
     function shouldHide(key) {
         return !(hideComponent.value && hideComponent.value.includes(key));
@@ -298,6 +304,10 @@ const {td} = useDefaultLang();
     }
     // fill expression
     function submitFill() {
+        if (!yearWithinHorizon.value && crontabValueString.value !== props.expression.trim()) {
+            proxy.$message.error(`显式年份仅支持至${maxYear}年，请调整年份后确认`);
+            return;
+        }
         if (crontabValueString.value.split(' ')[0] == '*') {
             proxy.$message.error(td('common.crontab.noSecondConfigurable'));
             return;

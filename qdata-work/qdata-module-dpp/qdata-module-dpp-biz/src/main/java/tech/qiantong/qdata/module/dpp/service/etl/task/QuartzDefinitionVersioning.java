@@ -16,6 +16,16 @@ import java.util.function.ToLongFunction;
 @RequiredArgsConstructor
 public class QuartzDefinitionVersioning {
     private final JdbcTemplate jdbc;
+    public void initialize(DppEtlNewNodeSaveReqVO request, DppEtlTaskDO task) {
+        String status = jdbc.queryForObject("SELECT status FROM dpp_etl_task WHERE id=? AND del_flag='0' FOR UPDATE", String.class, task.getId());
+        if (!"-1".equals(status)) throw new IllegalArgumentException("任务已完成首次保存，请刷新后重试");
+        request.setVersion(0);
+        prepare(request, 0L, code -> {
+            List<Long> versions = jdbc.queryForList("SELECT version FROM dpp_etl_node_log WHERE code=? ORDER BY version DESC LIMIT 1 FOR UPDATE", Long.class, code);
+            return versions.isEmpty() ? 0 : versions.get(0);
+        });
+        request.setCode(task.getCode());
+    }
     public void advance(DppEtlNewNodeSaveReqVO request,DppEtlTaskDO task) {
         Long current=jdbc.queryForObject("SELECT version FROM dpp_etl_task WHERE id=? AND del_flag='0' FOR UPDATE",Long.class,task.getId());
         if(jdbc.queryForObject("SELECT COUNT(*) FROM dpp_etl_task_instance WHERE task_id=? AND status IN ('0','1','2','12') AND del_flag='0'",Long.class,task.getId())>0)
@@ -28,7 +38,7 @@ public class QuartzDefinitionVersioning {
     }
 
     static void prepare(DppEtlNewNodeSaveReqVO request,Long current,ToLongFunction<String> nodeVersion) {
-        if(current==null || current<1 || request.getVersion()==null || request.getVersion().longValue()!=current)
+        if(current==null || current<0 || request.getVersion()==null || request.getVersion().longValue()!=current)
             throw new IllegalArgumentException("任务版本已变化或缺少版本，请刷新后重试");
         JSONArray nodes=JSON.parseArray(request.getTaskDefinitionList()),relations=JSON.parseArray(request.getTaskRelationJson());
         if(nodes==null || nodes.isEmpty() || relations==null || relations.isEmpty())throw new IllegalArgumentException("请配置完整的任务节点和依赖");

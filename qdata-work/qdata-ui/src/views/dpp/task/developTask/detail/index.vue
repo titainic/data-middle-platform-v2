@@ -198,6 +198,7 @@ function getList() {
       managedTask.value=null;
       // Task configuration
       nodeData.value = {
+        ...response.data,
         ...response.data.taskConfig,
         draftJson: response.data.draftJson,
         status: response.data.status,
@@ -290,6 +291,7 @@ const handleRun = async () => {
 // Run instance save
 const handletaskConfig = (obj) => {
   nodeData.value = {
+    ...nodeData.value,
     ...obj,
   };
 };
@@ -346,11 +348,14 @@ const dataJson = () => {
     code: form.value.code,
     projectCode: form.value.projectCode,
     projectId: form.value.projectId,
+    personCharge: String(nodeData.value.personCharge ?? form.value.personCharge ?? ''),
+    crontab: nodeData.value.crontab ?? form.value.crontab,
     type: form.value.type || "3",
   };
 };
 // Great save
 const handleExportData = async () => {
+  if (loading.value) return;
   loading.value = true;
   try {
     if (!form.value.sql) {
@@ -358,10 +363,11 @@ const handleExportData = async () => {
     }
     if (!nodeData.value?.name) {
       taskConfigDialogVisible.value = true;
-      return;
+      return proxy.$modal.msgWarning(td('dpp.developTaskDetail.taskNameRequired', 'Task name is required'));
     }
     let valid = await configViewRef.value.configRef.validate();
     if (!valid) {
+      taskConfigDialogVisible.value = true;
       return proxy.$modal.msgWarning(td('dpp.developTaskDetail.saveFailedCheckAttr', 'Save failed, please check attribute config required fields'));
     }
     // Axios must receive a plain JSON object, not Vue's reactive proxy.
@@ -376,10 +382,10 @@ const handleExportData = async () => {
         : await createProcessDefinition(payload);
 
     // Processing after success
-    if (res.code == "200") {
+    if (res?.code == "200") {
       handleSuccess();
     } else {
-      proxy.$modal.msgWarning(td('dpp.integratioTask.operationFailed', 'Operation failed, please contact administrator'));
+      proxy.$modal.msgWarning(res?.msg || td('dpp.developTaskDetail.saveFailedNoReason', 'Save failed: the service returned no error details. Please retry.'));
     }
   } catch (error) {
     handleError(error);
@@ -397,8 +403,15 @@ const handleSuccess = () => {
 };
 
 const handleError = (error) => {
-  console.error("Operation failed:", error);
-  proxy.$modal.msgWarning(error.message || td('dpp.integratioTask.operationFailed', 'Operation failed, please contact administrator'));
+  // Element Plus 校验失败会拒绝字段对象，而不是抛出 Error。
+  const fieldMessages = error && typeof error === 'object'
+    ? Object.values(error).filter(Array.isArray).flat().map(field => field?.message).filter(Boolean)
+    : [];
+  if (fieldMessages.length) taskConfigDialogVisible.value = true;
+  const message = fieldMessages.length ? [...new Set(fieldMessages)].join('；')
+    : error?.response?.data?.msg || error?.data?.msg || error?.msg
+      || (typeof error === 'string' ? error : error?.message);
+  proxy.$modal.msgWarning(message || td('dpp.developTaskDetail.saveFailedNoReason', 'Save failed: the service returned no error details. Please retry.'));
 };
 
 const openTaskConfigDialog = () => {

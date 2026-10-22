@@ -920,6 +920,8 @@ export default {
     noTaskId: '无效的任务id，请刷新后重试',
     saveFailedInputSql: '保存失败，请输入sql语句',
     saveFailedCheckAttr: '保存失败，请检查属性配置必填项',
+    taskNameRequired: '任务名称不能为空',
+    saveFailedNoReason: '保存失败，服务未返回错误原因，请稍后重试',
     editTaskConfig: '修改任务配置',
     logConsole: '日志控制台',
     queryResult: '查询结果',

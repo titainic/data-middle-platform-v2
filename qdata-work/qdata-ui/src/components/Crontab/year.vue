@@ -45,7 +45,7 @@
             <el-radio v-model="radioValue" :value="4" @change="onRadioChange">
                 {{ td('common.crontab.year.averagePrefix') }}
                 <el-input-number v-model="average01" :min="1970" :max="maxFullYear" @change="onRadioChange" /> {{ td('common.crontab.year.averageMiddle') }}
-                <el-input-number v-model="average02" :min="1" :max="maxFullYear" @change="onRadioChange" />
+                <el-input-number v-model="average02" :min="1" :max="MAX_YEAR_AHEAD" @change="onRadioChange" />
                 {{ td('common.crontab.year.averageSuffix') }}
             </el-radio>
         </el-form-item>
@@ -66,6 +66,7 @@
                         :key="item"
                         :value="item"
                         :label="item"
+                        :disabled="item > maxFullYear"
                     />
                 </el-select>
             </el-radio>
@@ -74,6 +75,7 @@
 </template>
 
 <script setup>
+    import { MAX_YEAR_AHEAD } from './yearPolicy.mjs';
     import useDefaultLang from "@/composables/useDefaultLang.js";
     const { td } = useDefaultLang();
     const emit = defineEmits(['update']);
@@ -96,8 +98,7 @@
         }
     });
     const fullYear = new Date().getFullYear();
-    // Match the existing preview and Quartz CronExpression.MAX_YEAR horizon.
-    const maxFullYear = fullYear + 100;
+    const maxFullYear = fullYear + MAX_YEAR_AHEAD;
     const radioValue = ref(1);
     const cycle01 = ref(fullYear);
     const cycle02 = ref(fullYear + 1);
@@ -106,7 +107,7 @@
     const checkboxList = ref([fullYear]);
     const checkCopy = ref([fullYear]);
     // Keep imported years visible even outside the default nine-year window.
-    const yearOptions = ref(Array.from({ length: 9 }, (_, index) => fullYear + index));
+    const yearOptions = ref(Array.from({ length: MAX_YEAR_AHEAD + 1 }, (_, index) => fullYear + index));
     const cycleTotal = computed(() => {
         const start = props.check(cycle01.value, 1970, maxFullYear - 1);
         const end = props.check(cycle02.value, start + 1, maxFullYear);
@@ -114,7 +115,7 @@
     });
     const averageTotal = computed(() => {
         const start = props.check(average01.value, 1970, maxFullYear);
-        const step = props.check(average02.value, 1, maxFullYear);
+        const step = props.check(average02.value, 1, MAX_YEAR_AHEAD);
         return start + '/' + step;
     });
     const checkboxString = computed(() => checkboxList.value.join(','));

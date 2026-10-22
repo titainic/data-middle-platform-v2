@@ -26,6 +26,7 @@ class QuartzDefinitionLogRegressionTest {
         var nodes=mock(IDppEtlNodeService.class);
         var rels=mock(IDppEtlTaskNodeRelService.class);
         inject(service,"dppEtlTaskMapper",mapper);
+        inject(service,"quartzDefinitionVersioning",mock(tech.qiantong.qdata.module.dpp.service.etl.task.QuartzDefinitionVersioning.class));
         inject(service,"iDppEtlTaskLogService",logs);
         inject(service,"iDppEtlNodeService",nodes);
         inject(service,"iDppEtlNodeLogService",mock(IDppEtlNodeLogService.class));
@@ -33,7 +34,9 @@ class QuartzDefinitionLogRegressionTest {
         inject(service,"iDppEtlTaskNodeRelLogService",mock(IDppEtlTaskNodeRelLogService.class));
         var task=new DppEtlTaskDO();
         task.setId(31L);task.setCode("env31");task.setStatus("0");task.setScheduler(ScheduleConstants.QUARTZ);
+        task.setProjectId(5L); task.setQuartzId(42L);
         when(mapper.selectById("31")).thenReturn(task);
+        when(mapper.findTaskNameConflict(5L, "fix_task", 31L)).thenReturn(null);
         when(rels.removeOldDppEtlTaskNodeRel(anyString())).thenReturn(List.of());
         when(nodes.createDppEtlNodeBatch(anyList())).thenReturn(List.of());
         doReturn(Map.of()).when(service).releaseTaskCrontab(any());
@@ -47,6 +50,7 @@ class QuartzDefinitionLogRegressionTest {
         });
         var request=new DppEtlNewNodeSaveReqVO();
         request.setId("31");request.setCode("env31");request.setVersion(2);
+        request.setName("fix_task"); request.setProjectId(5L);
         request.setTaskDefinitionList("[]");request.setTaskRelationJson("[]");
         try(var converter=mockStatic(TaskConverter.class,invocation->{
             if(List.class.isAssignableFrom(invocation.getMethod().getReturnType())) return List.of();

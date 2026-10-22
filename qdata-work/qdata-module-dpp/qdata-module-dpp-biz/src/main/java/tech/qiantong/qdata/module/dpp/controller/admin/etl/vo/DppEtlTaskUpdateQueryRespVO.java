@@ -348,6 +348,8 @@ public class DppEtlTaskUpdateQueryRespVO implements Serializable {
         // Create taskConfig Map
         Map<String, Object> taskConfig = new HashMap<>();
         taskConfig.put("type", this.type);
+        taskConfig.put("projectId", this.projectId);
+        taskConfig.put("projectCode", this.projectCode);
         taskConfig.put("releaseState", this.status);
         taskConfig.put("description", this.description); // Get description from itself
         taskConfig.put("name", this.name); // Get task name from itself

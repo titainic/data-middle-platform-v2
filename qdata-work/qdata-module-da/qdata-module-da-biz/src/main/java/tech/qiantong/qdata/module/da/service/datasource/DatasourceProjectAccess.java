@@ -72,6 +72,7 @@ public class DatasourceProjectAccess {
             if(rel==null || rel.getProjectId()==null || !seen.add(rel.getProjectId()))throw new IllegalArgumentException("请选择不重复的有效项目");
             Long project=rel.getProjectId();if((create || !before.contains(project)) && !addProjects.contains(project))throw denied();if(create && !actionProjects.contains(project))throw denied();
             var codes=jdbc.queryForList("SELECT code FROM att_project WHERE id=? AND valid_flag='1' AND del_flag='0'",String.class,project);if(codes.size()!=1)throw denied();
+            if(rel.getProjectCode()!=null && !rel.getProjectCode().isBlank() && !rel.getProjectCode().equals(codes.get(0)))throw new IllegalArgumentException("项目ID与项目编码不一致，请重新选择所属项目");
             var saved=new DaDatasourceProjectRelDO();saved.setProjectId(project);saved.setProjectCode(codes.get(0));saved.setDatasourceId(create?null:request.getId());saved.setValidFlag(true);
             saved.setDppAssigned(existing.stream().filter(x->project.equals(x.getProjectId())).anyMatch(x->Boolean.TRUE.equals(x.getDppAssigned())));normalized.add(saved);
         }
@@ -82,6 +83,13 @@ public class DatasourceProjectAccess {
             Object date=row.get("create_time");if(date instanceof java.util.Date value)request.setCreateTime(value);else if(date instanceof java.time.LocalDateTime value)request.setCreateTime(java.sql.Timestamp.valueOf(value));
             request.setListCount(number(row.get("list_count")));request.setSyncCount(number(row.get("sync_count")));request.setDataSize(number(row.get("data_size")));
         }
+    }
+    public String resolveProjectCode(Long projectId, String projectCode) {
+        if (projectId == null) return projectCode;
+        if (!projects("list").contains(projectId)) throw denied();
+        var codes = jdbc.queryForList("SELECT code FROM att_project WHERE id=? AND valid_flag='1' AND del_flag='0'", String.class, projectId);
+        if (codes.size() != 1 || projectCode != null && !projectCode.isBlank() && !projectCode.equals(codes.get(0))) throw denied();
+        return codes.get(0);
     }
     public Map<String,Object> relation(Long id,boolean write){
         if(id==null)throw denied();var rows=jdbc.queryForList("SELECT * FROM da_datasource_project_rel WHERE id=?",id);if(rows.size()!=1)throw denied();var row=rows.get(0);

@@ -104,6 +104,19 @@ public class DaDatasourceProjectRelServiceImpl extends ServiceImpl<DaDatasourceP
     }
 
     @Override
+    public List<DaDatasourceProjectRelDO> getProjectBindings(Collection<Long> datasourceIds) {
+        if (datasourceIds == null || datasourceIds.isEmpty()) return List.of();
+        var query = new MPJLambdaWrapper<DaDatasourceProjectRelDO>();
+        query.selectAll(DaDatasourceProjectRelDO.class)
+                .select("p.name AS projectName")
+                .leftJoin("ATT_PROJECT p ON p.id=t.PROJECT_ID")
+                .eq("p.del_flag", "0")
+                .eq(DaDatasourceProjectRelDO::getValidFlag, true)
+                .in(DaDatasourceProjectRelDO::getDatasourceId, datasourceIds);
+        return daDatasourceProjectRelMapper.selectList(query);
+    }
+
+    @Override
     public List<DaDatasourceProjectRelDO> getJoinProjectAndDatasource(DaDatasourceProjectRelDO daDatasourceProjectRelDO) {
         MPJLambdaWrapper<DaDatasourceProjectRelDO> lambdaWrapper = new MPJLambdaWrapper();
         lambdaWrapper.selectAll(DaDatasourceProjectRelDO.class)

@@ -783,7 +783,7 @@ export default {
       confirmDelete: '是否确认删除用户编号为"{id}"的数据项？',
       enable: '启用',
       disable: '停用',
-      confirmStatusChange: '确认要"{text}""{name}"用户吗?',
+      confirmStatusChange: '确认要"{text}"用户"{name}"（编号：{id}）吗？',
       resetPasswordPrompt: '请输入"{name}"的新密码',
       resetPasswordInputError: '用户密码长度必须介于 8 和 20 之间',
       resetPasswordSuccess: '修改成功，新密码是：{password}',

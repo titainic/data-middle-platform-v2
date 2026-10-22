@@ -23,6 +23,9 @@
     class="dialog"
     :title="effectiveTitle"
     destroy-on-close
+    :close-on-click-modal="!submitting"
+    :close-on-press-escape="!submitting"
+    :show-close="!submitting"
     width="60%"
     :append-to="$refs['app-container']"
   >
@@ -365,21 +368,23 @@
     <template #footer>
       <div style="text-align: right">
         <template v-if="info">
-          <el-button @click="closeDialog">{{
+          <el-button @click="closeDialog" :disabled="submitting">{{
             td("common.button.close", "Close")
           }}</el-button>
           <el-button
             type="primary"
             @click="saveClose"
+            :loading="submitting"
+            :disabled="submitting"
             v-if="!route.query.info"
             >{{ td("common.button.save", "Save") }}</el-button
           >
         </template>
         <template v-else>
-          <el-button @click="saveClose">{{
+          <el-button @click="saveClose" :loading="submitting" :disabled="submitting">{{
             td("dpp.developTask.saveOnly", "Save Only")
           }}</el-button>
-          <el-button type="primary" @click="saveData">{{
+          <el-button type="primary" @click="saveData" :loading="submitting" :disabled="submitting">{{
             td("dpp.developTask.saveAndConfigure", "Save and Configure Flow")
           }}</el-button>
         </template>
@@ -464,6 +469,7 @@ const props = defineProps({
   deptOptions: { type: Object, default: () => ({}) },
   userList: { type: Object, default: () => ({}) },
   info: { type: Boolean, default: false },
+  submitTask: { type: Function, default: null },
 });
 const effectiveTitle = computed(() => props.title || td('dpp.developTask.formTitle'));
 const projectAllowsDolphin = ref(false);
@@ -645,11 +651,16 @@ const enforceQuartzJDBC = () => {
 };
 
 let daDiscoveryTaskRef = ref();
+const submitting = ref(false);
 // How to close a dialog box
 const closeDialog = () => {
+  if (submitting.value) return;
   emit("update:visible", false);
 };
-const saveClose = async () => {
+const submitForm = async (action) => {
+  // 首次异步校验前锁定，两个保存入口共用直到请求完成。
+  if (submitting.value) return;
+  submitting.value = true;
   try {
     if (form.value.scheduler === 'DOLPHINSCHEDULER' && !await checkDSUpStart()) {
       return;
@@ -669,47 +680,27 @@ const saveClose = async () => {
       }
       const formData = JSON.parse(JSON.stringify(form.value));
       formData.draftJson = JSON.stringify(templateAct.value);
-      console.log("🚀 ~ saveData ~ formData:", formData);
-      emit("save", formData);
-      emit("update:visible", false);
-    } else {
-      console.log("Form validation failed");
-    }
-  } catch (error) {
-    console.error("Error while saving data:", error);
-  }
-};
-// How to save data
-const saveData = async () => {
-  try {
-    if (form.value.scheduler === 'DOLPHINSCHEDULER' && !await checkDSUpStart()) {
-      return;
-    }
-    const valid = await daDiscoveryTaskRef.value.validate();
-    if (valid) {
-      enforceQuartzJDBC();
-      if (!form.value.code) {
-        const response = await getNodeUniqueKey({
-          scheduler: form.value.scheduler,
-          projectCode: userStore.projectCode || "133545087166112",
-          projectId: userStore.projectId,
-        });
-        if (response && response.data) {
-          form.value.code = response.data; // Set unique code
-        }
+      if (props.submitTask) {
+        if (!await props.submitTask(formData, action)) return;
+      } else {
+        // 详情页仅更新本地配置，保留原有事件契约。
+        emit(action, formData);
       }
-      const formData = JSON.parse(JSON.stringify(form.value));
-      formData.draftJson = JSON.stringify(templateAct.value);
-      console.log("🚀 ~ saveData ~ formData:", formData);
-      emit("confirm", formData);
       emit("update:visible", false);
-    } else {
-      console.log("Form validation failed");
     }
   } catch (error) {
-    console.error("Error while saving data:", error);
+    // Element Plus 字段错误由表单原位展示，请求异常保留表单并提示。
+    const fieldErrors = error && Object.values(error).some(Array.isArray);
+    const message = error?.response?.data?.msg || error?.msg || error?.message;
+    if (!fieldErrors) {
+      proxy.$modal.msgWarning(message || td("dpp.developTaskDetail.saveFailedNoReason", "Save failed: the service returned no error details. Please retry."));
+    }
+  } finally {
+    submitting.value = false;
   }
 };
+const saveClose = () => submitForm("save");
+const saveData = () => submitForm("confirm");
 
 /**
  * check dolphinscheduler api
