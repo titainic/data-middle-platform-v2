@@ -75,6 +75,7 @@ import "highlight.js/styles/xcode.min.css";
 import "@/assets/images/ai/style/dify_table.css";
 import hljs from "highlight.js";
 import { renderContent, getFileFormat } from "@/utils/app/chat/chat.js";
+import { sanitizeModelHtml } from "@/utils/app/chat/sanitizeModelHtml.js";
 import { listByMessage } from "@/api/ai/retriever/resources";
 import word from "@/assets/images/ai/office/img-word.png";
 import excel from "@/assets/images/ai/office/img-ecel.png";
@@ -131,12 +132,12 @@ const fileImg = {
 };
 
 const md = new MarkdownIt({
-  html: true, // Allow parsing HTML (optional)
+  html: true, // HTML 在最终写入 DOM 前统一消毒。
   highlight: function (str, lang) {
     if (lang && hljs.getLanguage(lang)) {
       try {
-        const copyHtml = `<div id="copy" data-copy='${str}' style="position: absolute; right: 10px; top: 5px; color: #fff;cursor: pointer;">${t('components.markdownView.copy')}</div>`;
-        return `<pre style="position: relative;">${copyHtml}<code class="hljs">${
+        const copyHtml = `<div id="copy" class="markdown-code-copy" data-copy="${md.utils.escapeHtml(str)}">${t('components.markdownView.copy')}</div>`;
+        return `<pre class="markdown-code-block">${copyHtml}<code class="hljs">${
           hljs.highlight(lang, str, true).value
         }</code></pre>`;
       } catch (__) {}
@@ -185,7 +186,7 @@ const deepThinking = computed(() => {
   } else {
     remainingContent = afterStart;
   }
-  return (
+  return sanitizeModelHtml(
     '<span style="font-size: 12px;">' + t('components.markdownView.thinking') + '</br></span>' + remainingContent
   );
 });
@@ -194,7 +195,7 @@ const deepThinking = computed(() => {
 const renderedMarkdown = computed(() => {
   const content = props.content;
   let remainingContent = renderContent(content);
-  return md.render(remainingContent);
+  return sanitizeModelHtml(md.render(remainingContent));
 });
 
 /** Initialization **/
@@ -215,6 +216,18 @@ defineExpose({ copyContent }); // Provide methods for parent to call
 // Introduce css
 
 .markdown-view {
+  :deep(.markdown-code-block) {
+    position: relative;
+  }
+
+  :deep(.markdown-code-copy) {
+    position: absolute;
+    right: 10px;
+    top: 5px;
+    color: #fff;
+    cursor: pointer;
+  }
+
   font-family: PingFang SC;
   font-size: 0.95rem;
   font-weight: 400;
