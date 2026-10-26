@@ -15,7 +15,7 @@ cd /mnt/c/Users/Ming/Desktop/qData/qdata-service-quality-ce # Change the path to
 docker buildx build \
   --platform linux/amd64 \
   --no-cache \
-  -t crpi-kf13onfj0v8f6jax.cn-shanghai.personal.cr.aliyuncs.com/qiantongkeji/qdata-service-quality-ce:1.6.1 \
+  -t qdata-service-quality-ce:local \
   --file=docker/Dockerfile \
   --load \
   /mnt/c/Users/Ming/Desktop/qData/qdata-service-quality-ce # Change the context path to your own path
@@ -24,19 +24,13 @@ docker buildx build \
 docker buildx build \
   --platform linux/arm64 \
   --no-cache \
-  -t crpi-kf13onfj0v8f6jax.cn-shanghai.personal.cr.aliyuncs.com/qiantongkeji/qdata-service-quality-ce:1.6.1 \
+  -t qdata-service-quality-ce:local \
   --file=docker/Dockerfile \
   --load \
   /mnt/c/Users/Ming/Desktop/qData/qdata-service-quality-ce # Change the context path to your own path
 
 # Check if ARM64 is supported
-docker inspect crpi-kf13onfj0v8f6jax.cn-shanghai.personal.cr.aliyuncs.com/qiantongkeji/qdata-service-quality-ce:1.6.1 --format '{{.Architecture}}'
+docker inspect qdata-service-quality-ce:local --format '{{.Architecture}}'
 
 # Delete the previously built builder (optional but recommended, keep it clean)
 docker buildx rm qdata-builder
-
-# Start new container
-docker run -d \
-  --name qdata-service-quality-ce \
-  -p 8083:8083 \
-  crpi-kf13onfj0v8f6jax.cn-shanghai.personal.cr.aliyuncs.com/qiantongkeji/qdata-service-quality-ce:1.6.1
