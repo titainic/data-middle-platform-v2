@@ -33,6 +33,20 @@
 
 下载源码可放在 `/data/src/data-middle-platform-v2`，运行实例示例安装到 `/data/qdata`。构建产物位于仓库 `deploy/artifacts/`；安装目录 `runtime/` 保存受限配置与密钥，数据及上传目录由运行实例管理。
 
+### 外联与供应链配置（BIN-215）
+
+API/GIS 业务转发默认拒绝所有目标。升级或新装后，在主平台的受管配置中设置 `qdata.forwarding.allowed-hosts`（精确域名列表，无通配符）或 `qdata.forwarding.allowed-cidrs`（IPv4/IPv6 CIDR 列表）。例如部署方自己的业务域名、实际业务网段；空列表不开放转发。域名与网段为“或”关系，域名规则信任该域名的解析地址，网段规则检查全部 DNS 结果；链路本地、组播和未指定地址始终拒绝。转发不自动跟随 HTTP 重定向，目标需直接提供业务响应。既有 API/GIS 发布配置不会自动加入白名单，部署前应核对目标清单。
+
+Excel 图片导出只读取上传目录下的 `/profile/...` 文件，HTTP(S) 外链、任意本地路径、越界路径和指向目录外的符号链接会跳过图片；其余单元格继续导出。远端文件存储提供的图片 URL 也不会被下载，需先保存为受管上传文件。
+
+Quartz 允许列表以类和方法登记，覆盖现有 ETL 开发/集成、质量、元数据、资产发现及 `ryTask` 示例入口。新增自定义任务必须审查并登记到 `JobTargetPolicy`，仅使用已有包名前缀不能通过。历史未登记任务执行时会拒绝，部署前应只读核对已有调用目标。
+
+安装器的 MySQL、Redis、RabbitMQ、Neo4j、Nginx 及三个服务 Dockerfile 的 Temurin 基镜像固定于 `deploy/image-digests.json`。在线使用索引 digest；离线 `docker load` 后只有本地镜像 config digest 命中登记值时才直接使用镜像 ID。`fetch-image.py` 按锁定 digest 下载并校验清单、配置和层摘要，不按浮动 tag 取最新镜像；升级镜像需重新审查并同步锁文件及 Dockerfile。
+
+前端构建先运行 `npm ci --ignore-scripts`，再由 `prepare_frontend.py` 校验 `package-lock.json` 及五个已登记依赖的安装入口/辅助文件 SHA256，全部匹配后才执行 Vue 版本适配脚本。锁文件或脚本变化会阻断构建；更新依赖时同步审查 `deploy/frontend-install-scripts.json`。离线依赖包同样执行该校验。手工构建也应遵循这两步，不直接执行不受控的 npm 生命周期脚本。
+
+休眠工具 `sendSSLPost` 使用 JDK 默认 CA 信任库和主机名验证，并禁用自动重定向；TLS/连接失败会抛出异常。内网私有 CA 应配置受管信任库，不再通过信任任意证书接入。
+
 ## 2. 准备 Linux 环境
 
 需要 64 位 Linux + systemd、JDK **21**、Maven **3.9 或更高**、Node.js **20 或更高（建议 22）**、npm、Python 3、Git、curl、tar、unzip、openssl、Fontconfig 和至少一套字体。工具与 CPU 架构匹配；JDK 8 / 17 不能构建此工程。

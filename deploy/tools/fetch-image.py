@@ -23,6 +23,10 @@ def main():
         parser.error('A Docker Hub image with an explicit tag is required')
     if arguments.output.exists():
         parser.error('Output already exists; existing archives are never overwritten')
+    lock = json.loads((Path(__file__).resolve().parents[1] / 'image-digests.json').read_text())
+    if arguments.image not in lock:
+        parser.error('Image is not registered in deploy/image-digests.json; review and pin it first')
+    pinned = lock[arguments.image]
     name, tag = arguments.image.split(':', 1)
     repository = name if '/' in name else 'library/' + name
     token_url = 'https://auth.docker.io/token?' + urllib.parse.urlencode({'service': 'registry.docker.io', 'scope': 'repository:' + repository + ':pull'})
@@ -43,14 +47,17 @@ def main():
             raise RuntimeError('Referenced manifest checksum mismatch')
         return json.loads(data), actual
 
-    manifest, digest = get_manifest(tag)
+    manifest, digest = get_manifest(pinned['digest'])
     if 'manifests' in manifest:
         selected = next((entry for entry in manifest['manifests'] if entry.get('platform', {}).get('os') == 'linux' and entry.get('platform', {}).get('architecture') == arguments.arch), None)
         if selected is None:
             raise RuntimeError('Requested Linux architecture is not available')
         manifest, digest = get_manifest(selected['digest'])
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
-    receipt = {'image': arguments.image, 'architecture': arguments.arch, 'manifest_digest': digest, 'layers': []}
+    if manifest['config']['digest'] != pinned['configs'][arguments.arch]:
+        raise RuntimeError('Image config differs from reviewed digest')
+    receipt = {'image': arguments.image, 'architecture': arguments.arch, 'index_digest': pinned['digest'],
+               'manifest_digest': digest, 'config_digest': manifest['config']['digest'], 'layers': []}
     with tempfile.TemporaryDirectory(prefix='qdata-image-', dir=arguments.output.parent) as temporary:
         work = Path(temporary)
 

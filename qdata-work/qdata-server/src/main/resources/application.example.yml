@@ -7,6 +7,10 @@ qdata:
   copyrightYear: 2025
   profile: ${user.dir}/upload/
   captchaType: math
+  # API/GIS 业务转发默认拒绝全部目标；在部署配置中登记实际域名或网段。
+  forwarding:
+    allowed-hosts: []
+    allowed-cidrs: []
 
 server:
   port: 8080

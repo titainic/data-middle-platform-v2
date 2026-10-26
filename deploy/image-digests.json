@@ -1,0 +1,44 @@
+{
+  "mysql:8.0": {
+    "digest": "sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b",
+    "configs": {
+      "amd64": "sha256:6cd09145362dfe6831b14545de3d5fd6cc75c37cfd6ef8561429c1fc73518b39",
+      "arm64": "sha256:b7e118f56c5963e079252e0d6e2978c9c010eb7fc7aaaec100e367796b5dd08f"
+    }
+  },
+  "redis:7-alpine": {
+    "digest": "sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541",
+    "configs": {
+      "amd64": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+      "arm64": "sha256:db1bf92695ab04a675308ded995fb54f73a8dafdc4b7b5dbe60a62e8c7c94039"
+    }
+  },
+  "rabbitmq:3.13-management": {
+    "digest": "sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69",
+    "configs": {
+      "amd64": "sha256:de912cbbf07f938bb8aaa5682464a73a00c6a996efdf0880423aeb4eae006c34",
+      "arm64": "sha256:f2edea6e7a01ca2e4c04f3dd0263d8c521686ef2467f587005747384ae49f2a9"
+    }
+  },
+  "neo4j:5.26-community": {
+    "digest": "sha256:adaa077a3ab023015143b8f73f7076a7d053f12985f5b06f4c6a128c3a2f7240",
+    "configs": {
+      "amd64": "sha256:c8b0c442afcb1688cb26e585938842b84a882a164d9260506d21b4774e20c260",
+      "arm64": "sha256:ca89a40b25020aedd1942d7f26b51fb52e8f749b05ecd3b4c186e16422a40bbb"
+    }
+  },
+  "nginx:1.28-alpine": {
+    "digest": "sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236",
+    "configs": {
+      "amd64": "sha256:dc73b49f5124cf2ee538dfbdfbd121f0b4ccdcb20fea30f3a81bd477c02e2bb5",
+      "arm64": "sha256:feb29ad4d53f4c6d793d598ed2af77917b8587163de8df86d6ae8e2acec5a5d4"
+    }
+  },
+  "eclipse-temurin:21-jre-jammy": {
+    "digest": "sha256:affcab5356e1270ac35d2361ee83135af2f03e8d580eca78a6d5d6fdbf048db0",
+    "configs": {
+      "amd64": "sha256:11eed32f648485a65789549c5a62ad808be938bb96c3566ddfd1f17f318ece16",
+      "arm64": "sha256:75804ec04b6a576d75a3f6c9b8e62f7396a1573c0f7fa07b4471ac9e7b2159e9"
+    }
+  }
+}

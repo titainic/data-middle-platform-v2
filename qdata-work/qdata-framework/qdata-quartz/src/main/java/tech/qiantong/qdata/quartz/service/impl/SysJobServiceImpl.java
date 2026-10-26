@@ -321,10 +321,9 @@ public class SysJobServiceImpl implements ISysJobService {
             return JobErrorEnum.INVALID_TARGET.getCode();
         }
 
-// // 2.5 Check whitelist
-//        if (!ScheduleUtils.whiteList(invokeTarget)) {
-//            return JobErrorEnum.NOT_IN_WHITELIST.getCode();
-//        }
+        if (!ScheduleUtils.whiteList(invokeTarget)) {
+            return JobErrorEnum.NOT_IN_WHITELIST.getCode();
+        }
 
         return 0L;
     }

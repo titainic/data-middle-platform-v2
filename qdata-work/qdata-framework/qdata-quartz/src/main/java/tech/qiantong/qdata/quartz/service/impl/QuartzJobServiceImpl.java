@@ -232,6 +232,9 @@ public class QuartzJobServiceImpl implements IQuartzJobService {
         if (StringUtils.containsAnyIgnoreCase(invokeTarget, Constants.JOB_ERROR_STR)) {
             return JobErrorEnum.INVALID_TARGET.getCode();
         }
+        if (!ScheduleUtils.whiteList(invokeTarget)) {
+            return JobErrorEnum.NOT_IN_WHITELIST.getCode();
+        }
         return 0L;
     }
 }

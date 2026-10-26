@@ -23,14 +23,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tech.qiantong.qdata.common.config.AniviaConfig;
 import tech.qiantong.qdata.common.constant.Constants;
-import tech.qiantong.qdata.common.utils.StringUtils;
 
 import java.io.ByteArrayInputStream;
-import java.io.FileInputStream;
 import java.io.InputStream;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.Arrays;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * Image processing tools
@@ -43,20 +40,7 @@ public class ImageUtils
 
     public static byte[] getImage(String imagePath)
     {
-        InputStream is = getFile(imagePath);
-        try
-        {
-            return IOUtils.toByteArray(is);
-        }
-        catch (Exception e)
-        {
-            log.error("Failed to load image {}", e);
-            return null;
-        }
-        finally
-        {
-            IOUtils.closeQuietly(is);
-        }
+        return readFile(imagePath);
     }
 
     public static InputStream getFile(String imagePath)
@@ -64,7 +48,7 @@ public class ImageUtils
         try
         {
             byte[] result = readFile(imagePath);
-            result = Arrays.copyOf(result, result.length);
+            if (result == null) return null;
             return new ByteArrayInputStream(result);
         }
         catch (Exception e)
@@ -85,23 +69,21 @@ public class ImageUtils
         InputStream in = null;
         try
         {
-            if (url.startsWith("http"))
+            // Excel 图片仅使用受管上传文件，任何协议URL、相对路径均不触发网络请求。
+            String prefix = Constants.RESOURCE_PREFIX + "/";
+            if (url == null || !url.startsWith(prefix))
             {
-                // Network address
-                URL urlObj = new URL(url);
-                URLConnection urlConnection = urlObj.openConnection();
-                urlConnection.setConnectTimeout(30 * 1000);
-                urlConnection.setReadTimeout(60 * 1000);
-                urlConnection.setDoInput(true);
-                in = urlConnection.getInputStream();
+                log.warn("拒绝读取导出图片：仅允许受管上传文件");
+                return null;
             }
-            else
+            Path root = Path.of(AniviaConfig.getProfile()).toRealPath();
+            Path image = root.resolve(url.substring(prefix.length())).normalize().toRealPath();
+            if (!image.startsWith(root) || !Files.isRegularFile(image))
             {
-                // Local address
-                String localPath = AniviaConfig.getProfile();
-                String downloadPath = localPath + StringUtils.substringAfter(url, Constants.RESOURCE_PREFIX);
-                in = new FileInputStream(downloadPath);
+                log.warn("拒绝读取导出图片：路径超出上传目录");
+                return null;
             }
+            in = Files.newInputStream(image);
             return IOUtils.toByteArray(in);
         }
         catch (Exception e)

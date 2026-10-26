@@ -1,0 +1,45 @@
+{
+  "lockSha256": "85e670775b348af5b9782a6621a911af0888dfdabf09d7fa2a37b8d3f2a73611",
+  "scripts": [
+    {
+      "package": "@vue-office/docx",
+      "entry": "lib/script/postinstall.js",
+      "files": {
+        "lib/script/postinstall.js": "fc74418275a4d9df9a0eab2a7e9d7ad7f02a71ee4b53f2be3beb251b989de394",
+        "lib/script/utils.js": "582752f7d9cb344874c5a28cad8a73dac7d04647f179ba5d94869d8031f4f9a2"
+      }
+    },
+    {
+      "package": "@vue-office/excel",
+      "entry": "lib/script/postinstall.js",
+      "files": {
+        "lib/script/postinstall.js": "fc74418275a4d9df9a0eab2a7e9d7ad7f02a71ee4b53f2be3beb251b989de394",
+        "lib/script/utils.js": "582752f7d9cb344874c5a28cad8a73dac7d04647f179ba5d94869d8031f4f9a2"
+      }
+    },
+    {
+      "package": "@vue-office/pdf",
+      "entry": "lib/script/postinstall.js",
+      "files": {
+        "lib/script/postinstall.js": "fc74418275a4d9df9a0eab2a7e9d7ad7f02a71ee4b53f2be3beb251b989de394",
+        "lib/script/utils.js": "582752f7d9cb344874c5a28cad8a73dac7d04647f179ba5d94869d8031f4f9a2"
+      }
+    },
+    {
+      "package": "vue-demi",
+      "entry": "scripts/postinstall.js",
+      "files": {
+        "scripts/postinstall.js": "e8ac6158bfc8522e5d163180b1a0033a0195e10c1c55e5f8a15d5e8393397d0f",
+        "scripts/utils.js": "6878d419f940cb36d3bab273e4b611827ddaaa94a797120f3f46b596e3484606"
+      }
+    },
+    {
+      "package": "v-code-diff",
+      "entry": "scripts/postinstall.cjs",
+      "files": {
+        "scripts/postinstall.cjs": "9f18d44aaf8c8bae906fb5f46b8540e6470644dae24dfc45ccc0c34bb63524c8",
+        "scripts/utils.cjs": "0f8a9f52a958c36cd3cbf79fb74a98413e31526b395143746e2a47a0d1482043"
+      }
+    }
+  ]
+}
