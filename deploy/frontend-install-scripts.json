@@ -1,5 +1,5 @@
 {
-  "lockSha256": "85e670775b348af5b9782a6621a911af0888dfdabf09d7fa2a37b8d3f2a73611",
+  "lockSha256": "9f1ba25b61bd37c8f6f62f8a9b41f82e5ce4631f231213a6f9b79f3abaa81d5d",
   "scripts": [
     {
       "package": "@vue-office/docx",
