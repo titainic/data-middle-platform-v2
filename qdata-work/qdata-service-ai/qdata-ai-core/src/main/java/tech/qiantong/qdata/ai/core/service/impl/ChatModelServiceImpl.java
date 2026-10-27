@@ -74,7 +74,7 @@ public class ChatModelServiceImpl implements IChatModelService {
             case OPENAI -> chatModel = this.getOpenAiChatModel(baseUrl, apiKey, modelName);
             case TONG_YI -> chatModel = this.getDashScopeChatModel(baseUrl, apiKey, modelName);
             case OLLAMA -> chatModel = this.getOllamaChatModel(baseUrl, modelName);
-            case DEEP_SEEK -> chatModel = this.getDeepSeekChatModel(apiKey, modelName);
+            case DEEP_SEEK -> chatModel = this.getDeepSeekChatModel(baseUrl, apiKey, modelName);
             default -> throw new ServiceException("ai.error.platform.unsupported", "This platform is not currently supported");
         }
         return chatModel;
@@ -112,16 +112,17 @@ public class ChatModelServiceImpl implements IChatModelService {
     /**
      * Get Ali Bailian chat model
      *
+     * @param baseUrl API 基础地址（必填）
      * @param apiKey apiKey (required)
      * @param modelName modelName (required)
      * @return DashScopeChatModel
      */
     private DashScopeChatModel getDashScopeChatModel(String baseUrl, String apiKey, String modelName) {
-        if (StrUtil.hasBlank(apiKey, modelName)) {
+        if (StrUtil.hasBlank(baseUrl, apiKey, modelName)) {
             throw new ServiceException("ai.error.field.required", "Required fields cannot be empty");
         }
         return DashScopeChatModel.builder()
-                .dashScopeApi(DashScopeApi.builder().apiKey(apiKey).build())
+                .dashScopeApi(DashScopeApi.builder().baseUrl(baseUrl).apiKey(apiKey).build())
                 .defaultOptions(DashScopeChatOptions.builder().model(modelName).build())
                 .build();
     }
@@ -146,16 +147,17 @@ public class ChatModelServiceImpl implements IChatModelService {
     /**
      * Get deepseek chat model
      *
+     * @param baseUrl API 基础地址（必填）
      * @param apiKey apiKey (required)
      * @param modelName modelName (required)
      * @return DeepSeekChatModel
      */
-    private DeepSeekChatModel getDeepSeekChatModel(String apiKey, String modelName) {
-        if (StrUtil.hasBlank(apiKey, modelName)) {
+    private DeepSeekChatModel getDeepSeekChatModel(String baseUrl, String apiKey, String modelName) {
+        if (StrUtil.hasBlank(baseUrl, apiKey, modelName)) {
             throw new ServiceException("ai.error.field.required", "Required fields cannot be empty");
         }
         return DeepSeekChatModel.builder()
-                .deepSeekApi(DeepSeekApi.builder().apiKey(apiKey).build())
+                .deepSeekApi(DeepSeekApi.builder().baseUrl(baseUrl).apiKey(apiKey).build())
                 .defaultOptions(DeepSeekChatOptions.builder().model(modelName).build())
                 .build();
     }
