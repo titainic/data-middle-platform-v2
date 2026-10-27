@@ -130,7 +130,8 @@ def main():
         raise ValueError("--offline requires --dependency-dir with third-party dependencies")
     environment.setdefault("NODE_OPTIONS", "--max-old-space-size=6144")
     if not arguments.offline:
-        run([npm, "ci", "--no-audit", "--no-fund"], cwd=source / "qdata-ui", env=environment)
+        run([npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=source / "qdata-ui", env=environment)
+    run([sys.executable, str(root / "deploy/tools/prepare_frontend.py"), str(source / "qdata-ui"), "--node", node], env=environment)
     run([node, str(root / "deploy/tools/verify_browser_crypto.cjs"), str(source / "qdata-ui")], env=environment)
     run([npm, "run", "build:prod"], cwd=source / "qdata-ui", env=environment)
     for name in ("static", "dist/admin"):

@@ -35,6 +35,20 @@ class InstallError(RuntimeError):
     pass
 
 
+def dependency_image(tag):
+    """在线按 index digest 拉取；离线 docker load 按已钉住的 config digest 使用。"""
+    lock = json.loads((Path(__file__).with_name("image-digests.json")).read_text())
+    entry = lock[tag]
+    digests = [entry["digest"], *entry["configs"].values()]
+    if any(not re.fullmatch(r"sha256:[0-9a-f]{64}", digest) for digest in digests):
+        raise InstallError("Invalid pinned Docker image digest")
+    local = subprocess.run(["docker", "image", "inspect", tag, "--format", "{{.Id}}"],
+                           capture_output=True, text=True)
+    if local.returncode == 0 and local.stdout.strip() in entry["configs"].values():
+        return local.stdout.strip()
+    return tag + "@" + entry["digest"]
+
+
 def run(command, *, input_text=None, env=None, cwd=None, private=False):
     result = subprocess.run(command, input=input_text, text=True, capture_output=True,
                             env=env, cwd=cwd)
@@ -525,7 +539,7 @@ def dependency_containers(arguments, settings, runtime, root):
          "--mount", f"type=bind,src={data / 'mysql'},dst=/var/lib/mysql",
          "--mount", f"type=bind,src={mysql.options},dst=/run/secrets/mysql-admin.cnf,readonly",
          "--env-file", str(mysql_environment),
-         "mysql:8.0", "--lower-case-table-names=1", "--character-set-server=utf8mb4",
+         dependency_image("mysql:8.0"), "--lower-case-table-names=1", "--character-set-server=utf8mb4",
          "--collation-server=utf8mb4_general_ci"], private=True)
     redis_configuration = runtime / "redis.conf"
     write_protected(redis_configuration, "bind 0.0.0.0\nprotected-mode yes\nappendonly yes\nrequirepass "
@@ -534,13 +548,13 @@ def dependency_containers(arguments, settings, runtime, root):
          "-p", f"127.0.0.1:{settings['REDIS_PORT']}:6379",
          "--mount", f"type=bind,src={data / 'redis'},dst=/data",
          "--mount", f"type=bind,src={redis_configuration},dst=/usr/local/etc/redis/redis.conf,readonly",
-         "redis:7-alpine", "sh", "-c", "cp /usr/local/etc/redis/redis.conf /data/qdata-redis.conf && chown redis:redis /data/qdata-redis.conf && chmod 600 /data/qdata-redis.conf && exec docker-entrypoint.sh redis-server /data/qdata-redis.conf"], private=True)
+         dependency_image("redis:7-alpine"), "sh", "-c", "cp /usr/local/etc/redis/redis.conf /data/qdata-redis.conf && chown redis:redis /data/qdata-redis.conf && chmod 600 /data/qdata-redis.conf && exec docker-entrypoint.sh redis-server /data/qdata-redis.conf"], private=True)
     rabbit_environment = runtime / "rabbitmq.env"
     write_protected(rabbit_environment, f"RABBITMQ_DEFAULT_USER={settings['RABBITMQ_USERNAME']}\n"
                     + f"RABBITMQ_DEFAULT_PASS={settings['RABBITMQ_PASSWORD']}\n")
     run(["docker", "run", "-d", "--name", containers[2], "--restart", "unless-stopped",
          "-p", f"127.0.0.1:{settings['RABBITMQ_PORT']}:5672", "--env-file", str(rabbit_environment),
-         "--mount", f"type=bind,src={data / 'rabbitmq'},dst=/var/lib/rabbitmq", "rabbitmq:3.13-management"], private=True)
+         "--mount", f"type=bind,src={data / 'rabbitmq'},dst=/var/lib/rabbitmq", dependency_image("rabbitmq:3.13-management")], private=True)
     neo4j_environment = runtime / "neo4j.env"
     write_protected(neo4j_environment, "NEO4J_AUTH=neo4j/" + settings["NEO4J_PASSWORD"] + "\n"
                     "NEO4J_server_memory_heap_initial__size=256m\n"
@@ -548,7 +562,7 @@ def dependency_containers(arguments, settings, runtime, root):
                     "NEO4J_server_memory_pagecache_size=256m\n")
     run(["docker", "run", "-d", "--name", containers[3], "--restart", "unless-stopped",
          "-p", f"127.0.0.1:{arguments.neo4j_port}:7687", "--env-file", str(neo4j_environment),
-         "--mount", f"type=bind,src={data / 'neo4j'},dst=/data", "neo4j:5.26-community"], private=True)
+         "--mount", f"type=bind,src={data / 'neo4j'},dst=/data", dependency_image("neo4j:5.26-community")], private=True)
     return mysql
 
 
@@ -774,7 +788,7 @@ http {{
             raise InstallError("Gateway container already exists; choose a new instance name")
         run(["docker", "run", "-d", "--name", name, "--restart", "unless-stopped", "--network", "host",
              "--mount", f"type=bind,src={gateway_configuration},dst=/etc/nginx/nginx.conf,readonly",
-             "nginx:1.28-alpine", "sh", "-c",
+             dependency_image("nginx:1.28-alpine"), "sh", "-c",
              "umask 022 && mkdir -p " + " ".join(map(str, temporary_paths))
              + " && chown nginx:nginx " + " ".join(map(str, temporary_paths))
              + " && chmod 700 " + " ".join(map(str, temporary_paths))

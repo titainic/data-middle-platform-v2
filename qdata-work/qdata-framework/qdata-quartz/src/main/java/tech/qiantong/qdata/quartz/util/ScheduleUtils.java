@@ -19,12 +19,10 @@
 package tech.qiantong.qdata.quartz.util;
 
 import org.quartz.*;
-import tech.qiantong.qdata.common.constant.Constants;
 import tech.qiantong.qdata.common.constant.ScheduleConstants;
 import tech.qiantong.qdata.common.exception.job.TaskException;
 import tech.qiantong.qdata.common.exception.job.TaskException.Code;
 import tech.qiantong.qdata.common.utils.StringUtils;
-import tech.qiantong.qdata.common.utils.spring.SpringUtils;
 import tech.qiantong.qdata.quartz.domain.QuartzJob;
 import tech.qiantong.qdata.quartz.domain.SysJob;
 import tech.qiantong.qdata.quartz.enums.ScheduleExecutionTypeEnum;
@@ -170,15 +168,6 @@ public class ScheduleUtils
      */
     public static boolean whiteList(String invokeTarget)
     {
-        String packageName = StringUtils.substringBefore(invokeTarget, "(");
-        int count = StringUtils.countMatches(packageName, ".");
-        if (count > 1)
-        {
-            return StringUtils.containsAnyIgnoreCase(invokeTarget, Constants.JOB_WHITELIST_STR);
-        }
-        Object obj = SpringUtils.getBean(StringUtils.split(invokeTarget, ".")[0]);
-        String beanPackageName = obj.getClass().getPackage().getName();
-        return StringUtils.containsAnyIgnoreCase(beanPackageName, Constants.JOB_WHITELIST_STR)
-                && !StringUtils.containsAnyIgnoreCase(beanPackageName, Constants.JOB_ERROR_STR);
+        return JobTargetPolicy.allowed(invokeTarget);
     }
 }

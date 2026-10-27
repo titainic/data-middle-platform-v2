@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21-jre-jammy@sha256:affcab5356e1270ac35d2361ee83135af2f03e8d580eca78a6d5d6fdbf048db0
 
 # Set time zone and application directory
 ENV TZ=Asia/Shanghai \

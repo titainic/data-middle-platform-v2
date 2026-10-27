@@ -35,6 +35,7 @@ import tech.qiantong.qdata.common.utils.poi.ExcelUtil;
 import tech.qiantong.qdata.quartz.domain.SysJob;
 import tech.qiantong.qdata.quartz.service.ISysJobService;
 import tech.qiantong.qdata.quartz.util.CronUtils;
+import tech.qiantong.qdata.quartz.util.ScheduleUtils;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
@@ -119,10 +120,10 @@ public class SysJobController extends BaseController
             return error(MessageUtils.messageWithFallback("sys.error.quartz.job.create.target.invalid",
                     "Failed to create task ''{0}'': the target string contains prohibited content", job.getJobName()));
         }
-//        else if (!ScheduleUtils.whiteList(job.getInvokeTarget()))
-//        {
-// return error("New task'" + job.getJobName() + "'Failed, the target string is not in the whitelist");
-//        }
+        else if (!ScheduleUtils.whiteList(job.getInvokeTarget()))
+        {
+            return error("Quartz调用目标未登记到允许列表");
+        }
         job.setCreateBy(getUsername());
         return toAjax(jobService.insertJob(job));
     }
@@ -160,10 +161,10 @@ public class SysJobController extends BaseController
             return error(MessageUtils.messageWithFallback("sys.error.quartz.job.update.target.invalid",
                     "Failed to update task ''{0}'': the target string contains prohibited content", job.getJobName()));
         }
-//        else if (!ScheduleUtils.whiteList(job.getInvokeTarget()))
-//        {
-// return error("Modify task'" + job.getJobName() + "'Failed, the target string is not in the whitelist");
-//        }
+        else if (!ScheduleUtils.whiteList(job.getInvokeTarget()))
+        {
+            return error("Quartz调用目标未登记到允许列表");
+        }
         job.setUpdateBy(getUsername());
         return toAjax(jobService.updateJob(job));
     }

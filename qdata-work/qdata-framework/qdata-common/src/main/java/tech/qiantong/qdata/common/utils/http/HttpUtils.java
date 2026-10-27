@@ -24,14 +24,13 @@ import tech.qiantong.qdata.common.constant.Constants;
 import tech.qiantong.qdata.common.utils.MessageUtils;
 import tech.qiantong.qdata.common.utils.StringUtils;
 
-import javax.net.ssl.*;
+import javax.net.ssl.HttpsURLConnection;
 import java.io.*;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
-import java.security.cert.X509Certificate;
 
 /**
  * General HTTP request utility
@@ -202,84 +201,46 @@ public class HttpUtils
 
     public static String sendSSLPost(String url, String param)
     {
-        StringBuilder result = new StringBuilder();
-        String urlNameString = url + "?" + param;
+        HttpsURLConnection connection = null;
         try
         {
-            log.info("sendSSLPost - {}", urlNameString);
-            SSLContext sc = SSLContext.getInstance("SSL");
-            sc.init(null, new TrustManager[] { new TrustAnyTrustManager() }, new java.security.SecureRandom());
-            URL console = new URL(urlNameString);
-            HttpsURLConnection conn = (HttpsURLConnection) console.openConnection();
-            conn.setRequestProperty("accept", "*/*");
-            conn.setRequestProperty("connection", "Keep-Alive");
-            conn.setRequestProperty("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-            conn.setRequestProperty("Accept-Charset", "utf-8");
-            conn.setRequestProperty("contentType", "utf-8");
-            conn.setDoOutput(true);
-            conn.setDoInput(true);
-
-            conn.setSSLSocketFactory(sc.getSocketFactory());
-            conn.setHostnameVerifier(new TrustAnyHostnameVerifier());
-            conn.connect();
-            InputStream is = conn.getInputStream();
-            BufferedReader br = new BufferedReader(new InputStreamReader(is));
-            String ret = "";
-            while ((ret = br.readLine()) != null)
+            connection = openVerifiedConnection(new URL(url + "?" + param));
+            connection.setRequestProperty("accept", "*/*");
+            connection.setRequestProperty("Accept-Charset", "utf-8");
+            connection.setDoOutput(true);
+            connection.setDoInput(true);
+            StringBuilder result = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)))
             {
-                if (ret != null && !"".equals(ret.trim()))
+                String line;
+                while ((line = reader.readLine()) != null)
                 {
-                    result.append(new String(ret.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8));
+                    if (!line.isBlank()) result.append(line);
                 }
             }
-            log.info("recv - {}", result);
-            conn.disconnect();
-            br.close();
+            return result.toString();
         }
-        catch (ConnectException e)
+        catch (IOException failure)
         {
-            log.error("Calling HttpUtils.sendSSLPost ConnectException, url=" + url + ",param=" + param, e);
+            // 不输出URL及参数，失败不伪装成空响应。
+            log.warn("sendSSLPost TLS校验、连接或读取失败，类型={}", failure.getClass().getSimpleName());
+            throw new IllegalStateException("HTTPS请求失败，请检查证书、主机名或连接状态", failure);
         }
-        catch (SocketTimeoutException e)
+        finally
         {
-            log.error("Calling HttpUtils.sendSSLPost SocketTimeoutException, url=" + url + ",param=" + param, e);
-        }
-        catch (IOException e)
-        {
-            log.error("Calling HttpUtils.sendSSLPost IOException, url=" + url + ",param=" + param, e);
-        }
-        catch (Exception e)
-        {
-            log.error("Calling HttpsUtil.sendSSLPost Exception, url=" + url + ",param=" + param, e);
-        }
-        return result.toString();
-    }
-
-    private static class TrustAnyTrustManager implements X509TrustManager
-    {
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType)
-        {
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType)
-        {
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers()
-        {
-            return new X509Certificate[] {};
+            if (connection != null) connection.disconnect();
         }
     }
 
-    private static class TrustAnyHostnameVerifier implements HostnameVerifier
+    /** 沿用 JDK 信任库及主机名验证；内网私有 CA 必须导入受管信任库。 */
+    static HttpsURLConnection openVerifiedConnection(URL url) throws IOException
     {
-        @Override
-        public boolean verify(String hostname, SSLSession session)
-        {
-            return true;
-        }
+        if (!"https".equalsIgnoreCase(url.getProtocol())) throw new IOException("仅允许HTTPS连接");
+        HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(15000);
+        connection.setInstanceFollowRedirects(false);
+        return connection;
     }
 }

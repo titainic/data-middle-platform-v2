@@ -11,13 +11,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.*;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.client.LaxRedirectStrategy;
 import tech.qiantong.qdata.common.exception.DependencyUnavailableException;
+import tech.qiantong.qdata.common.utils.spring.SpringUtils;
 
 /** Reads a bounded response before committing it, including a deadline for continuously trickling bodies. */
 final class BoundedHttpForwarder implements AutoCloseable {
@@ -25,21 +26,25 @@ final class BoundedHttpForwarder implements AutoCloseable {
     private final CloseableHttpClient client;
     private final ScheduledThreadPoolExecutor deadlines;
     private final DependencyGuard guard;
+    private final Supplier<ForwardTargetPolicy> policy;
     private final int totalMillis, maxBytes;
     BoundedHttpForwarder(int connectMillis,int readMillis,int totalMillis,int maxBytes,DependencyGuard guard) {
+        this(connectMillis,readMillis,totalMillis,maxBytes,guard,()->SpringUtils.getBean(ForwardTargetPolicy.class));
+    }
+    BoundedHttpForwarder(int connectMillis,int readMillis,int totalMillis,int maxBytes,DependencyGuard guard,Supplier<ForwardTargetPolicy> policy) {
         if(connectMillis<1 || readMillis<1 || totalMillis<1 || maxBytes<1)throw new IllegalArgumentException("Invalid forwarding limits");
-        this.totalMillis=totalMillis;this.maxBytes=maxBytes;this.guard=guard;
+        this.totalMillis=totalMillis;this.maxBytes=maxBytes;this.guard=guard;this.policy=policy;
         var config=RequestConfig.custom().setConnectTimeout(connectMillis).setSocketTimeout(readMillis)
                 .setConnectionRequestTimeout(1000).setMaxRedirects(5).build();
         client=HttpClients.custom().setDefaultRequestConfig(config).setMaxConnTotal(32).setMaxConnPerRoute(16)
-                .disableAutomaticRetries().disableCookieManagement().setRedirectStrategy(new LaxRedirectStrategy()).build();
+                .disableAutomaticRetries().disableCookieManagement().disableRedirectHandling()
+                .setDnsResolver(host->policy.get().resolve(host)).build();
         deadlines=new ScheduledThreadPoolExecutor(1,task->{var thread=new Thread(task,"qdata-forwarding-deadline");thread.setDaemon(true);return thread;});
         deadlines.setRemoveOnCancelPolicy(true);
     }
     void forward(String method,String url,Map<String,Object> parameters,List<HeaderEntity> headers,HttpServletResponse downstream)throws IOException {
         URI uri=URI.create(url);String scheme=uri.getScheme()==null?"":uri.getScheme().toLowerCase(Locale.ROOT);
-        if(!List.of("http","https").contains(scheme) || uri.getHost()==null || uri.getUserInfo()!=null)
-            throw new IllegalArgumentException("服务地址需为不含用户凭据的HTTP或HTTPS地址");
+        policy.get().checkUri(uri);
         int port=uri.getPort()<0?("https".equals(scheme)?443:80):uri.getPort();
         String origin=scheme+"://"+uri.getHost().toLowerCase(Locale.ROOT)+":"+port;
         HttpRequestBase request;

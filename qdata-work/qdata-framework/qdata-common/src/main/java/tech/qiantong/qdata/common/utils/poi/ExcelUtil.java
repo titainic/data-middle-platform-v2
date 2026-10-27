@@ -979,8 +979,11 @@ public class ExcelUtil<T>
             if (StringUtils.isNotEmpty(imagePath))
             {
                 byte[] data = ImageUtils.getImage(imagePath);
-                getDrawingPatriarch(cell.getSheet()).createPicture(anchor,
-                        cell.getSheet().getWorkbook().addPicture(data, getImageType(data)));
+                if (data != null && data.length > 0)
+                {
+                    getDrawingPatriarch(cell.getSheet()).createPicture(anchor,
+                            cell.getSheet().getWorkbook().addPicture(data, getImageType(data)));
+                }
             }
         }
     }
