@@ -353,6 +353,9 @@ public class ChatMessageServiceImpl implements IChatMessageService {
         JSONArray associations = JSONArray.parse(conversation.getAssociations());
 
         List<FactDimensionRelation> relations = new ArrayList<>();
+        if (associations == null) {
+            return relations;
+        }
         for (Object obj : associations) {
             JSONObject association = (JSONObject) obj;
             relations.add(FactDimensionRelation.builder()
